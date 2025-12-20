@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 from .db import database, models
-from .routers import products, categories, channels, reservations, context
+from .routers import products, categories, channels, reservations, context, shop_settings
 
 # Создаем таблицы базы данных
 models.Base.metadata.create_all(bind=database.engine)
@@ -79,6 +79,7 @@ app.include_router(categories.router)
 app.include_router(products.router)
 app.include_router(channels.router)
 app.include_router(reservations.router)
+app.include_router(shop_settings.router)
 
 @app.get("/")
 async def root():

@@ -50,6 +50,15 @@ class Reservation(Base):
     
     product = relationship("Product", backref="reservations")
 
+class ShopSettings(Base):
+    __tablename__ = "shop_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, unique=True, index=True)  # ID владельца магазина (уникальный)
+    reservations_enabled = Column(Boolean, default=True)  # Включена ли резервация товаров
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 
 

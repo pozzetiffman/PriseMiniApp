@@ -55,7 +55,8 @@ header {
     min-height: 50px;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    gap: 10px;
 }
 
 header h1 {
@@ -66,14 +67,9 @@ header h1 {
     letter-spacing: -0.3px;
     flex: 1;
     text-align: center;
-    padding: 0 60px; /* Отступы для кнопки корзины */
 }
 
 .cart-button {
-    position: absolute;
-    right: 15px;
-    top: 50%;
-    transform: translateY(-50%);
     padding: 8px 16px;
     background: var(--bg-glass);
     backdrop-filter: var(--blur-small);
@@ -85,12 +81,13 @@ header h1 {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
     box-shadow: 0 2px 8px var(--shadow-light);
 }
 
 .cart-button:hover {
     background: var(--bg-glass-light);
-    transform: translateY(-50%) scale(1.05);
+    transform: scale(1.05);
     box-shadow: 0 4px 16px var(--shadow-medium);
 }
 
@@ -678,7 +675,13 @@ main {
     .cart-button {
         font-size: 12px;
         padding: 6px 12px;
-        right: 10px;
+    }
+    
+    .admin-button {
+        padding: 6px 10px;
+        font-size: 16px;
+        min-width: 40px;
+        height: 40px;
     }
     
     #products-grid {
@@ -782,6 +785,232 @@ main {
     }
     to {
         transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Стили для админки */
+.admin-button {
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    min-width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-button:hover {
+    background: var(--bg-glass);
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px var(--shadow-medium);
+}
+
+.admin-button:active {
+    transform: scale(0.95);
+}
+
+/* Модальное окно админки */
+.admin-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    animation: fadeIn 0.3s ease;
+}
+
+.admin-modal-content {
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    margin: 10% auto;
+    padding: 0;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 8px 32px var(--shadow-glass);
+    border: 1px solid var(--border-glass);
+    animation: modalSlideIn 0.3s ease;
+    overflow: hidden;
+}
+
+.admin-modal-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-glass);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-glass-light);
+}
+
+.admin-modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.admin-close {
+    color: var(--text-hint);
+    font-size: 28px;
+    font-weight: 300;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.2s ease;
+}
+
+.admin-close:hover {
+    color: var(--text-primary);
+}
+
+.admin-modal-body {
+    padding: 25px;
+}
+
+.admin-setting {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--border-glass);
+}
+
+.admin-setting:last-child {
+    border-bottom: none;
+}
+
+.admin-setting-label {
+    flex: 1;
+    margin-right: 20px;
+}
+
+.admin-setting-label label {
+    display: block;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.admin-setting-description {
+    font-size: 14px;
+    color: var(--text-hint);
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* Переключатель (toggle switch) */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    transition: 0.3s;
+    border-radius: 28px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--text-primary);
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--tg-theme-button-color);
+    border-color: var(--tg-theme-button-color);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(22px);
+}
+
+.admin-info {
+    margin-top: 20px;
+    padding: 15px;
+    background: var(--bg-glass-light);
+    border-radius: 12px;
+    border: 1px solid var(--border-glass);
+}
+
+.admin-info p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-hint);
+    line-height: 1.5;
+}
+
+/* Уведомления админки */
+.admin-notification {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
         opacity: 1;
     }
 }

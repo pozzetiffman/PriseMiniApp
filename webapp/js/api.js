@@ -188,3 +188,56 @@ export async function cancelReservationAPI(reservationId) {
     
     return true;
 }
+
+// Получение настроек магазина
+export async function getShopSettings(shopOwnerId = null) {
+    let url = `${API_BASE}/api/shop-settings`;
+    if (shopOwnerId !== null) {
+        url += `?shop_owner_id=${shopOwnerId}`;
+    }
+    console.log(`Fetching shop settings from: ${url}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Shop settings error:", response.status, errorText);
+        throw new Error(`Shop settings error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log("✅ Shop settings fetched:", data);
+    return data;
+}
+
+// Обновление настроек магазина
+export async function updateShopSettings(reservationsEnabled) {
+    const url = `${API_BASE}/api/shop-settings`;
+    console.log(`Updating shop settings: reservations_enabled=${reservationsEnabled}`);
+    
+    const response = await fetch(url, {
+        method: 'PUT',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            reservations_enabled: reservationsEnabled
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Shop settings update response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить настройки';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}

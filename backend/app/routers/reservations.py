@@ -53,6 +53,30 @@ def create_reservation(
     
     print(f"DEBUG: Product found - name={product.name}, owner_id={product.user_id}")
     
+    # Проверяем настройки магазина - включена ли резервация
+    shop_settings = db.query(models.ShopSettings).filter(
+        models.ShopSettings.user_id == product.user_id
+    ).first()
+    
+    # Если настройки не существуют, создаем с дефолтными значениями (резервация включена)
+    if not shop_settings:
+        shop_settings = models.ShopSettings(
+            user_id=product.user_id,
+            reservations_enabled=True,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.add(shop_settings)
+        db.commit()
+    
+    # Проверяем, включена ли резервация для этого магазина
+    if not shop_settings.reservations_enabled:
+        print(f"WARNING: Reservations are disabled for shop owner {product.user_id}")
+        raise HTTPException(
+            status_code=400,
+            detail="Резервация товаров отключена владельцем магазина"
+        )
+    
     # Проверяем, что пользователь не пытается зарезервировать свой собственный товар
     if reserved_by_user_id == product.user_id:
         print(f"WARNING: User {reserved_by_user_id} tried to reserve their own product {product_id}")

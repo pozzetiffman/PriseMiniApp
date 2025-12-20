@@ -1,4 +1,5 @@
 // Главный файл приложения - инициализация и координация модулей
+import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
 import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext } from './api.js';
 import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
@@ -125,10 +126,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupCartButton();
     initCart();
     
-    // 8. Загружаем данные
+    // 8. Загружаем настройки магазина
+    if (appContext.role === 'owner') {
+        // Для владельца загружаем свои настройки
+        await loadShopSettings();
+        initAdmin();
+        setupAdminButton();
+    } else {
+        // Для клиентов загружаем настройки владельца магазина
+        await loadShopSettings(appContext.shop_owner_id);
+    }
+    
+    // 9. Загружаем данные
     await loadData();
     
-    // 9. Обновляем корзину после загрузки данных
+    // 10. Обновляем корзину после загрузки данных
     setTimeout(async () => {
         console.log('🛒 Обновление корзины после загрузки данных...');
         await updateCartUI();
@@ -136,7 +148,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Загрузка данных (категории и товары)
-async function loadData() {
+window.loadData = async function loadData() {
     console.log('🚀 loadData() called');
     console.log('🚀 appContext:', appContext);
     
@@ -430,13 +442,28 @@ function showProductModal(prod, finalPrice, fullImages) {
         }
     }
     
-    // Показываем кнопку резервации только если это не наш магазин и нет активной резервации
-    if (!hasActiveReservation && appContext.role === 'client' && appContext.permissions.can_reserve) {
+    // Показываем кнопку резервации только если:
+    // 1. Это не наш магазин (клиент)
+    // 2. Нет активной резервации
+    // 3. Резервация включена в настройках магазина
+    const shopSettings = getCurrentShopSettings();
+    const reservationsEnabled = shopSettings ? shopSettings.reservations_enabled : true; // По умолчанию включено
+    
+    console.log('🔒 Reservation check:', {
+        hasActiveReservation,
+        role: appContext.role,
+        can_reserve: appContext.permissions.can_reserve,
+        reservationsEnabled
+    });
+    
+    if (!hasActiveReservation && appContext.role === 'client' && appContext.permissions.can_reserve && reservationsEnabled) {
         const reserveBtn = document.createElement('button');
         reserveBtn.className = 'reserve-btn';
         reserveBtn.textContent = '🔒 Зарезервировать товар';
         reserveBtn.onclick = () => showReservationModal(prod.id);
         modalReservationButton.appendChild(reserveBtn);
+    } else if (!reservationsEnabled) {
+        console.log('🔒 Reservations disabled - button not shown');
     }
     
     showModalImage(0);
@@ -599,8 +626,26 @@ function setupModals() {
             if (cartModal && cartModal.style.display === 'block') {
                 cartModal.style.display = 'none';
             }
+            const adminModal = document.getElementById('admin-modal');
+            if (adminModal && adminModal.style.display === 'block') {
+                adminModal.style.display = 'none';
+            }
         }
     });
+}
+
+// Настройка кнопки админки
+function setupAdminButton() {
+    const adminButton = document.getElementById('admin-button');
+    if (adminButton) {
+        adminButton.style.display = 'block';
+        adminButton.onclick = () => {
+            openAdmin();
+        };
+        console.log('✅ Admin button set up');
+    } else {
+        console.error('❌ Admin button not found');
+    }
 }
 
 // Глобальная функция для отмены резервации из корзины
