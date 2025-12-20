@@ -1,0 +1,787 @@
+:root {
+    /* Liquid Glass стиль с темным оттенком (Telegram iOS) */
+    --tg-theme-bg-color: #1c1c1e;
+    --tg-theme-text-color: #ffffff;
+    --tg-theme-hint-color: #8e8e93;
+    --tg-theme-link-color: #5ac8fa;
+    --tg-theme-button-color: #5ac8fa;
+    --tg-theme-button-text-color: #ffffff;
+    --tg-theme-secondary-bg-color: #2c2c2e;
+    
+    /* Liquid Glass цвета */
+    --bg-primary: rgba(28, 28, 30, 0.8);
+    --bg-secondary: rgba(44, 44, 46, 0.6);
+    --bg-glass: rgba(58, 58, 60, 0.4);
+    --bg-glass-light: rgba(72, 72, 74, 0.5);
+    --text-primary: #ffffff;
+    --text-secondary: #ebebf5;
+    --text-hint: #8e8e93;
+    --border-color: rgba(255, 255, 255, 0.1);
+    --border-glass: rgba(255, 255, 255, 0.15);
+    --shadow-light: rgba(0, 0, 0, 0.3);
+    --shadow-medium: rgba(0, 0, 0, 0.5);
+    --shadow-glass: rgba(0, 0, 0, 0.4);
+    
+    /* Blur эффекты */
+    --blur-small: blur(10px);
+    --blur-medium: blur(20px);
+    --blur-large: blur(30px);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 50%, #1c1c1e 100%);
+    background-attachment: fixed;
+    color: var(--text-primary) !important;
+    margin: 0;
+    padding: 0;
+    -webkit-user-select: none;
+    user-select: none;
+    min-height: 100vh;
+}
+
+header {
+    padding: 15px;
+    text-align: center;
+    background: var(--bg-glass) !important;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-bottom: 1px solid var(--border-glass);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 4px 20px var(--shadow-glass);
+    position: relative;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+header h1 {
+    font-size: 18px;
+    margin: 0;
+    color: var(--text-primary) !important;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    flex: 1;
+    text-align: center;
+    padding: 0 60px; /* Отступы для кнопки корзины */
+}
+
+.cart-button {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 8px 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 20px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+.cart-button:hover {
+    background: var(--bg-glass-light);
+    transform: translateY(-50%) scale(1.05);
+    box-shadow: 0 4px 16px var(--shadow-medium);
+}
+
+.cart-title {
+    font-size: 20px;
+    margin: 0 0 20px 0;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.cart-items {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.cart-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    margin-bottom: 10px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    gap: 12px;
+}
+
+.cart-item-image-container {
+    width: 60px;
+    height: 60px;
+    min-width: 60px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-glass);
+}
+
+.cart-item-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cart-item-image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: var(--text-hint);
+}
+
+.cart-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.cart-item-info h3 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+    color: var(--text-primary);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cart-item-price {
+    margin: 4px 0 !important;
+    font-size: 16px !important;
+    color: var(--tg-theme-link-color) !important;
+    font-weight: 700 !important;
+}
+
+.cart-item-time {
+    margin: 4px 0 0 0 !important;
+    font-size: 13px !important;
+    color: var(--text-hint) !important;
+}
+
+.cancel-reservation-btn-small {
+    padding: 8px 12px;
+    background: rgba(255, 59, 48, 0.2);
+    border: 1px solid rgba(255, 59, 48, 0.4);
+    border-radius: 8px;
+    color: #ff3b30;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cancel-reservation-btn-small:hover {
+    background: rgba(255, 59, 48, 0.3);
+    border-color: rgba(255, 59, 48, 0.6);
+    transform: scale(1.1);
+}
+
+.scroll-x {
+    display: flex;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 10px;
+    gap: 10px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.scroll-x::-webkit-scrollbar {
+    display: none;
+}
+
+.category-badge {
+    padding: 10px 18px;
+    background: var(--bg-glass) !important;
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 20px;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--text-secondary) !important;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.category-badge.active {
+    background: rgba(90, 200, 250, 0.3) !important;
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    color: var(--tg-theme-button-color) !important;
+    border-color: rgba(90, 200, 250, 0.4);
+    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.3);
+    transform: scale(1.05);
+}
+
+#products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    padding: 10px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Адаптивность для больших экранов */
+@media (min-width: 768px) {
+    #products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+        padding: 15px;
+    }
+}
+
+/* Адаптивность для очень больших экранов */
+@media (min-width: 1024px) {
+    #products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+        padding: 20px;
+    }
+}
+
+.product-card {
+    background: var(--bg-glass) !important;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: 0 4px 20px var(--shadow-glass);
+    border: 1px solid var(--border-glass);
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.product-card:hover {
+    box-shadow: 0 8px 32px var(--shadow-medium);
+    transform: translateY(-4px);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.product-card:active {
+    transform: translateY(-2px) scale(0.98);
+}
+
+.product-image {
+    width: 100%;
+    aspect-ratio: 1/1;
+    background: var(--bg-secondary) !important;
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    position: relative;
+    overflow: hidden;
+    min-height: 150px;
+    border: 1px solid var(--border-glass);
+    box-shadow: inset 0 2px 8px var(--shadow-light);
+}
+
+.discount-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(255, 77, 77, 0.9);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(255, 77, 77, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    z-index: 10;
+}
+
+.product-price-container {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.product-price {
+    font-size: 18px;
+    color: var(--tg-theme-link-color) !important;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+}
+
+.old-price {
+    font-size: 13px;
+    color: var(--text-hint) !important;
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.delete-btn {
+    background-color: #ff4d4d;
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: auto;
+}
+
+.loading {
+    grid-column: span 2;
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--text-secondary) !important;
+    font-size: 15px;
+}
+
+.product-name {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    color: var(--text-secondary) !important;
+    line-height: 1.5;
+    letter-spacing: -0.2px;
+}
+
+.product-card {
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.product-card:active {
+    transform: scale(0.98);
+}
+
+/* Модальное окно */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    overflow-y: auto;
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+}
+
+.modal-content {
+    background: var(--bg-glass-light) !important;
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    margin: 20px auto;
+    padding: 24px;
+    border-radius: 24px;
+    max-width: 90%;
+    min-width: 280px;
+    max-height: 90vh;
+    position: relative;
+    animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 20px 60px var(--shadow-glass);
+    border: 1px solid var(--border-glass);
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-y: auto;
+    width: calc(100% - 40px);
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-close {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    font-size: 28px;
+    font-weight: 300;
+    color: var(--text-secondary) !important;
+    cursor: pointer;
+    z-index: 1001;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+.modal-close:hover,
+.modal-close:focus {
+    color: var(--text-primary) !important;
+    background: var(--bg-glass-light);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px var(--shadow-medium);
+}
+
+.modal-image {
+    width: 100%;
+    aspect-ratio: 1/1;
+    background: var(--bg-secondary) !important;
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-radius: 16px;
+    margin-bottom: 20px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border: 1px solid var(--border-glass);
+    box-shadow: 0 4px 20px var(--shadow-light);
+    overflow: hidden;
+}
+
+.modal-name {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text-primary) !important;
+    line-height: 1.3;
+    letter-spacing: -0.5px;
+}
+
+.modal-description {
+    font-size: 16px;
+    color: var(--text-secondary) !important;
+    margin-bottom: 20px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    opacity: 0.9;
+}
+
+.modal-description:empty::before {
+    content: "Описание отсутствует";
+    font-style: italic;
+    color: var(--tg-theme-hint-color);
+}
+
+.modal-price-container {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-top: auto;
+}
+
+.modal-price {
+    font-size: 26px;
+    color: var(--tg-theme-link-color) !important;
+    font-weight: 700;
+}
+
+.modal-old-price {
+    font-size: 18px;
+    color: var(--text-hint) !important;
+    text-decoration: line-through;
+}
+
+.modal-reservation-status {
+    margin: 15px 0;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(255, 193, 7, 0.2);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    color: #ffc107;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    display: none;
+}
+
+.modal-reservation-button {
+    margin-top: 20px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.modal-reservation-button button {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    word-wrap: break-word;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+.reserve-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    background: rgba(90, 200, 250, 0.3);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid rgba(90, 200, 250, 0.4);
+    color: var(--tg-theme-button-color);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(90, 200, 250, 0.2);
+}
+
+.reserve-btn:hover {
+    background: rgba(90, 200, 250, 0.4);
+    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.3);
+    transform: translateY(-2px);
+}
+
+.reserve-btn:active {
+    transform: translateY(0);
+}
+
+.reserve-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.cancel-reservation-btn {
+    background: rgba(255, 59, 48, 0.2);
+    border: 1px solid rgba(255, 59, 48, 0.4);
+    color: #ff3b30;
+}
+
+.cancel-reservation-btn:hover {
+    background: rgba(255, 59, 48, 0.3);
+    border-color: rgba(255, 59, 48, 0.6);
+}
+
+.cancel-reservation-btn:active {
+    background: rgba(255, 59, 48, 0.4);
+}
+
+.reservation-modal-content {
+    max-width: 300px;
+}
+
+.reservation-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary) !important;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.reservation-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.reservation-option {
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    color: var(--text-secondary);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+.reservation-option:hover {
+    background: var(--bg-glass-light);
+    border-color: rgba(90, 200, 250, 0.4);
+    color: var(--tg-theme-button-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px var(--shadow-medium);
+}
+
+.reservation-option:active {
+    transform: translateY(0);
+}
+
+.reservation-close {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+}
+
+/* Исправление для полноэкранного режима */
+html, body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+#app {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+main {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Дополнительные стили для лучшей видимости на мобильных */
+@media (max-width: 480px) {
+    header h1 {
+        font-size: 17px;
+        padding: 0 50px;
+    }
+    
+    .cart-button {
+        font-size: 12px;
+        padding: 6px 12px;
+        right: 10px;
+    }
+    
+    #products-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        padding: 8px;
+    }
+    
+    .product-card {
+        padding: 10px;
+    }
+    
+    .modal-content {
+        max-width: 95%;
+        width: calc(100% - 20px);
+        margin: 10px auto;
+        padding: 15px;
+        max-height: calc(100vh - 20px);
+    }
+    
+    .modal-image {
+        max-height: 250px;
+        aspect-ratio: 1/1;
+    }
+    
+    .modal-reservation-button {
+        margin-top: 15px;
+        width: 100%;
+    }
+    
+    .modal-reservation-button button {
+        width: 100%;
+        max-width: 100%;
+        padding: 12px;
+        font-size: 14px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    .product-name {
+        font-size: 14px;
+    }
+    
+    .product-price {
+        font-size: 17px;
+    }
+    
+    .modal-name {
+        font-size: 22px;
+    }
+    
+    .modal-price {
+        font-size: 26px;
+    }
+    
+    #products-grid {
+        gap: 10px;
+        padding: 12px;
+    }
+    
+    .product-card {
+        padding: 12px;
+    }
+    
+    .modal-content {
+        margin: 10px auto;
+        padding: 20px;
+        border-radius: 20px;
+    }
+}
+
+/* Улучшение контрастности для плейсхолдеров */
+.product-image-placeholder,
+.product-image-loading {
+    color: var(--text-hint) !important;
+    font-size: 36px;
+    opacity: 0.6;
+}
+
+/* Дополнительные эффекты для Liquid Glass */
+.scroll-x {
+    background: transparent;
+}
+
+#products-grid {
+    background: transparent;
+}
+
+/* Плавные переходы для всех интерактивных элементов */
+.category-badge,
+.product-card,
+.modal-close {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Улучшенная анимация модального окна */
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(20px) scale(0.95);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}

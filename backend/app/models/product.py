@@ -1,0 +1,25 @@
+from pydantic import BaseModel
+from typing import Optional, List
+
+class ProductBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float
+    image_url: Optional[str] = None  # Для обратной совместимости
+    images_urls: Optional[List[str]] = None  # Массив URL изображений (до 5 фото)
+    discount: float = 0.0
+    category_id: int
+
+class ProductCreate(ProductBase):
+    pass
+
+class Product(ProductBase):
+    id: int
+    user_id: Optional[int] = None
+    reservation: Optional[dict] = None  # Информация о резервации
+
+    class Config:
+        from_attributes = True
+
+
+

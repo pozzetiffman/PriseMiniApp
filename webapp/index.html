@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#1c1c1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Прайс</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1 id="user-name">Загрузка...</h1>
+            <button id="cart-button" class="cart-button" style="display: none;">🛒 Корзина (<span id="cart-count">0</span>)</button>
+        </header>
+        <main>
+            <div id="categories-nav" class="scroll-x">
+                <!-- Категории будут здесь -->
+            </div>
+            <div id="products-grid">
+                <!-- Товары будут здесь -->
+                <p class="loading">Загрузка товаров...</p>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Модальное окно для детального просмотра товара -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <div id="modal-image" class="modal-image"></div>
+            <div id="modal-name" class="modal-name"></div>
+            <div id="modal-description" class="modal-description"></div>
+            <div id="modal-price-container" class="modal-price-container"></div>
+            <div id="modal-reservation-status" class="modal-reservation-status"></div>
+            <div id="modal-reservation-button" class="modal-reservation-button"></div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно для выбора времени резервации -->
+    <div id="reservation-modal" class="modal">
+        <div class="modal-content reservation-modal-content">
+            <span class="modal-close reservation-close">&times;</span>
+            <h2 class="reservation-title">⏰ Выберите время резервации</h2>
+            <div id="reservation-options" class="reservation-options">
+                <button class="reservation-option" data-hours="1">1 час</button>
+                <button class="reservation-option" data-hours="2">2 часа</button>
+                <button class="reservation-option" data-hours="3">3 часа</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно корзины -->
+    <div id="cart-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close cart-close">&times;</span>
+            <h2 class="cart-title">🛒 Мои резервации</h2>
+            <div id="cart-items" class="cart-items">
+                <!-- Зарезервированные товары будут здесь -->
+            </div>
+        </div>
+    </div>
+    
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
