@@ -455,6 +455,7 @@ header h1 {
 }
 
 .modal-image {
+    position: relative;
     width: 100%;
     aspect-ratio: 1/1;
     background: var(--bg-secondary) !important;
@@ -465,6 +466,7 @@ header h1 {
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+    overflow: hidden;
     border: 1px solid var(--border-glass);
     box-shadow: 0 4px 20px var(--shadow-light);
     overflow: hidden;

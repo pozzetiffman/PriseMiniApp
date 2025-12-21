@@ -41,3 +41,4 @@ for prod in products:
 
 db.close()
 
+

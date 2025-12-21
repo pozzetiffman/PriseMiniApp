@@ -232,20 +232,17 @@ export async function loadCart() {
                     }
                 }
                 
-                let productImage = '';
+                // Определяем URL изображения
+                let imageUrl = null;
                 if (product.images_urls && product.images_urls.length > 0) {
                     const firstImage = product.images_urls[0];
-                    const fullImageUrl = firstImage.startsWith('http') 
+                    imageUrl = firstImage.startsWith('http') 
                         ? firstImage 
                         : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
-                    productImage = `<img src="${fullImageUrl}" alt="${product.name}" class="cart-item-image" onerror="this.style.display='none'">`;
                 } else if (product.image_url) {
-                    const fullImageUrl = product.image_url.startsWith('http') 
+                    imageUrl = product.image_url.startsWith('http') 
                         ? product.image_url 
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
-                    productImage = `<img src="${fullImageUrl}" alt="${product.name}" class="cart-item-image" onerror="this.style.display='none'">`;
-                } else {
-                    productImage = '<div class="cart-item-image-placeholder">📦</div>';
                 }
                 
                 const finalPrice = product.discount > 0 
@@ -254,10 +251,64 @@ export async function loadCart() {
                 
                 const cartItem = document.createElement('div');
                 cartItem.className = 'cart-item';
+                
+                // Создаем контейнер для изображения
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'cart-item-image-container';
+                
+                if (imageUrl) {
+                    // Показываем placeholder во время загрузки
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '⏳';
+                    imageContainer.appendChild(placeholder);
+                    
+                    // Загружаем изображение через fetch для обхода блокировки Telegram WebView
+                    fetch(imageUrl, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        const img = document.createElement('img');
+                        img.src = blobUrl;
+                        img.alt = product.name;
+                        img.className = 'cart-item-image';
+                        img.onerror = () => {
+                            URL.revokeObjectURL(blobUrl);
+                            placeholder.textContent = '📦';
+                            placeholder.style.display = 'flex';
+                            if (img.parentNode) {
+                                img.remove();
+                            }
+                        };
+                        img.onload = () => {
+                            if (placeholder.parentNode) {
+                                placeholder.remove();
+                            }
+                        };
+                        imageContainer.appendChild(img);
+                    })
+                    .catch(error => {
+                        console.error('[CART IMG] Fetch error:', error);
+                        placeholder.textContent = '📦';
+                    });
+                } else {
+                    // Нет изображения - показываем placeholder
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '📦';
+                    imageContainer.appendChild(placeholder);
+                }
+                
                 cartItem.innerHTML = `
-                    <div class="cart-item-image-container">
-                        ${productImage}
-                    </div>
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
                         <p class="cart-item-price">${finalPrice} ₽</p>
@@ -265,6 +316,9 @@ export async function loadCart() {
                     </div>
                     <button class="cancel-reservation-btn-small" onclick="window.cancelReservationFromCart(${reservation.id}, ${reservation.product_id})" title="Снять резервацию">❌</button>
                 `;
+                
+                // Вставляем контейнер изображения в начало
+                cartItem.insertBefore(imageContainer, cartItem.firstChild);
                 cartItems.appendChild(cartItem);
                 console.log('🛒 loadCart: Added cart item for product:', product.name);
             } catch (e) {

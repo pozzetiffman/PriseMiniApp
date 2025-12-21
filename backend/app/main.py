@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -43,15 +43,16 @@ else:
     async def root():
         return {"message": "PriseMiniApp API is running", "webapp": "not found"}
 
-# Middleware для добавления заголовков к статическим файлам
+# Middleware для добавления заголовков к статическим файлам и API endpoints
 @app.middleware("http")
 async def add_ngrok_headers(request, call_next):
     response = await call_next(request)
-    # Добавляем заголовки для статических файлов и WebApp
+    # Добавляем заголовки для статических файлов, WebApp и API endpoints изображений
     if (request.url.path.startswith("/static/") or 
         request.url.path.startswith("/css/") or 
         request.url.path.startswith("/js/") or 
         request.url.path.startswith("/assets/") or
+        request.url.path.startswith("/api/images/") or  # Проксирование изображений через API
         request.url.path == "/" or
         request.url.path.endswith(('.html', '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.webp'))):
         response.headers["ngrok-skip-browser-warning"] = "69420"
@@ -60,7 +61,7 @@ async def add_ngrok_headers(request, call_next):
         response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "*"
         # Кэширование для изображений
-        if request.url.path.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')):
+        if request.url.path.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) or request.url.path.startswith("/api/images/"):
             response.headers["Cache-Control"] = "public, max-age=31536000"
     return response
 
@@ -96,3 +97,38 @@ async def test_image(filename: str):
     if os.path.exists(file_path):
         return {"exists": True, "path": file_path, "size": os.path.getsize(file_path)}
     return {"exists": False, "path": file_path}
+
+@app.get("/api/images/{filename}")
+async def proxy_image(filename: str):
+    """
+    Проксирует изображения через API endpoint.
+    Это обходит блокировку Telegram WebView для ngrok доменов.
+    """
+    # Безопасность: проверяем, что filename не содержит путь (предотвращаем path traversal)
+    if '/' in filename or '..' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    file_path = f"static/uploads/{filename}"
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Определяем MIME type по расширению
+    ext = filename.lower().split('.')[-1] if '.' in filename else ''
+    media_types = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp'
+    }
+    media_type = media_types.get(ext, 'image/jpeg')
+    
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "public, max-age=31536000",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )

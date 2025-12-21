@@ -11,6 +11,38 @@ from ..models import product as schemas
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
+# Получаем публичный URL из переменной окружения или используем ngrok по умолчанию
+API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "https://unmaneuvered-chronogrammatically-otelia.ngrok-free.dev")
+
+def make_full_url(path: str) -> str:
+    """
+    Преобразует относительный путь в полный HTTPS URL.
+    Использует /api/images/ вместо /static/uploads/ для обхода блокировки Telegram WebView.
+    """
+    if not path:
+        return ""
+    
+    # Если уже полный URL, проверяем, содержит ли он /static/uploads/
+    if path.startswith('http://') or path.startswith('https://'):
+        # Если это полный URL с /static/uploads/, заменяем на /api/images/
+        if '/static/uploads/' in path:
+            filename = path.split('/static/uploads/')[-1]
+            # Убираем query параметры если есть
+            filename = filename.split('?')[0]
+            return API_PUBLIC_URL + f'/api/images/{filename}'
+        return path
+    
+    if path.startswith('/'):
+        # Если это путь к изображению в static/uploads, используем API endpoint
+        if path.startswith('/static/uploads/'):
+            filename = path.replace('/static/uploads/', '')
+            # Убираем query параметры если есть
+            filename = filename.split('?')[0]
+            return API_PUBLIC_URL + f'/api/images/{filename}'
+        return API_PUBLIC_URL + path
+    
+    return API_PUBLIC_URL + '/' + path
+
 @router.get("/", response_model=List[schemas.Product])
 def get_products(
     user_id: int,
@@ -37,6 +69,10 @@ def get_products(
         # Для обратной совместимости: если есть image_url, но нет images_urls, добавляем его
         if not images_list and prod.image_url:
             images_list = [prod.image_url]
+        
+        # Преобразуем относительные пути в полные HTTPS URL для Telegram Mini App
+        images_list = [make_full_url(img_url) for img_url in images_list if img_url]
+        image_url_full = make_full_url(prod.image_url) if prod.image_url else None
         
         # Проверяем активную резервацию
         from datetime import datetime
@@ -80,14 +116,14 @@ def get_products(
         else:
             print(f"DEBUG: Product {prod.id} '{prod.name}' has no active reservation")
         
-        # Создаем объект продукта с images_urls как список
+        # Создаем объект продукта с images_urls как список (теперь с полными HTTPS URL)
         prod_dict = {
             "id": prod.id,
             "name": prod.name,
             "description": prod.description,
             "price": prod.price,
-            "image_url": prod.image_url,  # Для обратной совместимости
-            "images_urls": images_list,
+            "image_url": image_url_full,  # Полный HTTPS URL для обратной совместимости
+            "images_urls": images_list,  # Массив полных HTTPS URL
             "discount": prod.discount,
             "category_id": prod.category_id,
             "user_id": prod.user_id,
@@ -96,6 +132,13 @@ def get_products(
         result.append(prod_dict)
         
         print(f"DEBUG: Product {prod.id} '{prod.name}' - images_urls: {len(images_list)} images")
+        if images_list:
+            print(f"DEBUG: Product {prod.id} first image URL: {images_list[0]}")
+            # Проверяем, что URL использует /api/images/ вместо /static/uploads/
+            if '/static/uploads/' in images_list[0]:
+                print(f"WARNING: Product {prod.id} image URL still contains /static/uploads/ - should use /api/images/")
+            elif '/api/images/' in images_list[0]:
+                print(f"OK: Product {prod.id} image URL correctly uses /api/images/")
     
     return result
 
@@ -180,14 +223,18 @@ async def create_product(
     
     print(f"DEBUG: Product created in DB: id={db_product.id}, name={db_product.name}, images_count={len(images_urls)}")
     
-    # Возвращаем продукт с images_urls как список
+    # Преобразуем относительные пути в полные HTTPS URL
+    images_urls_full = [make_full_url(img_url) for img_url in images_urls]
+    image_url_full = make_full_url(db_product.image_url) if db_product.image_url else None
+    
+    # Возвращаем продукт с images_urls как список полных HTTPS URL
     return {
         "id": db_product.id,
         "name": db_product.name,
         "description": db_product.description,
         "price": db_product.price,
-        "image_url": db_product.image_url,
-        "images_urls": images_urls,
+        "image_url": image_url_full,
+        "images_urls": images_urls_full,
         "discount": db_product.discount,
         "category_id": db_product.category_id,
         "user_id": db_product.user_id

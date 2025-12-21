@@ -241,26 +241,39 @@ function renderProducts(products) {
     products.forEach(prod => {
         const finalPrice = prod.discount > 0 ? Math.round(prod.price * (1 - prod.discount / 100)) : prod.price;
         
-        // Получаем изображения
+        // Получаем изображения - backend теперь возвращает полные HTTPS URL
         let imagesList = [];
-        if (prod.images_urls && prod.images_urls.length > 0) {
+        if (prod.images_urls && Array.isArray(prod.images_urls) && prod.images_urls.length > 0) {
             imagesList = prod.images_urls;
         } else if (prod.image_url) {
             imagesList = [prod.image_url];
         }
         
-        // Преобразуем в полные URL
+        // Backend возвращает полные HTTPS URL, но на всякий случай проверяем
         const fullImages = imagesList.map(imgUrl => {
+            if (!imgUrl) return '';
+            // Если уже полный URL - используем как есть
             if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) {
                 return imgUrl;
-            } else if (imgUrl.startsWith('/')) {
-                return 'https://unmaneuvered-chronogrammatically-otelia.ngrok-free.dev' + imgUrl;
-            } else {
-                return 'https://unmaneuvered-chronogrammatically-otelia.ngrok-free.dev/' + imgUrl;
             }
-        });
+            // Если относительный путь - добавляем API_BASE
+            if (imgUrl.startsWith('/')) {
+                return API_BASE + imgUrl;
+            }
+            return API_BASE + '/' + imgUrl;
+        }).filter(url => url !== '');
         
         const fullImg = fullImages.length > 0 ? fullImages[0] : '';
+        
+        // ДИАГНОСТИКА: Проверяем fullImg
+        if (prod.id) {
+            console.log(`[IMG DEBUG] Product ${prod.id} "${prod.name}":`);
+            console.log(`[IMG DEBUG]   - imagesList length: ${imagesList.length}`);
+            console.log(`[IMG DEBUG]   - fullImages length: ${fullImages.length}`);
+            console.log(`[IMG DEBUG]   - fullImg: "${fullImg}"`);
+            console.log(`[IMG DEBUG]   - fullImg type: ${typeof fullImg}`);
+            console.log(`[IMG DEBUG]   - fullImg empty?: ${!fullImg}`);
+        }
         
         const card = document.createElement('div');
         card.className = 'product-card';
@@ -290,30 +303,157 @@ function renderProducts(products) {
         // Изображение
         const imageDiv = document.createElement('div');
         imageDiv.className = 'product-image';
-        if (fullImg) {
-            const img = document.createElement('img');
-            img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block;';
-            img.alt = prod.name;
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-                imageDiv.innerHTML = '';
-                imageDiv.appendChild(img);
-            };
-            img.onerror = () => {
-                imageDiv.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-                imageDiv.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 24px;">📷</div>';
-            };
-            img.src = fullImg;
-        } else {
-            imageDiv.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-            imageDiv.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 24px;">📷</div>';
+        imageDiv.style.position = 'relative';
+        imageDiv.style.overflow = 'hidden';
+        
+        // ДИАГНОСТИКА: Проверяем видимость imageDiv
+        if (prod.id) {
+            console.log(`[IMG DEBUG] Product ${prod.id}: imageDiv created, className="${imageDiv.className}"`);
         }
         
+        // Создаем badge скидки ПЕРЕД добавлением изображения, чтобы он не удалился
+        let discountBadge = null;
         if (prod.discount > 0) {
-            const discountBadge = document.createElement('div');
+            discountBadge = document.createElement('div');
             discountBadge.className = 'discount-badge';
             discountBadge.textContent = `-${prod.discount}%`;
-            imageDiv.appendChild(discountBadge);
+        }
+        
+        // КРИТИЧЕСКИ ВАЖНО: Добавляем imageDiv в card ПЕРЕД созданием img
+        // Это гарантирует, что элемент будет в DOM когда мы установим src
+        card.appendChild(imageDiv);
+        
+        // ДИАГНОСТИКА: Проверяем, что imageDiv в DOM
+        if (prod.id) {
+            console.log(`[IMG DEBUG] Product ${prod.id}: imageDiv added to card, in DOM: ${card.contains(imageDiv)}`);
+        }
+        
+        // КРИТИЧЕСКИ ВАЖНО: Добавляем card в productsGrid ПЕРЕД установкой img.src
+        // Это гарантирует, что весь элемент будет в DOM когда мы установим src
+        // Telegram WebView может не начать загрузку изображения, если элемент не в DOM
+        productsGrid.appendChild(card);
+        
+        // ДИАГНОСТИКА: Проверяем, что card в DOM
+        if (prod.id) {
+            console.log(`[IMG DEBUG] Product ${prod.id}: card added to productsGrid, in DOM: ${productsGrid.contains(card)}`);
+        }
+        
+        if (fullImg) {
+            // КРИТИЧЕСКОЕ РЕШЕНИЕ: Загружаем изображение через fetch и создаем blob URL
+            // Это обходит блокировку Telegram WebView для ngrok доменов
+            // Telegram WebView может блокировать прямые запросы к ngrok доменам через <img src>
+            // Но fetch запросы работают, поэтому мы загружаем через fetch и создаем blob URL
+            
+            // Показываем placeholder во время загрузки
+            imageDiv.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+            const loadingPlaceholder = document.createElement('div');
+            loadingPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 24px;';
+            loadingPlaceholder.textContent = '⏳';
+            imageDiv.appendChild(loadingPlaceholder);
+            
+            // Добавляем badge скидки ПЕРЕД загрузкой (чтобы он был поверх)
+            if (discountBadge) {
+                discountBadge.style.zIndex = '10';
+                discountBadge.style.position = 'absolute';
+                imageDiv.appendChild(discountBadge);
+            }
+            
+            // Функция для показа ошибки
+            const showError = () => {
+                if (prod.id) {
+                    console.error(`[IMG DEBUG] Product ${prod.id}: IMAGE LOAD ERROR`);
+                }
+                imageDiv.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+                const errorPlaceholder = document.createElement('div');
+                errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 24px;';
+                errorPlaceholder.textContent = '📷';
+                imageDiv.innerHTML = '';
+                imageDiv.appendChild(errorPlaceholder);
+                if (discountBadge) {
+                    imageDiv.appendChild(discountBadge);
+                }
+            };
+            
+            // Загружаем изображение через fetch для обхода блокировки Telegram WebView
+            fetch(fullImg, {
+                headers: {
+                    'ngrok-skip-browser-warning': '69420'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // Создаем blob URL для обхода блокировки ngrok доменов
+                const blobUrl = URL.createObjectURL(blob);
+                
+                if (prod.id) {
+                    console.log(`[IMG DEBUG] Product ${prod.id}: Image loaded via fetch, blob URL created: ${blobUrl.substring(0, 50)}...`);
+                }
+                
+                // Создаем img элемент и устанавливаем blob URL
+                const img = document.createElement('img');
+                img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block;';
+                img.alt = prod.name;
+                
+                img.onload = function() {
+                    // Изображение загружено успешно
+                    if (prod.id) {
+                        console.log(`[IMG DEBUG] Product ${prod.id}: IMAGE LOADED SUCCESSFULLY via blob URL`);
+                    }
+                    // Удаляем placeholder
+                    if (loadingPlaceholder.parentNode) {
+                        loadingPlaceholder.remove();
+                    }
+                };
+                
+                img.onerror = function() {
+                    // Ошибка загрузки изображения
+                    if (prod.id) {
+                        console.error(`[IMG DEBUG] Product ${prod.id}: IMAGE LOAD ERROR - blob URL failed`);
+                    }
+                    URL.revokeObjectURL(blobUrl); // Освобождаем память
+                    showError();
+                };
+                
+                // Заменяем placeholder на изображение
+                imageDiv.innerHTML = '';
+                imageDiv.appendChild(img);
+                if (discountBadge) {
+                    imageDiv.appendChild(discountBadge);
+                }
+                
+                // Устанавливаем blob URL
+                img.src = blobUrl;
+                
+                // Сохраняем blob URL для последующей очистки (опционально)
+                // Можно добавить очистку при удалении карточки
+            })
+            .catch(error => {
+                if (prod.id) {
+                    console.error(`[IMG DEBUG] Product ${prod.id}: Fetch error:`, error);
+                    console.error(`[IMG DEBUG] Product ${prod.id}: Failed URL: "${fullImg}"`);
+                }
+                showError();
+            });
+        } else {
+            // ДИАГНОСТИКА: fullImg пустой
+            if (prod.id) {
+                console.warn(`[IMG DEBUG] Product ${prod.id}: fullImg is EMPTY - showing placeholder`);
+            }
+            imageDiv.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+            const placeholder = document.createElement('div');
+            placeholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 24px;';
+            placeholder.textContent = '📷';
+            imageDiv.appendChild(placeholder);
+            
+            // Добавляем badge скидки даже если нет изображения
+            if (discountBadge) {
+                imageDiv.appendChild(discountBadge);
+            }
         }
         
         // Название
@@ -335,13 +475,11 @@ function renderProducts(products) {
             oldPriceSpan.textContent = `${prod.price} ₽`;
             priceContainer.appendChild(oldPriceSpan);
         }
-        
-        card.appendChild(imageDiv);
         card.appendChild(nameDiv);
         card.appendChild(priceContainer);
         card.onclick = () => showProductModal(prod, finalPrice, fullImages);
         
-        productsGrid.appendChild(card);
+        // card уже добавлен в DOM выше (перед установкой img.src)
     });
 }
 
@@ -559,29 +697,190 @@ function showModalImage(index) {
     currentImageIndex = index;
     const fullImg = currentImages[index];
     
-    modalImage.innerHTML = '';
+    // Очищаем содержимое, но сохраняем структуру для навигации
+    const oldContainer = modalImage.querySelector('.image-container');
+    if (oldContainer) {
+        oldContainer.remove();
+    }
+    
+    // Очищаем предыдущий blob URL если был
+    const oldBlobUrl = modalImage.dataset.blobUrl;
+    if (oldBlobUrl) {
+        URL.revokeObjectURL(oldBlobUrl);
+        delete modalImage.dataset.blobUrl;
+    }
+    
     const imageContainer = document.createElement('div');
+    imageContainer.className = 'image-container';
     imageContainer.style.cssText = 'position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;';
     imageContainer.innerHTML = '<div style="color: var(--tg-theme-hint-color); font-size: 48px;">⏳</div>';
     modalImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
     modalImage.appendChild(imageContainer);
     
-    const img = document.createElement('img');
-    img.style.cssText = 'width: 100%; height: 100%; object-fit: contain; border-radius: 12px; display: block;';
-    img.alt = currentProduct ? currentProduct.name : 'Product';
-    img.crossOrigin = 'anonymous';
-    
-    img.onload = () => {
-        imageContainer.innerHTML = '';
-        imageContainer.appendChild(img);
-        modalImage.style.backgroundColor = 'transparent';
-    };
-    
-    img.onerror = () => {
+    // Загружаем изображение через fetch для обхода блокировки Telegram WebView
+    fetch(fullImg, {
+        headers: {
+            'ngrok-skip-browser-warning': '69420'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Создаем blob URL для обхода блокировки ngrok доменов
+        const blobUrl = URL.createObjectURL(blob);
+        modalImage.dataset.blobUrl = blobUrl; // Сохраняем для последующей очистки
+        
+        const img = document.createElement('img');
+        img.style.cssText = 'width: 100%; height: 100%; object-fit: contain; border-radius: 12px; display: block;';
+        img.alt = currentProduct ? currentProduct.name : 'Product';
+        
+        img.onload = () => {
+            imageContainer.innerHTML = '';
+            imageContainer.appendChild(img);
+            modalImage.style.backgroundColor = 'transparent';
+            
+            // Добавляем навигацию по фото, если их больше одного
+            if (currentImages.length > 1) {
+                updateImageNavigation();
+            }
+        };
+        
+        img.onerror = () => {
+            URL.revokeObjectURL(blobUrl);
+            delete modalImage.dataset.blobUrl;
+            imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+        };
+        
+        img.src = blobUrl;
+    })
+    .catch(error => {
+        console.error('[MODAL IMG] Fetch error:', error);
+        console.error('[MODAL IMG] Failed URL:', fullImg);
         imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+    });
+}
+
+// Обновление навигации по фото
+function updateImageNavigation() {
+    const modalImage = document.getElementById('modal-image');
+    
+    // Удаляем старые кнопки навигации, если они есть
+    const oldNav = modalImage.querySelector('.image-navigation');
+    if (oldNav) {
+        oldNav.remove();
+    }
+    
+    // Создаем контейнер для навигации
+    const navContainer = document.createElement('div');
+    navContainer.className = 'image-navigation';
+    navContainer.style.cssText = `
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        z-index: 100;
+    `;
+    
+    // Кнопка "Назад"
+    if (currentImageIndex > 0) {
+        const prevBtn = document.createElement('button');
+        prevBtn.innerHTML = '◀';
+        prevBtn.style.cssText = `
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        prevBtn.onclick = (e) => {
+            e.stopPropagation();
+            showModalImage(currentImageIndex - 1);
+        };
+        navContainer.appendChild(prevBtn);
+    }
+    
+    // Индикатор фото (1/5, 2/5 и т.д.)
+    const indicator = document.createElement('div');
+    indicator.textContent = `${currentImageIndex + 1}/${currentImages.length}`;
+    indicator.style.cssText = `
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(10px);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 16px;
+        font-size: 14px;
+        font-weight: 600;
+    `;
+    navContainer.appendChild(indicator);
+    
+    // Кнопка "Вперед"
+    if (currentImageIndex < currentImages.length - 1) {
+        const nextBtn = document.createElement('button');
+        nextBtn.innerHTML = '▶';
+        nextBtn.style.cssText = `
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        nextBtn.onclick = (e) => {
+            e.stopPropagation();
+            showModalImage(currentImageIndex + 1);
+        };
+        navContainer.appendChild(nextBtn);
+    }
+    
+    modalImage.appendChild(navContainer);
+    
+    // Добавляем обработчики свайпов для мобильных устройств
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    modalImage.ontouchstart = (e) => {
+        touchStartX = e.changedTouches[0].screenX;
     };
     
-    img.src = fullImg;
+    modalImage.ontouchend = (e) => {
+        touchEndX = e.changedTouches[0].screenX;
+        handleSwipe();
+    };
+    
+    function handleSwipe() {
+        const swipeThreshold = 50;
+        const diff = touchStartX - touchEndX;
+        
+        if (Math.abs(diff) > swipeThreshold) {
+            if (diff > 0 && currentImageIndex < currentImages.length - 1) {
+                // Свайп влево - следующее фото
+                showModalImage(currentImageIndex + 1);
+            } else if (diff < 0 && currentImageIndex > 0) {
+                // Свайп вправо - предыдущее фото
+                showModalImage(currentImageIndex - 1);
+            }
+        }
+    }
 }
 
 // Настройка модальных окон

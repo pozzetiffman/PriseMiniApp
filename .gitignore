@@ -52,3 +52,11 @@ Thumbs.db
 *.tmp
 *.temp
 
+
+
+# Uploaded images
+backend/static/uploads/*.jpg
+backend/static/uploads/*.png
+backend/static/uploads/*.jpeg
+backend/static/uploads/*.gif
+backend/static/uploads/*.webp

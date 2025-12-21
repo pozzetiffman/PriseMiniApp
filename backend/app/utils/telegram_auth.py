@@ -105,3 +105,4 @@ def get_user_id_from_init_data(init_data: str, bot_token: str) -> int:
     validated_data = validate_telegram_init_data(init_data, bot_token)
     return validated_data["user"]["id"]
 
+

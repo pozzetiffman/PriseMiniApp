@@ -20,3 +20,4 @@ class ShopSettings(ShopSettingsBase):
     class Config:
         from_attributes = True
 
+

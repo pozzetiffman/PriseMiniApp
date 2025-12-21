@@ -19,3 +19,4 @@ class Reservation(ReservationBase):
     class Config:
         from_attributes = True
 
+
