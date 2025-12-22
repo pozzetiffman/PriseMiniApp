@@ -241,3 +241,33 @@ export async function updateShopSettings(reservationsEnabled) {
     
     return JSON.parse(responseText);
 }
+
+// Переключение статуса "горящее предложение" для товара
+export async function toggleHotOffer(productId, shopOwnerId, isHotOffer) {
+    const url = `${API_BASE}/api/products/${productId}/hot-offer?user_id=${shopOwnerId}`;
+    console.log(`Toggling hot offer: productId=${productId}, isHotOffer=${isHotOffer}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            is_hot_offer: isHotOffer
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Hot offer toggle response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось изменить статус горящего предложения';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}

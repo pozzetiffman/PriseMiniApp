@@ -127,6 +127,7 @@ def get_products(
             "discount": prod.discount,
             "category_id": prod.category_id,
             "user_id": prod.user_id,
+            "is_hot_offer": getattr(prod, 'is_hot_offer', False),  # Горящее предложение
             "reservation": reservation_info
         }
         result.append(prod_dict)
@@ -150,6 +151,7 @@ async def create_product(
     user_id: int = Form(...),
     description: Optional[str] = Form(None),
     discount: float = Form(0.0),
+    is_hot_offer: bool = Form(False),
     images: List[UploadFile] = File(None),
     db: Session = Depends(database.get_db)
 ):
@@ -214,6 +216,7 @@ async def create_product(
         user_id=user_id,
         description=description,
         discount=discount,
+        is_hot_offer=is_hot_offer,
         image_url=image_url,
         images_urls=images_urls_json
     )
@@ -237,7 +240,8 @@ async def create_product(
         "images_urls": images_urls_full,
         "discount": db_product.discount,
         "category_id": db_product.category_id,
-        "user_id": db_product.user_id
+        "user_id": db_product.user_id,
+        "is_hot_offer": getattr(db_product, 'is_hot_offer', False)
     }
 
 @router.put("/{product_id}", response_model=schemas.Product)
@@ -260,6 +264,31 @@ def update_product(
     db.commit()
     db.refresh(db_product)
     return db_product
+
+@router.patch("/{product_id}/hot-offer")
+def toggle_hot_offer(
+    product_id: int,
+    hot_offer_update: schemas.HotOfferUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Переключение статуса 'горящее предложение' для товара"""
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    db_product.is_hot_offer = hot_offer_update.is_hot_offer
+    db.commit()
+    db.refresh(db_product)
+    
+    return {
+        "id": db_product.id,
+        "is_hot_offer": db_product.is_hot_offer,
+        "message": f"Горящее предложение {'включено' if db_product.is_hot_offer else 'выключено'}"
+    }
 
 @router.delete("/{product_id}")
 def delete_product(

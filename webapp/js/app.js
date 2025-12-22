@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext } from './api.js';
+import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, toggleHotOffer } from './api.js';
 import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -320,6 +320,15 @@ function renderProducts(products) {
             discountBadge.textContent = `-${prod.discount}%`;
         }
         
+        // Создаем badge горящего предложения
+        let hotOfferBadge = null;
+        if (prod.is_hot_offer) {
+            hotOfferBadge = document.createElement('div');
+            hotOfferBadge.className = 'hot-offer-badge';
+            hotOfferBadge.innerHTML = '🔥';
+            hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+        }
+        
         // КРИТИЧЕСКИ ВАЖНО: Добавляем imageDiv в card ПЕРЕД созданием img
         // Это гарантирует, что элемент будет в DOM когда мы установим src
         card.appendChild(imageDiv);
@@ -359,6 +368,23 @@ function renderProducts(products) {
                 imageDiv.appendChild(discountBadge);
             }
             
+            // Добавляем badge горящего предложения
+            // Размещаем справа, если есть discount-badge, иначе слева
+            if (hotOfferBadge) {
+                hotOfferBadge.style.zIndex = '11';
+                hotOfferBadge.style.position = 'absolute';
+                hotOfferBadge.style.top = '8px';
+                // Если есть discount-badge, размещаем справа
+                if (discountBadge) {
+                    hotOfferBadge.style.right = '8px';
+                    hotOfferBadge.style.left = 'auto';
+                } else {
+                    hotOfferBadge.style.left = '8px';
+                    hotOfferBadge.style.right = 'auto';
+                }
+                imageDiv.appendChild(hotOfferBadge);
+            }
+            
             // Функция для показа ошибки
             const showError = () => {
                 if (prod.id) {
@@ -372,6 +398,9 @@ function renderProducts(products) {
                 imageDiv.appendChild(errorPlaceholder);
                 if (discountBadge) {
                     imageDiv.appendChild(discountBadge);
+                }
+                if (hotOfferBadge) {
+                    imageDiv.appendChild(hotOfferBadge);
                 }
             };
             
@@ -426,6 +455,9 @@ function renderProducts(products) {
                 if (discountBadge) {
                     imageDiv.appendChild(discountBadge);
                 }
+                if (hotOfferBadge) {
+                    imageDiv.appendChild(hotOfferBadge);
+                }
                 
                 // Устанавливаем blob URL
                 img.src = blobUrl;
@@ -454,6 +486,23 @@ function renderProducts(products) {
             // Добавляем badge скидки даже если нет изображения
             if (discountBadge) {
                 imageDiv.appendChild(discountBadge);
+            }
+            
+            // Добавляем badge горящего предложения даже если нет изображения
+            // Размещаем справа, если есть discount-badge, иначе слева
+            if (hotOfferBadge) {
+                hotOfferBadge.style.zIndex = '11';
+                hotOfferBadge.style.position = 'absolute';
+                hotOfferBadge.style.top = '8px';
+                // Если есть discount-badge, размещаем справа
+                if (discountBadge) {
+                    hotOfferBadge.style.right = '8px';
+                    hotOfferBadge.style.left = 'auto';
+                } else {
+                    hotOfferBadge.style.left = '8px';
+                    hotOfferBadge.style.right = 'auto';
+                }
+                imageDiv.appendChild(hotOfferBadge);
             }
         }
         
@@ -512,6 +561,55 @@ function showProductModal(prod, finalPrice, fullImages) {
         oldPriceSpan.className = 'old-price';
         oldPriceSpan.textContent = `${prod.price} ₽`;
         modalPriceContainer.appendChild(oldPriceSpan);
+    }
+    
+    // Управление горящим предложением (только для владельца)
+    const modalHotOfferControl = document.getElementById('modal-hot-offer-control');
+    if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
+        modalHotOfferControl.style.display = 'block';
+        modalHotOfferControl.innerHTML = '';
+        
+        const hotOfferContainer = document.createElement('div');
+        hotOfferContainer.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--bg-glass); backdrop-filter: blur(10px); border-radius: 12px; margin: 12px 0;';
+        
+        const hotOfferLabel = document.createElement('div');
+        hotOfferLabel.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        hotOfferLabel.innerHTML = '<span style="font-size: 20px;">🔥</span><span style="font-weight: 600;">Горящее предложение</span>';
+        
+        const hotOfferToggle = document.createElement('label');
+        hotOfferToggle.className = 'toggle-switch';
+        hotOfferToggle.style.cssText = 'margin: 0;';
+        
+        const toggleInput = document.createElement('input');
+        toggleInput.type = 'checkbox';
+        toggleInput.checked = prod.is_hot_offer || false;
+        toggleInput.onchange = async (e) => {
+            const isHotOffer = e.target.checked;
+            try {
+                await toggleHotOffer(prod.id, appContext.shop_owner_id, isHotOffer);
+                prod.is_hot_offer = isHotOffer;
+                // Обновляем визуальное отображение на карточках
+                setTimeout(() => {
+                    loadData();
+                }, 300);
+            } catch (error) {
+                console.error('Error toggling hot offer:', error);
+                alert('Ошибка при изменении статуса: ' + error.message);
+                toggleInput.checked = !isHotOffer; // Возвращаем предыдущее значение
+            }
+        };
+        
+        const toggleSlider = document.createElement('span');
+        toggleSlider.className = 'toggle-slider';
+        
+        hotOfferToggle.appendChild(toggleInput);
+        hotOfferToggle.appendChild(toggleSlider);
+        
+        hotOfferContainer.appendChild(hotOfferLabel);
+        hotOfferContainer.appendChild(hotOfferToggle);
+        modalHotOfferControl.appendChild(hotOfferContainer);
+    } else {
+        modalHotOfferControl.style.display = 'none';
     }
     
     // Резервация

@@ -23,6 +23,7 @@ class Product(Base):
     images_urls = Column(Text, nullable=True)  # JSON массив URL изображений (до 5 фото)
     discount = Column(Float, default=0.0)  # Скидка в процентах
     user_id = Column(BigInteger, index=True)  # ID пользователя Telegram
+    is_hot_offer = Column(Boolean, default=False)  # Горящее предложение
     
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship("Category", back_populates="products")

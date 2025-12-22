@@ -9,6 +9,7 @@ class ProductBase(BaseModel):
     images_urls: Optional[List[str]] = None  # Массив URL изображений (до 5 фото)
     discount: float = 0.0
     category_id: int
+    is_hot_offer: bool = False  # Горящее предложение
 
 class ProductCreate(ProductBase):
     pass
@@ -20,6 +21,9 @@ class Product(ProductBase):
 
     class Config:
         from_attributes = True
+
+class HotOfferUpdate(BaseModel):
+    is_hot_offer: bool
 
 
 
