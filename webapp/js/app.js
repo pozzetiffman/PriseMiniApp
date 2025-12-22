@@ -305,6 +305,7 @@ function renderProducts(products) {
         imageDiv.className = 'product-image';
         imageDiv.style.position = 'relative';
         imageDiv.style.overflow = 'hidden';
+        imageDiv.style.aspectRatio = '3/4';
         
         // ДИАГНОСТИКА: Проверяем видимость imageDiv
         if (prod.id) {
@@ -779,33 +780,54 @@ function updateImageNavigation() {
     navContainer.className = 'image-navigation';
     navContainer.style.cssText = `
         position: absolute;
-        bottom: 10px;
+        bottom: 12px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
         gap: 8px;
         align-items: center;
         z-index: 100;
+        padding: 6px;
     `;
     
-    // Кнопка "Назад"
+    // Кнопка "Назад" в стиле Liquid Glass
     if (currentImageIndex > 0) {
         const prevBtn = document.createElement('button');
-        prevBtn.innerHTML = '◀';
+        prevBtn.innerHTML = '‹';
         prevBtn.style.cssText = `
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(10px);
-            border: none;
-            color: white;
-            width: 36px;
-            height: 36px;
+            background: linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.95);
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             font-size: 18px;
+            font-weight: 700;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                        0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                        0 2px 8px rgba(90, 200, 250, 0.2);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         `;
+        prevBtn.onmouseenter = () => {
+            prevBtn.style.background = 'linear-gradient(135deg, rgba(90, 200, 250, 0.35) 0%, rgba(90, 200, 250, 0.2) 100%)';
+            prevBtn.style.transform = 'scale(1.15)';
+            prevBtn.style.boxShadow = '0 6px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.2) inset, 0 4px 12px rgba(90, 200, 250, 0.4)';
+            prevBtn.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+        };
+        prevBtn.onmouseleave = () => {
+            prevBtn.style.background = 'linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%)';
+            prevBtn.style.transform = 'scale(1)';
+            prevBtn.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 2px 8px rgba(90, 200, 250, 0.2)';
+            prevBtn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+        };
         prevBtn.onclick = (e) => {
             e.stopPropagation();
             showModalImage(currentImageIndex - 1);
@@ -813,38 +835,64 @@ function updateImageNavigation() {
         navContainer.appendChild(prevBtn);
     }
     
-    // Индикатор фото (1/5, 2/5 и т.д.)
+    // Индикатор фото в стиле Liquid Glass
     const indicator = document.createElement('div');
     indicator.textContent = `${currentImageIndex + 1}/${currentImages.length}`;
     indicator.style.cssText = `
-        background: rgba(0, 0, 0, 0.6);
-        backdrop-filter: blur(10px);
-        color: white;
-        padding: 6px 12px;
+        background: linear-gradient(135deg, rgba(58, 58, 60, 0.6) 0%, rgba(44, 44, 46, 0.5) 100%);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.95);
+        padding: 6px 14px;
         border-radius: 16px;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
+        letter-spacing: 0.3px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     `;
     navContainer.appendChild(indicator);
     
-    // Кнопка "Вперед"
+    // Кнопка "Вперед" в стиле Liquid Glass
     if (currentImageIndex < currentImages.length - 1) {
         const nextBtn = document.createElement('button');
-        nextBtn.innerHTML = '▶';
+        nextBtn.innerHTML = '›';
         nextBtn.style.cssText = `
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(10px);
-            border: none;
-            color: white;
-            width: 36px;
-            height: 36px;
+            background: linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.95);
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             font-size: 18px;
+            font-weight: 700;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                        0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                        0 2px 8px rgba(90, 200, 250, 0.2);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         `;
+        nextBtn.onmouseenter = () => {
+            nextBtn.style.background = 'linear-gradient(135deg, rgba(90, 200, 250, 0.35) 0%, rgba(90, 200, 250, 0.2) 100%)';
+            nextBtn.style.transform = 'scale(1.15)';
+            nextBtn.style.boxShadow = '0 6px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.2) inset, 0 4px 12px rgba(90, 200, 250, 0.4)';
+            nextBtn.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+        };
+        nextBtn.onmouseleave = () => {
+            nextBtn.style.background = 'linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%)';
+            nextBtn.style.transform = 'scale(1)';
+            nextBtn.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 2px 8px rgba(90, 200, 250, 0.2)';
+            nextBtn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+        };
         nextBtn.onclick = (e) => {
             e.stopPropagation();
             showModalImage(currentImageIndex + 1);

@@ -284,7 +284,8 @@ header h1 {
 
 .product-image {
     width: 100%;
-    aspect-ratio: 1/1;
+    aspect-ratio: 3/4 !important;
+    min-height: 180px;
     background: var(--bg-secondary) !important;
     backdrop-filter: var(--blur-small);
     -webkit-backdrop-filter: var(--blur-small);
@@ -457,7 +458,9 @@ header h1 {
 .modal-image {
     position: relative;
     width: 100%;
-    aspect-ratio: 1/1;
+    aspect-ratio: 3/4 !important;
+    min-height: 450px;
+    max-height: 600px;
     background: var(--bg-secondary) !important;
     backdrop-filter: var(--blur-small);
     -webkit-backdrop-filter: var(--blur-small);
@@ -705,8 +708,9 @@ main {
     }
     
     .modal-image {
-        max-height: 250px;
-        aspect-ratio: 1/1;
+        min-height: 350px;
+        max-height: 500px;
+        aspect-ratio: 3/4 !important;
     }
     
     .modal-reservation-button {
