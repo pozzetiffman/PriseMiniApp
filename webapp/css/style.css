@@ -1066,6 +1066,16 @@ main {
     transform: translateX(22px);
 }
 
+.toggle-switch input:disabled + .toggle-slider {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--bg-glass);
+}
+
+.toggle-switch input:disabled {
+    cursor: not-allowed;
+}
+
 .admin-info {
     margin-top: 20px;
     padding: 15px;

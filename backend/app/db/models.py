@@ -58,6 +58,7 @@ class ShopSettings(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, unique=True, index=True)  # ID владельца магазина (уникальный)
     reservations_enabled = Column(Boolean, default=True)  # Включена ли резервация товаров
+    quantity_enabled = Column(Boolean, default=True)  # Включен ли показ количества товаров и учет резервации
     shop_name = Column(String, nullable=True)  # Название магазина
     welcome_image_url = Column(String, nullable=True)  # Приветственное изображение/логотип магазина
     welcome_description = Column(Text, nullable=True)  # Приветственное описание/примечание магазина

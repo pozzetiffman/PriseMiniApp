@@ -213,21 +213,14 @@ export async function getShopSettings(shopOwnerId = null) {
 }
 
 // Обновление настроек магазина
-export async function updateShopSettings(reservationsEnabled, shopName = null) {
+export async function updateShopSettings(settingsUpdate) {
     const url = `${API_BASE}/api/shop-settings`;
-    console.log(`Updating shop settings: reservations_enabled=${reservationsEnabled}, shop_name=${shopName}`);
-    
-    const body = {
-        reservations_enabled: reservationsEnabled
-    };
-    if (shopName !== null) {
-        body.shop_name = shopName;
-    }
+    console.log(`Updating shop settings:`, settingsUpdate);
     
     const response = await fetch(url, {
         method: 'PUT',
         headers: getBaseHeaders(),
-        body: JSON.stringify(body)
+        body: JSON.stringify(settingsUpdate)
     });
     
     const responseText = await response.text();

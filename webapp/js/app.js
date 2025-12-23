@@ -375,9 +375,11 @@ function renderProducts(products) {
             hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
         }
         
-        // Создаем badge количества товара
+        // Создаем badge количества товара (только если quantity_enabled включен)
         let quantityBadge = null;
-        if (prod.quantity !== undefined && prod.quantity !== null) {
+        const shopSettings = getCurrentShopSettings();
+        const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
+        if (quantityEnabled && prod.quantity !== undefined && prod.quantity !== null) {
             quantityBadge = document.createElement('div');
             quantityBadge.className = 'product-quantity-badge';
             const quantity = prod.quantity;
@@ -723,10 +725,12 @@ function showProductModal(prod, finalPrice, fullImages) {
         modalPriceContainer.appendChild(oldPriceSpan);
     }
     
-    // Количество товара в модальном окне
+    // Количество товара в модальном окне (только если quantity_enabled включен)
     const modalQuantityDiv = document.getElementById('modal-quantity');
     if (modalQuantityDiv) {
-        if (prod.quantity !== undefined && prod.quantity !== null) {
+        const shopSettingsForModal = getCurrentShopSettings();
+        const quantityEnabledForModal = shopSettingsForModal ? (shopSettingsForModal.quantity_enabled !== false) : true;
+        if (quantityEnabledForModal && prod.quantity !== undefined && prod.quantity !== null) {
             modalQuantityDiv.style.display = 'block';
             modalQuantityDiv.textContent = `📦 В наличии: ${prod.quantity} шт.`;
         } else {
@@ -734,11 +738,15 @@ function showProductModal(prod, finalPrice, fullImages) {
         }
     }
     
-    // Резервация
+    // Резервация (только если quantity_enabled включен)
     const modalReservationButton = document.getElementById('modal-reservation-button');
     const modalReservationStatus = document.getElementById('modal-reservation-status');
     modalReservationButton.innerHTML = '';
     modalReservationStatus.style.display = 'none';
+    
+    // Проверяем, включено ли количество товаров (и соответственно резервация)
+    const shopSettingsForReservation = getCurrentShopSettings();
+    const quantityEnabledForReservation = shopSettingsForReservation ? (shopSettingsForReservation.quantity_enabled !== false) : true;
     
     // Используем контекст для определения прав (backend уже проверил все)
     const hasActiveReservation = prod.reservation && prod.reservation.reserved_until;
@@ -748,7 +756,8 @@ function showProductModal(prod, finalPrice, fullImages) {
     // Проверяем, можно ли еще резервировать товар (для товаров с quantity > 1)
     const canStillReserve = productQuantity > 0 && activeReservationsCount < productQuantity;
     
-    if (hasActiveReservation) {
+    // Показываем информацию о резервации только если quantity_enabled включен
+    if (quantityEnabledForReservation && hasActiveReservation) {
         // Backend уже вернул только активные резервации, просто показываем время
         // Backend возвращает время в UTC через isoformat()
         // Парсим время правильно (если нет Z в конце, добавляем его для UTC)
@@ -817,8 +826,10 @@ function showProductModal(prod, finalPrice, fullImages) {
     // 1. Это не наш магазин (клиент)
     // 2. Нет активной резервации ИЛИ можно еще резервировать (для товаров с quantity > 1)
     // 3. Резервация включена в настройках магазина
+    // 4. Количество товаров включено (quantity_enabled)
     const shopSettings = getCurrentShopSettings();
-    const reservationsEnabled = shopSettings ? shopSettings.reservations_enabled : true; // По умолчанию включено
+    const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
+    const reservationsEnabled = shopSettings ? (shopSettings.reservations_enabled === true) : true; // По умолчанию включено
     
     console.log('🔒 Reservation check:', {
         hasActiveReservation,
@@ -827,15 +838,18 @@ function showProductModal(prod, finalPrice, fullImages) {
         canStillReserve,
         role: appContext.role,
         can_reserve: appContext.permissions.can_reserve,
-        reservationsEnabled
+        reservationsEnabled,
+        quantityEnabled
     });
     
     // Показываем кнопку резервации, если:
     // - Нет активной резервации ИЛИ
     // - Есть активная резервация, но можно еще резервировать (quantity > active_count)
+    // - И количество товаров включено, И резервация включена
     const shouldShowReserveButton = (!hasActiveReservation || canStillReserve) && 
                                      appContext.role === 'client' && 
                                      appContext.permissions.can_reserve && 
+                                     quantityEnabled &&
                                      reservationsEnabled;
     
     if (shouldShowReserveButton) {
@@ -844,8 +858,8 @@ function showProductModal(prod, finalPrice, fullImages) {
         reserveBtn.textContent = '🔒 Зарезервировать товар';
         reserveBtn.onclick = () => showReservationModal(prod.id);
         modalReservationButton.appendChild(reserveBtn);
-    } else if (!reservationsEnabled) {
-        console.log('🔒 Reservations disabled - button not shown');
+    } else if (!reservationsEnabled || !quantityEnabled) {
+        console.log('🔒 Reservations or quantity disabled - button not shown');
     }
     
     showModalImage(0);

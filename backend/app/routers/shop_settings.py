@@ -125,6 +125,7 @@ async def get_shop_settings(
         settings = models.ShopSettings(
             user_id=target_user_id,
             reservations_enabled=True,
+            quantity_enabled=True,
             shop_name=None,
             welcome_image_url=None,
             welcome_description=None,
@@ -150,6 +151,7 @@ async def get_shop_settings(
         "id": settings.id,
         "user_id": settings.user_id,
         "reservations_enabled": settings.reservations_enabled,
+        "quantity_enabled": settings.quantity_enabled if hasattr(settings, 'quantity_enabled') else True,
         "shop_name": settings.shop_name,
         "welcome_image_url": welcome_image_url_full,
         "welcome_description": settings.welcome_description,
@@ -183,6 +185,7 @@ async def update_shop_settings(
         settings = models.ShopSettings(
             user_id=user_id,
             reservations_enabled=update_data.get('reservations_enabled', True),
+            quantity_enabled=update_data.get('quantity_enabled', True),
             shop_name=update_data.get('shop_name', None),
             welcome_image_url=update_data.get('welcome_image_url', None),
             welcome_description=update_data.get('welcome_description', None),
@@ -192,8 +195,18 @@ async def update_shop_settings(
         db.add(settings)
     else:
         # Обновляем только переданные поля
+        # Сначала обновляем quantity_enabled, если он передан
+        if 'quantity_enabled' in update_data:
+            settings.quantity_enabled = update_data['quantity_enabled']
+            # Если quantity_enabled отключен, автоматически отключаем резервацию
+            if not update_data['quantity_enabled']:
+                settings.reservations_enabled = False
         if 'reservations_enabled' in update_data:
-            settings.reservations_enabled = update_data['reservations_enabled']
+            # Если quantity_enabled выключен, нельзя включить резервацию
+            if settings.quantity_enabled if hasattr(settings, 'quantity_enabled') else True:
+                settings.reservations_enabled = update_data['reservations_enabled']
+            else:
+                settings.reservations_enabled = False
         if 'shop_name' in update_data:
             settings.shop_name = update_data['shop_name']
         if 'welcome_image_url' in update_data:
@@ -205,8 +218,27 @@ async def update_shop_settings(
     db.commit()
     db.refresh(settings)
     
-    print(f"✅ Settings updated - reservations_enabled={settings.reservations_enabled}, shop_name={settings.shop_name}")
-    return settings
+    print(f"✅ Settings updated - reservations_enabled={settings.reservations_enabled}, quantity_enabled={settings.quantity_enabled if hasattr(settings, 'quantity_enabled') else True}, shop_name={settings.shop_name}")
+    # Возвращаем настройки с полным URL для welcome_image_url
+    welcome_image_url_full = None
+    if settings.welcome_image_url:
+        if settings.welcome_image_url.startswith('http://') or settings.welcome_image_url.startswith('https://'):
+            welcome_image_url_full = settings.welcome_image_url
+        else:
+            filename = settings.welcome_image_url.replace('/static/uploads/', '')
+            welcome_image_url_full = f"{API_PUBLIC_URL}/api/images/{filename}"
+    
+    return {
+        "id": settings.id,
+        "user_id": settings.user_id,
+        "reservations_enabled": settings.reservations_enabled,
+        "quantity_enabled": settings.quantity_enabled if hasattr(settings, 'quantity_enabled') else True,
+        "shop_name": settings.shop_name,
+        "welcome_image_url": welcome_image_url_full,
+        "welcome_description": settings.welcome_description,
+        "created_at": settings.created_at,
+        "updated_at": settings.updated_at
+    }
 
 
 @router.post("/welcome-image", response_model=schemas.ShopSettings)
@@ -254,6 +286,7 @@ async def upload_welcome_image(
         settings = models.ShopSettings(
             user_id=user_id,
             reservations_enabled=True,
+            quantity_enabled=True,
             shop_name=None,
             welcome_image_url=image_url_path,
             welcome_description=None,
@@ -288,6 +321,7 @@ async def upload_welcome_image(
         "id": settings.id,
         "user_id": settings.user_id,
         "reservations_enabled": settings.reservations_enabled,
+        "quantity_enabled": settings.quantity_enabled if hasattr(settings, 'quantity_enabled') else True,
         "shop_name": settings.shop_name,
         "welcome_image_url": welcome_image_url_full,
         "welcome_description": settings.welcome_description,
@@ -329,5 +363,24 @@ async def delete_welcome_image(
         db.refresh(settings)
     
     print(f"✅ Welcome image deleted - user_id={user_id}")
-    return settings
+    # Преобразуем относительный путь в полный HTTPS URL для welcome_image_url
+    welcome_image_url_full = None
+    if settings.welcome_image_url:
+        if settings.welcome_image_url.startswith('http://') or settings.welcome_image_url.startswith('https://'):
+            welcome_image_url_full = settings.welcome_image_url
+        else:
+            filename = settings.welcome_image_url.replace('/static/uploads/', '')
+            welcome_image_url_full = f"{API_PUBLIC_URL}/api/images/{filename}"
+    
+    return {
+        "id": settings.id,
+        "user_id": settings.user_id,
+        "reservations_enabled": settings.reservations_enabled,
+        "quantity_enabled": settings.quantity_enabled if hasattr(settings, 'quantity_enabled') else True,
+        "shop_name": settings.shop_name,
+        "welcome_image_url": welcome_image_url_full,
+        "welcome_description": settings.welcome_description,
+        "created_at": settings.created_at,
+        "updated_at": settings.updated_at
+    }
 

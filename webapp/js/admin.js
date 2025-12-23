@@ -3,6 +3,7 @@ import { getShopSettings, updateShopSettings } from './api.js';
 
 let adminModal = null;
 let reservationsToggle = null;
+let quantityEnabledToggle = null;
 let shopSettings = null;
 
 // Инициализация админки
@@ -16,6 +17,7 @@ export function initAdmin() {
     
     adminModal = document.getElementById('admin-modal');
     reservationsToggle = document.getElementById('reservations-toggle');
+    quantityEnabledToggle = document.getElementById('quantity-enabled-toggle');
     
     // Настройка закрытия модального окна
     const adminClose = document.querySelector('.admin-close');
@@ -31,6 +33,14 @@ export function initAdmin() {
             adminModal.style.display = 'none';
         }
     };
+    
+    // Обработчик переключателя количества товаров
+    if (quantityEnabledToggle) {
+        quantityEnabledToggle.onchange = async (e) => {
+            const enabled = e.target.checked;
+            await handleQuantityEnabledToggle(enabled);
+        };
+    }
     
     // Обработчик переключателя резервации
     if (reservationsToggle) {
@@ -59,6 +69,16 @@ function createAdminModal() {
             <div class="admin-modal-body">
                 <div class="admin-setting">
                     <div class="admin-setting-label">
+                        <label for="quantity-enabled-toggle">Количество товаров</label>
+                        <p class="admin-setting-description">Показывать количество товаров и разрешить учет резервации</p>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="quantity-enabled-toggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="admin-setting">
+                    <div class="admin-setting-label">
                         <label for="reservations-toggle">Резервация товаров</label>
                         <p class="admin-setting-description">Разрешить клиентам резервировать товары на определенное время</p>
                     </div>
@@ -68,7 +88,7 @@ function createAdminModal() {
                     </label>
                 </div>
                 <div class="admin-info">
-                    <p>💡 Когда резервация включена, клиенты могут резервировать товары на 1-3 часа. При отключении резервации клиенты смогут только просматривать товары.</p>
+                    <p>💡 Когда количество товаров включено, отображается количество на складе и можно включить резервацию. При отключении количества резервация становится недоступной.</p>
                 </div>
             </div>
         </div>
@@ -90,9 +110,14 @@ export async function openAdmin() {
         shopSettings = await getShopSettings();
         console.log('✅ Shop settings loaded:', shopSettings);
         
-        // Устанавливаем значение переключателя
+        // Устанавливаем значение переключателей
+        if (quantityEnabledToggle) {
+            quantityEnabledToggle.checked = shopSettings.quantity_enabled !== false;
+        }
         if (reservationsToggle) {
-            reservationsToggle.checked = shopSettings.reservations_enabled;
+            reservationsToggle.checked = shopSettings.reservations_enabled === true;
+            // Делаем тумблер резервации неактивным, если количество товаров выключено
+            reservationsToggle.disabled = !(shopSettings.quantity_enabled !== false);
         }
         
         // Показываем модальное окно
@@ -103,12 +128,72 @@ export async function openAdmin() {
     }
 }
 
+// Обработка изменения переключателя количества товаров
+async function handleQuantityEnabledToggle(enabled) {
+    console.log(`🔧 Toggling quantity enabled: ${enabled}`);
+    
+    try {
+        // Если quantity_enabled отключается, автоматически отключаем резервацию
+        const updateData = {
+            quantity_enabled: enabled
+        };
+        if (!enabled) {
+            updateData.reservations_enabled = false;
+        }
+        
+        shopSettings = await updateShopSettings(updateData);
+        console.log('✅ Shop settings updated:', shopSettings);
+        
+        // Обновляем состояние тумблера резервации
+        if (reservationsToggle) {
+            reservationsToggle.checked = shopSettings.reservations_enabled === true;
+            reservationsToggle.disabled = !enabled;
+        }
+        
+        // Показываем уведомление об успешном обновлении
+        const statusText = enabled ? 'включен' : 'отключен';
+        showNotification(`Показ количества товаров ${statusText}`);
+        
+        // Обновляем заголовок с названием магазина (если оно изменилось)
+        if (typeof window.updateShopNameInHeader === 'function') {
+            await window.updateShopNameInHeader();
+        }
+        
+        // Перезагружаем данные для обновления UI
+        if (typeof window.loadData === 'function') {
+            setTimeout(() => {
+                window.loadData();
+            }, 300);
+        }
+    } catch (error) {
+        console.error('❌ Error updating shop settings:', error);
+        
+        // Возвращаем переключатель в исходное состояние
+        if (quantityEnabledToggle) {
+            quantityEnabledToggle.checked = !enabled;
+        }
+        
+        alert('Не удалось обновить настройки: ' + error.message);
+    }
+}
+
 // Обработка изменения переключателя резервации
 async function handleReservationsToggle(enabled) {
     console.log(`🔧 Toggling reservations: ${enabled}`);
     
+    // Проверяем, что quantity_enabled включен
+    if (!shopSettings || shopSettings.quantity_enabled === false) {
+        console.warn('⚠️ Cannot enable reservations when quantity is disabled');
+        if (reservationsToggle) {
+            reservationsToggle.checked = false;
+        }
+        return;
+    }
+    
     try {
-        shopSettings = await updateShopSettings(enabled);
+        shopSettings = await updateShopSettings({
+            reservations_enabled: enabled
+        });
         console.log('✅ Shop settings updated:', shopSettings);
         
         // Показываем уведомление об успешном обновлении
@@ -197,7 +282,7 @@ export async function loadShopSettings(shopOwnerId = null) {
     } catch (error) {
         console.error('❌ Error loading shop settings:', error);
         // Возвращаем дефолтные настройки при ошибке
-        return { reservations_enabled: true };
+        return { reservations_enabled: true, quantity_enabled: true };
     }
 }
 

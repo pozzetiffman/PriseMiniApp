@@ -4,6 +4,7 @@ from typing import Optional
 
 class ShopSettingsBase(BaseModel):
     reservations_enabled: bool = True
+    quantity_enabled: bool = True  # Включен ли показ количества товаров и учет резервации
     shop_name: Optional[str] = None  # Название магазина
     welcome_image_url: Optional[str] = None  # Приветственное изображение/логотип магазина
     welcome_description: Optional[str] = None  # Приветственное описание/примечание магазина
