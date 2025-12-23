@@ -10,6 +10,7 @@ class ProductBase(BaseModel):
     discount: float = 0.0
     category_id: int
     is_hot_offer: bool = False  # Горящее предложение
+    quantity: int = 0  # Количество товара на складе
 
 class ProductCreate(ProductBase):
     pass

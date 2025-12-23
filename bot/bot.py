@@ -119,6 +119,7 @@ class AddProduct(StatesGroup):
     category = State()
     discount = State()
     description = State()
+    quantity = State()  # Количество товара
     photos = State()  # Состояние для загрузки нескольких фото
 
 class AddChannel(StatesGroup):
@@ -1112,9 +1113,22 @@ async def process_discount(message: Message, state: FSMContext):
 @dp.message(AddProduct.description)
 async def process_description(message: Message, state: FSMContext):
     description = message.text if message.text != "/skip" else None
-    await state.update_data(description=description, photos=[])  # Инициализируем массив фото
-    await state.set_state(AddProduct.photos)
-    await message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
+    await state.update_data(description=description)
+    await state.set_state(AddProduct.quantity)
+    await message.answer("Введите количество товара на складе (число, или 0 если неограниченно):")
+
+@dp.message(AddProduct.quantity)
+async def process_quantity(message: Message, state: FSMContext):
+    try:
+        quantity = int(message.text)
+        if quantity < 0:
+            await message.answer("Количество не может быть отрицательным. Введите число (0 или больше):")
+            return
+        await state.update_data(quantity=quantity, photos=[])  # Инициализируем массив фото
+        await state.set_state(AddProduct.photos)
+        await message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
+    except ValueError:
+        await message.answer("Пожалуйста, введите целое число (например, 10 или 0).")
 
 @dp.message(AddProduct.photos, F.photo)
 async def process_photos(message: Message, state: FSMContext):
@@ -1171,6 +1185,7 @@ async def process_photos_done(message: Message, state: FSMContext):
             payload.add_field('category_id', str(data['category_id']))
             payload.add_field('user_id', str(user_id))
             payload.add_field('discount', str(data.get('discount', 0)))
+            payload.add_field('quantity', str(data.get('quantity', 0)))
             if data.get('description'):
                 payload.add_field('description', data['description'])
             

@@ -24,6 +24,7 @@ class Product(Base):
     discount = Column(Float, default=0.0)  # Скидка в процентах
     user_id = Column(BigInteger, index=True)  # ID пользователя Telegram
     is_hot_offer = Column(Boolean, default=False)  # Горящее предложение
+    quantity = Column(Integer, default=0)  # Количество товара на складе
     
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship("Category", back_populates="products")

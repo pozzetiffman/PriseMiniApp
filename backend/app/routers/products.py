@@ -128,6 +128,7 @@ def get_products(
             "category_id": prod.category_id,
             "user_id": prod.user_id,
             "is_hot_offer": getattr(prod, 'is_hot_offer', False),  # Горящее предложение
+            "quantity": getattr(prod, 'quantity', 0),  # Количество товара на складе
             "reservation": reservation_info
         }
         result.append(prod_dict)
@@ -152,6 +153,7 @@ async def create_product(
     description: Optional[str] = Form(None),
     discount: float = Form(0.0),
     is_hot_offer: bool = Form(False),
+    quantity: int = Form(0),
     images: List[UploadFile] = File(None),
     db: Session = Depends(database.get_db)
 ):
@@ -217,6 +219,7 @@ async def create_product(
         description=description,
         discount=discount,
         is_hot_offer=is_hot_offer,
+        quantity=quantity,
         image_url=image_url,
         images_urls=images_urls_json
     )
@@ -241,7 +244,8 @@ async def create_product(
         "discount": db_product.discount,
         "category_id": db_product.category_id,
         "user_id": db_product.user_id,
-        "is_hot_offer": getattr(db_product, 'is_hot_offer', False)
+        "is_hot_offer": getattr(db_product, 'is_hot_offer', False),
+        "quantity": getattr(db_product, 'quantity', 0)
     }
 
 @router.put("/{product_id}", response_model=schemas.Product)
