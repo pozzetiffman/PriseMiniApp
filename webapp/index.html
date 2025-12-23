@@ -56,13 +56,33 @@
         </div>
     </div>
     
+    <!-- Модальное окно для заказа товара -->
+    <div id="order-modal" class="modal">
+        <div class="modal-content reservation-modal-content">
+            <span class="modal-close order-close">&times;</span>
+            <h2 class="reservation-title">🛒 Заказать товар</h2>
+            <div class="order-form">
+                <label for="order-quantity">Количество:</label>
+                <input type="number" id="order-quantity" min="1" value="1" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                <button id="order-submit" class="reserve-btn" style="width: 100%; margin-top: 12px;">✅ Заказать</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Модальное окно корзины -->
     <div id="cart-modal" class="modal">
         <div class="modal-content">
             <span class="modal-close cart-close">&times;</span>
-            <h2 class="cart-title">🛒 Мои резервации</h2>
+            <h2 class="cart-title">🛒 Мои заказы</h2>
+            <div class="cart-tabs">
+                <button class="cart-tab active" data-tab="reservations">🔒 Резервации</button>
+                <button class="cart-tab" data-tab="orders">🛒 Заказы</button>
+            </div>
             <div id="cart-items" class="cart-items">
                 <!-- Зарезервированные товары будут здесь -->
+            </div>
+            <div id="orders-items" class="cart-items" style="display: none;">
+                <!-- Заказанные товары будут здесь -->
             </div>
         </div>
     </div>

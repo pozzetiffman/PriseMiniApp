@@ -1,5 +1,5 @@
 // Модуль корзины
-import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth } from './api.js';
+import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI } from './api.js';
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -41,15 +41,29 @@ export async function updateCartUI() {
         const activeReservations = await fetchUserReservations();
         console.log(`🛒 Got ${activeReservations.length} active cart reservations from server`);
         
+        // Также проверяем заказы
+        let activeOrders = [];
+        try {
+            activeOrders = await getMyOrdersAPI();
+            console.log(`🛒 Got ${activeOrders ? activeOrders.length : 0} orders from server`);
+        } catch (e) {
+            console.warn('⚠️ Failed to fetch orders for cart UI:', e);
+            activeOrders = [];
+        }
+        
+        // Общее количество элементов в корзине (резервации + заказы)
+        const totalItems = activeReservations.length + (activeOrders ? activeOrders.length : 0);
+        console.log(`🛒 Total cart items: ${totalItems} (${activeReservations.length} reservations + ${activeOrders ? activeOrders.length : 0} orders)`);
+        
         // Удаляем дебаг-индикатор, если он был создан ранее
         const existingDebugIndicator = document.getElementById('cart-debug-indicator');
         if (existingDebugIndicator) {
             existingDebugIndicator.remove();
         }
         
-        // Показываем кнопку корзины
-        if (activeReservations.length > 0) {
-            console.log(`🛒🛒🛒 ПОКАЗЫВАЕМ КОРЗИНУ! Найдено ${activeReservations.length} активных резерваций`);
+        // Показываем кнопку корзины, если есть резервации ИЛИ заказы
+        if (totalItems > 0) {
+            console.log(`🛒🛒🛒 ПОКАЗЫВАЕМ КОРЗИНУ! Найдено ${activeReservations.length} активных резерваций и ${activeOrders ? activeOrders.length : 0} заказов`);
             console.log(`🛒🛒🛒 Резервации:`, activeReservations.map(r => ({
                 id: r.id,
                 product_id: r.product_id,
@@ -57,6 +71,12 @@ export async function updateCartUI() {
                 is_active: r.is_active,
                 reserved_until: r.reserved_until
             })));
+            console.log(`🛒🛒🛒 Заказы:`, activeOrders ? activeOrders.map(o => ({
+                id: o.id,
+                product_id: o.product_id,
+                is_completed: o.is_completed,
+                is_cancelled: o.is_cancelled
+            })) : []);
             
             // ПРИНУДИТЕЛЬНО показываем кнопку корзины
             cartButton.removeAttribute('hidden');
@@ -76,7 +96,7 @@ export async function updateCartUI() {
                 z-index: 9999 !important;
             `;
             
-            cartCount.textContent = String(activeReservations.length);
+            cartCount.textContent = String(totalItems);
             
             // Проверяем видимость через 100ms
             setTimeout(() => {
@@ -87,7 +107,7 @@ export async function updateCartUI() {
                                  computedDisplay !== 'none' &&
                                  computedVisibility !== 'hidden';
                 
-                console.log(`✅✅✅ КНОПКА КОРЗИНЫ ${isVisible ? 'ВИДНА' : 'НЕ ВИДНА'}! Count: ${activeReservations.length}`);
+                console.log(`✅✅✅ КНОПКА КОРЗИНЫ ${isVisible ? 'ВИДНА' : 'НЕ ВИДНА'}! Count: ${totalItems}`);
                 console.log(`✅ Button rect:`, rect);
                 console.log(`✅ Computed styles:`, {
                     display: computedDisplay,
@@ -108,7 +128,7 @@ export async function updateCartUI() {
                 }
             }, 100);
         } else {
-            console.log(`❌ Cart button hidden - no active reservations (found ${activeReservations.length})`);
+            console.log(`❌ Cart button hidden - no active reservations or orders (found ${activeReservations.length} reservations, ${activeOrders ? activeOrders.length : 0} orders)`);
             cartButton.style.display = 'none';
         }
     } catch (e) {
@@ -393,7 +413,8 @@ export function setupCartButton() {
     if (cartButton) {
         cartButton.onclick = () => {
             if (cartModal) {
-                loadCart();
+                // Инициализируем активную вкладку при открытии корзины
+                switchCartTab('reservations');
                 cartModal.style.display = 'block';
             }
         };
@@ -426,6 +447,212 @@ export function setupCartModal() {
         }
     };
     
+    // Настройка вкладок
+    const tabs = document.querySelectorAll('.cart-tab');
+    if (tabs && tabs.length > 0) {
+        tabs.forEach(tab => {
+            tab.onclick = () => {
+                console.log(`🛒 Cart tab clicked: ${tab.dataset.tab}`);
+                switchCartTab(tab.dataset.tab);
+            };
+        });
+        // Инициализируем активную вкладку по умолчанию
+        switchCartTab('reservations');
+        console.log('✅ Cart tabs initialized');
+    } else {
+        console.warn('⚠️ Cart tabs not found in HTML');
+    }
+    
     console.log('✅ Cart modal initialized');
+}
+
+// Переключение вкладок корзины
+function switchCartTab(tabName) {
+    console.log(`🛒 switchCartTab: switching to tab "${tabName}"`);
+    const tabs = document.querySelectorAll('.cart-tab');
+    const cartItems = document.getElementById('cart-items');
+    const ordersItems = document.getElementById('orders-items');
+    
+    if (!tabs || tabs.length === 0) {
+        console.warn('⚠️ Cart tabs not found');
+        return;
+    }
+    
+    if (!cartItems || !ordersItems) {
+        console.warn('⚠️ Cart items containers not found');
+        return;
+    }
+    
+    tabs.forEach(tab => {
+        if (tab.dataset.tab === tabName) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+    
+    if (tabName === 'reservations') {
+        cartItems.style.display = 'block';
+        ordersItems.style.display = 'none';
+        console.log('🛒 Loading reservations...');
+        loadCart();
+    } else if (tabName === 'orders') {
+        cartItems.style.display = 'none';
+        ordersItems.style.display = 'block';
+        console.log('🛒 Loading orders...');
+        loadOrders();
+    }
+}
+
+// Загрузка заказов
+async function loadOrders() {
+    console.log('🛒 loadOrders: Starting...');
+    const ordersItems = document.getElementById('orders-items');
+    if (!ordersItems) {
+        console.error('❌ loadOrders: orders-items element not found');
+        return;
+    }
+    
+    ordersItems.innerHTML = '<p class="loading">Загрузка заказов...</p>';
+    
+    try {
+        console.log('🛒 loadOrders: Fetching orders from API...');
+        const orders = await getMyOrdersAPI();
+        console.log('🛒 loadOrders: Got orders:', orders ? orders.length : 0, orders);
+        
+        if (!orders || orders.length === 0) {
+            ordersItems.innerHTML = '<p class="loading">У вас нет заказов</p>';
+            return;
+        }
+        
+        // Рендерим список заказов
+        ordersItems.innerHTML = '';
+        for (const order of orders) {
+            try {
+                // Получаем информацию о товаре
+                const productUrl = `${API_BASE}/api/products/?user_id=${order.user_id}`;
+                const productResponse = await fetch(productUrl, {
+                    headers: getBaseHeadersNoAuth()
+                });
+                
+                if (!productResponse.ok) {
+                    continue;
+                }
+                
+                const products = await productResponse.json();
+                const product = products.find(p => p.id === order.product_id);
+                if (!product) {
+                    continue;
+                }
+                
+                // Определяем URL изображения
+                let imageUrl = null;
+                if (product.images_urls && product.images_urls.length > 0) {
+                    const firstImage = product.images_urls[0];
+                    imageUrl = firstImage.startsWith('http') 
+                        ? firstImage 
+                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
+                } else if (product.image_url) {
+                    imageUrl = product.image_url.startsWith('http') 
+                        ? product.image_url 
+                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
+                }
+                
+                const finalPrice = product.discount > 0 
+                    ? Math.round(product.price * (1 - product.discount / 100)) 
+                    : product.price;
+                
+                const orderItem = document.createElement('div');
+                orderItem.className = 'cart-item';
+                
+                // Создаем контейнер для изображения
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'cart-item-image-container';
+                
+                if (imageUrl) {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '⏳';
+                    imageContainer.appendChild(placeholder);
+                    
+                    fetch(imageUrl, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        const img = document.createElement('img');
+                        img.src = blobUrl;
+                        img.alt = product.name;
+                        img.className = 'cart-item-image';
+                        img.onerror = () => {
+                            URL.revokeObjectURL(blobUrl);
+                            placeholder.textContent = '📦';
+                            placeholder.style.display = 'flex';
+                            if (img.parentNode) {
+                                img.remove();
+                            }
+                        };
+                        img.onload = () => {
+                            if (placeholder.parentNode) {
+                                placeholder.remove();
+                            }
+                        };
+                        imageContainer.appendChild(img);
+                    })
+                    .catch(error => {
+                        console.error('[ORDERS IMG] Fetch error:', error);
+                        placeholder.textContent = '📦';
+                    });
+                } else {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '📦';
+                    imageContainer.appendChild(placeholder);
+                }
+                
+                // Статус заказа
+                let statusText = '';
+                let statusColor = '';
+                if (order.is_completed) {
+                    statusText = '✅ Выполнен';
+                    statusColor = '#4CAF50';
+                } else if (order.is_cancelled) {
+                    statusText = '❌ Отменен';
+                    statusColor = '#F44336';
+                } else {
+                    statusText = '⏳ В обработке';
+                    statusColor = '#FFA500';
+                }
+                
+                orderItem.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3>${product.name}</h3>
+                        <p class="cart-item-price">${finalPrice} ₽ × ${order.quantity} шт.</p>
+                        <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
+                    </div>
+                `;
+                
+                orderItem.insertBefore(imageContainer, orderItem.firstChild);
+                ordersItems.appendChild(orderItem);
+            } catch (e) {
+                console.error('❌ Error loading order item:', e);
+            }
+        }
+        
+        if (ordersItems.children.length === 0) {
+            ordersItems.innerHTML = '<p class="loading">Не удалось загрузить заказы</p>';
+        }
+    } catch (error) {
+        console.error('❌ Error loading orders:', error);
+        ordersItems.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
+    }
 }
 

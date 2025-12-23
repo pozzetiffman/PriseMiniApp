@@ -1,5 +1,5 @@
 // Модуль админки магазина
-import { getShopSettings, updateShopSettings, getSoldProductsAPI } from './api.js';
+import { getShopSettings, updateShopSettings, getSoldProductsAPI, getShopOrdersAPI, completeOrderAPI, cancelOrderAPI } from './api.js';
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -74,6 +74,7 @@ function createAdminModal() {
             </div>
             <div class="admin-tabs">
                 <button class="admin-tab active" data-tab="settings">⚙️ Настройки</button>
+                <button class="admin-tab" data-tab="orders">🛒 Заказы</button>
                 <button class="admin-tab" data-tab="sold">✅ Проданные</button>
             </div>
             <div class="admin-modal-body">
@@ -100,6 +101,11 @@ function createAdminModal() {
                     </div>
                     <div class="admin-info">
                         <p>💡 Когда количество товаров включено, отображается количество на складе и можно включить резервацию. При отключении количества резервация становится недоступной.</p>
+                    </div>
+                </div>
+                <div id="admin-tab-orders" class="admin-tab-content">
+                    <div id="orders-list" class="orders-list">
+                        <p class="loading">Загрузка заказов...</p>
                     </div>
                 </div>
                 <div id="admin-tab-sold" class="admin-tab-content">
@@ -327,9 +333,151 @@ function switchAdminTab(tabName) {
         }
     });
     
+    // Если переключились на вкладку "Заказы", загружаем данные
+    if (tabName === 'orders') {
+        loadOrders();
+    }
+    
     // Если переключились на вкладку "Проданные", загружаем данные
     if (tabName === 'sold') {
         loadSoldProducts();
+    }
+}
+
+// Загрузка заказов
+async function loadOrders() {
+    const ordersList = document.getElementById('orders-list');
+    if (!ordersList) return;
+    
+    ordersList.innerHTML = '<p class="loading">Загрузка заказов...</p>';
+    
+    try {
+        const orders = await getShopOrdersAPI();
+        
+        if (!orders || orders.length === 0) {
+            ordersList.innerHTML = '<p class="loading">Заказов пока нет</p>';
+            return;
+        }
+        
+        // Рендерим список заказов
+        ordersList.innerHTML = '';
+        orders.forEach(order => {
+            const orderItem = document.createElement('div');
+            orderItem.className = 'order-item';
+            orderItem.style.cssText = `
+                background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+                backdrop-filter: blur(20px);
+                border-radius: 12px;
+                padding: 14px 16px;
+                margin-bottom: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            `;
+            
+            // Заголовок с названием товара
+            const nameDiv = document.createElement('div');
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color);';
+            // Если товар загружен через relationship, используем его, иначе загружаем отдельно
+            if (order.product && order.product.name) {
+                nameDiv.textContent = order.product.name;
+            } else {
+                nameDiv.textContent = `Товар #${order.product_id}`;
+            }
+            
+            // Информация о заказе
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+            
+            // Количество
+            const quantityDiv = document.createElement('div');
+            quantityDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color);';
+            quantityDiv.textContent = `Количество: ${order.quantity} шт.`;
+            
+            // Дата заказа
+            const dateDiv = document.createElement('div');
+            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color);';
+            if (order.created_at) {
+                const orderDate = new Date(order.created_at);
+                dateDiv.textContent = `Дата заказа: ${orderDate.toLocaleDateString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}`;
+            }
+            
+            // Статус
+            const statusDiv = document.createElement('div');
+            statusDiv.style.cssText = 'font-size: 14px; font-weight: 600;';
+            if (order.is_completed) {
+                statusDiv.textContent = '✅ Выполнен';
+                statusDiv.style.color = '#4CAF50';
+            } else {
+                statusDiv.textContent = '⏳ В обработке';
+                statusDiv.style.color = '#FFA500';
+            }
+            
+            infoDiv.appendChild(quantityDiv);
+            infoDiv.appendChild(dateDiv);
+            infoDiv.appendChild(statusDiv);
+            
+            // Кнопки действий (только для невыполненных заказов)
+            const actionsDiv = document.createElement('div');
+            actionsDiv.style.cssText = 'display: flex; gap: 8px; margin-top: 8px;';
+            
+            if (!order.is_completed && !order.is_cancelled) {
+                // Кнопка "Выполнить"
+                const completeBtn = document.createElement('button');
+                completeBtn.className = 'reserve-btn';
+                completeBtn.style.cssText = 'flex: 1; background: rgba(76, 175, 80, 0.9);';
+                completeBtn.textContent = '✅ Выполнить';
+                completeBtn.onclick = async () => {
+                    if (confirm('Выполнить этот заказ?')) {
+                        try {
+                            await completeOrderAPI(order.id);
+                            showNotification('Заказ выполнен');
+                            loadOrders(); // Перезагружаем список
+                        } catch (error) {
+                            alert('Ошибка: ' + error.message);
+                        }
+                    }
+                };
+                
+                // Кнопка "Отменить"
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'reserve-btn';
+                cancelBtn.style.cssText = 'flex: 1; background: rgba(244, 67, 54, 0.9);';
+                cancelBtn.textContent = '❌ Отменить';
+                cancelBtn.onclick = async () => {
+                    if (confirm('Отменить этот заказ? Заказ будет удален из списка.')) {
+                        try {
+                            await cancelOrderAPI(order.id);
+                            showNotification('Заказ отменен');
+                            loadOrders(); // Перезагружаем список
+                        } catch (error) {
+                            alert('Ошибка: ' + error.message);
+                        }
+                    }
+                };
+                
+                actionsDiv.appendChild(completeBtn);
+                actionsDiv.appendChild(cancelBtn);
+            }
+            
+            orderItem.appendChild(nameDiv);
+            orderItem.appendChild(infoDiv);
+            if (actionsDiv.children.length > 0) {
+                orderItem.appendChild(actionsDiv);
+            }
+            
+            ordersList.appendChild(orderItem);
+        });
+    } catch (error) {
+        console.error('❌ Error loading orders:', error);
+        ordersList.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
     }
 }
 

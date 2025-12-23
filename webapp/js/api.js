@@ -504,3 +504,122 @@ export async function getSoldProductsAPI(shopOwnerId) {
     
     return JSON.parse(responseText);
 }
+
+// Создание заказа (ordered_by_user_id определяется на backend из initData)
+export async function createOrderAPI(productId, quantity) {
+    const url = `${API_BASE}/api/orders/?product_id=${productId}&quantity=${quantity}`;
+    console.log(`Order URL: ${url}`);
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Order response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Ошибка при создании заказа';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Получить заказы магазина (для владельца)
+export async function getShopOrdersAPI() {
+    const url = `${API_BASE}/api/orders/shop`;
+    console.log(`Fetching shop orders from: ${url}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Shop orders error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Shop orders fetched: ${data.length}`);
+    return data;
+}
+
+// Получить мои заказы (для клиента)
+export async function getMyOrdersAPI() {
+    const url = `${API_BASE}/api/orders/my`;
+    console.log(`Fetching my orders from: ${url}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`My orders error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ My orders fetched: ${data.length}`);
+    return data;
+}
+
+// Выполнить заказ (только владелец магазина)
+export async function completeOrderAPI(orderId) {
+    const url = `${API_BASE}/api/orders/${orderId}/complete`;
+    console.log(`Complete order URL: ${url}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Complete order response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось выполнить заказ';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Отменить заказ (владелец магазина или заказчик)
+export async function cancelOrderAPI(orderId) {
+    const url = `${API_BASE}/api/orders/${orderId}`;
+    console.log(`Cancel order URL: ${url}`);
+    
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Cancel order response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось отменить заказ';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return true;
+}

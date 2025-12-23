@@ -96,6 +96,20 @@ class SoldProduct(Base):
     product = relationship("Product", backref="sold_records")
     category = relationship("Category", backref="sold_products")
 
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)  # ID товара
+    user_id = Column(BigInteger, index=True)  # ID владельца магазина (создателя товара)
+    ordered_by_user_id = Column(BigInteger, index=True)  # ID пользователя, который заказал
+    quantity = Column(Integer, default=1)  # Количество заказанного товара
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время создания заказа
+    is_completed = Column(Boolean, default=False)  # Выполнен ли заказ
+    is_cancelled = Column(Boolean, default=False)  # Отменен ли заказ
+    
+    product = relationship("Product", backref="orders")
+
 
 
 

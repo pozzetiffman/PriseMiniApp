@@ -98,6 +98,38 @@ header h1 {
     font-weight: 600;
 }
 
+.cart-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-glass);
+    background: var(--bg-glass-light);
+    margin-bottom: 15px;
+    border-radius: 12px 12px 0 0;
+}
+
+.cart-tab {
+    flex: 1;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-hint);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cart-tab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.cart-tab.active {
+    color: var(--tg-theme-link-color, #5ac8fa);
+    border-bottom-color: var(--tg-theme-link-color, #5ac8fa);
+    background: rgba(90, 200, 250, 0.1);
+}
+
 .cart-items {
     max-height: 70vh;
     overflow-y: auto;

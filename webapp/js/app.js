@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelReservationAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
+import { API_BASE, cancelReservationAPI, createOrderAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
 import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -21,6 +21,8 @@ const modal = document.getElementById('product-modal');
 const modalClose = document.querySelector('.modal-close');
 const reservationModal = document.getElementById('reservation-modal');
 const reservationClose = document.querySelector('.reservation-close');
+const orderModal = document.getElementById('order-modal');
+const orderClose = document.querySelector('.order-close');
 
 // Состояние модального окна товара
 let currentImageIndex = 0;
@@ -940,6 +942,16 @@ function showProductModal(prod, finalPrice, fullImages) {
         console.log('🔒 Reservations or quantity disabled - button not shown');
     }
     
+    // Показываем кнопку "Заказать" для товаров под заказ (только для клиентов)
+    if (isMadeToOrder && appContext.role === 'client') {
+        const orderBtn = document.createElement('button');
+        orderBtn.className = 'reserve-btn';
+        orderBtn.style.background = 'rgba(90, 200, 250, 0.95)';
+        orderBtn.textContent = '🛒 Заказать';
+        orderBtn.onclick = () => showOrderModal(prod.id);
+        modalReservationButton.appendChild(orderBtn);
+    }
+    
     showModalImage(0);
     modal.style.display = 'block';
 }
@@ -960,6 +972,68 @@ function showReservationModal(productId) {
             await createReservation(productId, hours);
         };
     });
+}
+
+// Показ модального окна заказа
+function showOrderModal(productId) {
+    if (!appContext) {
+        alert('❌ Ошибка: контекст не загружен');
+        return;
+    }
+    
+    if (!orderModal) {
+        alert('❌ Ошибка: модальное окно заказа не найдено');
+        return;
+    }
+    
+    // Сбрасываем количество на 1
+    const quantityInput = document.getElementById('order-quantity');
+    if (quantityInput) {
+        quantityInput.value = 1;
+    }
+    
+    // Устанавливаем обработчик кнопки заказа
+    const submitBtn = document.getElementById('order-submit');
+    if (submitBtn) {
+        submitBtn.onclick = async () => {
+            const quantity = parseInt(quantityInput.value) || 1;
+            if (quantity < 1) {
+                alert('❌ Количество должно быть не менее 1');
+                return;
+            }
+            orderModal.style.display = 'none';
+            await createOrder(productId, quantity);
+        };
+    }
+    
+    orderModal.style.display = 'block';
+}
+
+// Создание заказа
+async function createOrder(productId, quantity) {
+    try {
+        if (!appContext) {
+            alert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        // ordered_by_user_id определяется на backend из initData
+        const order = await createOrderAPI(productId, quantity);
+        
+        alert(`✅ Заказ создан! Количество: ${quantity} шт.`);
+        
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Обновляем данные и корзину
+        setTimeout(async () => {
+            await loadData();
+            await updateCartUI();
+        }, 500);
+    } catch (e) {
+        console.error('Order error:', e);
+        alert(`❌ Ошибка при создании заказа: ${e.message}`);
+    }
 }
 
 // Создание резервации
@@ -1425,6 +1499,21 @@ function setupModals() {
             reservationModal.style.display = 'none';
         }
     };
+    
+    // Закрытие модального окна заказа
+    if (orderClose) {
+        orderClose.onclick = () => {
+            orderModal.style.display = 'none';
+        };
+    }
+    
+    if (orderModal) {
+        orderModal.onclick = (e) => {
+            if (e.target === orderModal) {
+                orderModal.style.display = 'none';
+            }
+        };
+    }
     
     // Закрытие модального окна редактирования товара
     const editProductModal = document.getElementById('edit-product-modal');
