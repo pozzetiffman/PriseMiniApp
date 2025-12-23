@@ -58,6 +58,8 @@ class ShopSettings(Base):
     user_id = Column(BigInteger, unique=True, index=True)  # ID владельца магазина (уникальный)
     reservations_enabled = Column(Boolean, default=True)  # Включена ли резервация товаров
     shop_name = Column(String, nullable=True)  # Название магазина
+    welcome_image_url = Column(String, nullable=True)  # Приветственное изображение/логотип магазина
+    welcome_description = Column(Text, nullable=True)  # Приветственное описание/примечание магазина
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

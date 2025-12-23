@@ -2,7 +2,8 @@
 Роутер для управления настройками магазина
 """
 import os
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
@@ -14,6 +15,7 @@ from ..utils.telegram_auth import validate_telegram_init_data
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "https://unmaneuvered-chronogrammatically-otelia.ngrok-free.dev")
 
 router = APIRouter(prefix="/api/shop-settings", tags=["shop-settings"])
 
@@ -124,6 +126,8 @@ async def get_shop_settings(
             user_id=target_user_id,
             reservations_enabled=True,
             shop_name=None,
+            welcome_image_url=None,
+            welcome_description=None,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -131,7 +135,27 @@ async def get_shop_settings(
         db.commit()
         db.refresh(settings)
     
-    return settings
+    # Преобразуем относительный путь в полный HTTPS URL для welcome_image_url
+    welcome_image_url_full = None
+    if settings.welcome_image_url:
+        if settings.welcome_image_url.startswith('http://') or settings.welcome_image_url.startswith('https://'):
+            welcome_image_url_full = settings.welcome_image_url
+        else:
+            # Извлекаем имя файла из пути
+            filename = settings.welcome_image_url.replace('/static/uploads/', '')
+            welcome_image_url_full = f"{API_PUBLIC_URL}/api/images/{filename}"
+    
+    # Возвращаем настройки с полным URL
+    return {
+        "id": settings.id,
+        "user_id": settings.user_id,
+        "reservations_enabled": settings.reservations_enabled,
+        "shop_name": settings.shop_name,
+        "welcome_image_url": welcome_image_url_full,
+        "welcome_description": settings.welcome_description,
+        "created_at": settings.created_at,
+        "updated_at": settings.updated_at
+    }
 
 
 @router.put("", response_model=schemas.ShopSettings)
@@ -160,6 +184,8 @@ async def update_shop_settings(
             user_id=user_id,
             reservations_enabled=update_data.get('reservations_enabled', True),
             shop_name=update_data.get('shop_name', None),
+            welcome_image_url=update_data.get('welcome_image_url', None),
+            welcome_description=update_data.get('welcome_description', None),
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -170,11 +196,138 @@ async def update_shop_settings(
             settings.reservations_enabled = update_data['reservations_enabled']
         if 'shop_name' in update_data:
             settings.shop_name = update_data['shop_name']
+        if 'welcome_image_url' in update_data:
+            settings.welcome_image_url = update_data['welcome_image_url']
+        if 'welcome_description' in update_data:
+            settings.welcome_description = update_data['welcome_description']
         settings.updated_at = datetime.utcnow()
     
     db.commit()
     db.refresh(settings)
     
     print(f"✅ Settings updated - reservations_enabled={settings.reservations_enabled}, shop_name={settings.shop_name}")
+    return settings
+
+
+@router.post("/welcome-image", response_model=schemas.ShopSettings)
+async def upload_welcome_image(
+    image: UploadFile = File(...),
+    user_id: int = Depends(get_validated_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Загрузить приветственное изображение/логотип магазина.
+    """
+    print(f"📷 POST /api/shop-settings/welcome-image - user_id={user_id}")
+    
+    # Проверяем, что это изображение
+    if not image.content_type or not image.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    
+    upload_dir = "static/uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # Генерируем уникальное имя файла
+    file_ext = os.path.splitext(image.filename)[1] if image.filename else '.jpg'
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(upload_dir, unique_filename)
+    
+    # Сохраняем файл
+    try:
+        contents = await image.read()
+        with open(file_path, "wb") as buffer:
+            buffer.write(contents)
+        print(f"📷 Welcome image saved: {file_path}, size: {len(contents)} bytes")
+    except Exception as e:
+        print(f"❌ Error saving welcome image: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save image: {str(e)}")
+    
+    # Формируем путь к изображению
+    image_url_path = f"/static/uploads/{unique_filename}"
+    
+    # Получаем или создаем настройки
+    settings = db.query(models.ShopSettings).filter(
+        models.ShopSettings.user_id == user_id
+    ).first()
+    
+    if not settings:
+        settings = models.ShopSettings(
+            user_id=user_id,
+            reservations_enabled=True,
+            shop_name=None,
+            welcome_image_url=image_url_path,
+            welcome_description=None,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.add(settings)
+    else:
+        # Удаляем старое изображение, если оно было
+        if settings.welcome_image_url:
+            old_path = settings.welcome_image_url.replace('/static/uploads/', 'static/uploads/')
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                    print(f"🗑️ Old welcome image deleted: {old_path}")
+                except Exception as e:
+                    print(f"⚠️ Could not delete old image: {e}")
+        
+        settings.welcome_image_url = image_url_path
+        settings.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(settings)
+    
+    # Преобразуем относительный путь в полный HTTPS URL
+    welcome_image_url_full = f"{API_PUBLIC_URL}/api/images/{unique_filename}" if settings.welcome_image_url else None
+    
+    print(f"✅ Welcome image uploaded - user_id={user_id}, image_url={welcome_image_url_full}")
+    
+    # Возвращаем настройки с полным URL
+    return {
+        "id": settings.id,
+        "user_id": settings.user_id,
+        "reservations_enabled": settings.reservations_enabled,
+        "shop_name": settings.shop_name,
+        "welcome_image_url": welcome_image_url_full,
+        "welcome_description": settings.welcome_description,
+        "created_at": settings.created_at,
+        "updated_at": settings.updated_at
+    }
+
+
+@router.delete("/welcome-image", response_model=schemas.ShopSettings)
+async def delete_welcome_image(
+    user_id: int = Depends(get_validated_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Удалить приветственное изображение/логотип магазина.
+    """
+    print(f"🗑️ DELETE /api/shop-settings/welcome-image - user_id={user_id}")
+    
+    settings = db.query(models.ShopSettings).filter(
+        models.ShopSettings.user_id == user_id
+    ).first()
+    
+    if not settings:
+        raise HTTPException(status_code=404, detail="Shop settings not found")
+    
+    # Удаляем файл изображения, если он существует
+    if settings.welcome_image_url:
+        file_path = settings.welcome_image_url.replace('/static/uploads/', 'static/uploads/')
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                print(f"🗑️ Welcome image deleted: {file_path}")
+            except Exception as e:
+                print(f"⚠️ Could not delete image file: {e}")
+        
+        settings.welcome_image_url = None
+        settings.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(settings)
+    
+    print(f"✅ Welcome image deleted - user_id={user_id}")
     return settings
 

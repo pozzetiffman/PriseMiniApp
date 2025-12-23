@@ -54,6 +54,61 @@ async def get_shop_name(user_id: int) -> str:
     except:
         return 'магазин'
 
+async def get_shop_settings(user_id: int) -> dict:
+    """Получить настройки магазина для пользователя"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                else:
+                    return {}
+    except:
+        return {}
+
+async def send_shop_message(bot_or_message, chat_id_or_message, msg: str, reply_markup, shop_owner_id: int):
+    """
+    Отправить сообщение о магазине с фото, если оно есть.
+    bot_or_message - объект bot или message
+    chat_id_or_message - chat_id (для bot.send_message) или message (для message.answer)
+    """
+    shop_settings = await get_shop_settings(shop_owner_id)
+    welcome_image_url = shop_settings.get('welcome_image_url')
+    
+    # Определяем, используем ли bot.send_message или message.answer
+    is_bot_send = hasattr(bot_or_message, 'send_message') and isinstance(chat_id_or_message, int)
+    
+    if welcome_image_url:
+        if is_bot_send:
+            return await bot_or_message.send_photo(
+                chat_id=chat_id_or_message,
+                photo=welcome_image_url,
+                caption=msg,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            return await chat_id_or_message.answer_photo(
+                photo=welcome_image_url,
+                caption=msg,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+    else:
+        if is_bot_send:
+            return await bot_or_message.send_message(
+                chat_id=chat_id_or_message,
+                text=msg,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            return await chat_id_or_message.answer(
+                text=msg,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+
 # Состояния для категорий и товаров
 class AddCategory(StatesGroup):
     name = State()
@@ -72,6 +127,12 @@ class AddChannel(StatesGroup):
 class SetShopName(StatesGroup):
     name = State()
 
+class SetWelcomeImage(StatesGroup):
+    image = State()
+
+class SetWelcomeDescription(StatesGroup):
+    description = State()
+
 @dp.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject):
     # Проверяем, есть ли параметр в команде (например, /start store_123456)
@@ -83,10 +144,12 @@ async def cmd_start(message: Message, command: CommandObject):
             store_owner_id = int(param.replace("store_", ""))
             share_url = f"{WEBAPP_URL}?user_id={store_owner_id}"
             
-            # Получаем название магазина
-            shop_name = await get_shop_name(store_owner_id)
+            # Получаем настройки магазина
+            shop_settings = await get_shop_settings(store_owner_id)
+            shop_name = shop_settings.get('shop_name', 'магазин')
             shop_name_display = shop_name if shop_name != 'магазин' else 'Магазин'
             button_text = f"Открыть {shop_name_display}" if shop_name != 'магазин' else "🛍️ Открыть магазин"
+            welcome_image_url = shop_settings.get('welcome_image_url')
             
             builder = InlineKeyboardBuilder()
             builder.row(types.InlineKeyboardButton(
@@ -94,10 +157,23 @@ async def cmd_start(message: Message, command: CommandObject):
                 web_app=WebAppInfo(url=share_url)
             ))
             
+            welcome_description = shop_settings.get('welcome_description')
+            
             msg = f"**{shop_name_display}**\n\n"
+            if welcome_description:
+                msg += f"{welcome_description}\n\n"
             msg += "Нажмите кнопку ниже, чтобы открыть витрину с товарами."
             
-            await message.answer(msg, reply_markup=builder.as_markup(), parse_mode="Markdown")
+            # Отправляем сообщение с фото, если оно есть
+            if welcome_image_url:
+                await message.answer_photo(
+                    photo=welcome_image_url,
+                    caption=msg,
+                    reply_markup=builder.as_markup(),
+                    parse_mode="Markdown"
+                )
+            else:
+                await message.answer(msg, reply_markup=builder.as_markup(), parse_mode="Markdown")
             return
         except ValueError:
             # Неправильный формат параметра
@@ -174,13 +250,16 @@ async def cmd_post(message: Message):
     user_id = message.from_user.id
     share_url = f"{WEBAPP_URL}?user_id={user_id}"
     
-    # Получаем название магазина
-    shop_name = await get_shop_name(user_id)
+    # Получаем настройки магазина
+    shop_settings = await get_shop_settings(user_id)
+    shop_name = shop_settings.get('shop_name', 'магазин')
     shop_name_display = shop_name if shop_name != 'магазин' else 'Магазин'
     button_text = f"Открыть {shop_name_display}" if shop_name != 'магазин' else "🛍️ Открыть магазин"
+    welcome_description = shop_settings.get('welcome_description')
     
     msg = f"**{shop_name_display}**\n\n"
-    msg += "Нажмите кнопку ниже, чтобы открыть витрину с товарами!"
+    if welcome_description:
+        msg += f"{welcome_description}\n\n"
     
     # Удаляем команду пользователя (если есть права)
     try:
@@ -197,9 +276,9 @@ async def cmd_post(message: Message):
             url=bot_link
         ))
         if chat_type == "channel":
-            msg += "\n\n💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!"
+            msg += "💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!"
         else:
-            msg += "\n\n💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!\n"
+            msg += "💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!\n"
             msg += "💡 **Совет:** Конвертируйте группу в супергруппу, чтобы магазин открывался сразу внутри Telegram"
         try:
             sent = await message.answer(msg, reply_markup=builder.as_markup(), parse_mode="Markdown")
@@ -256,7 +335,7 @@ async def cmd_post(message: Message):
         msg += "\n\n💡 Нажмите кнопку - откроется бот, и магазин запустится внутри Telegram!"
         
         try:
-            sent = await message.answer(msg, reply_markup=builder.as_markup(), parse_mode="Markdown")
+            sent = await send_shop_message(message, message, msg, builder.as_markup(), user_id)
             logging.info(f"✅ Successfully posted store message to supergroup with deep link, message_id: {sent.message_id}")
             return
         except Exception as e:
@@ -274,7 +353,7 @@ async def cmd_post(message: Message):
     ))
     
     try:
-        sent = await message.answer(msg, reply_markup=builder_url.as_markup(), parse_mode="Markdown")
+        sent = await send_shop_message(message, message, msg, builder_url.as_markup(), user_id)
         logging.info(f"Successfully posted store message with URL, message_id: {sent.message_id}, chat_id: {chat_id}")
     except Exception as e:
         error_msg = str(e)
@@ -289,6 +368,8 @@ async def cmd_manage(message: Message):
         [KeyboardButton(text="📁 Добавить категорию")],
         [KeyboardButton(text="📋 Список категорий")],
         [KeyboardButton(text="🏷️ Название магазина")],
+        [KeyboardButton(text="🖼️ Логотип магазина")],
+        [KeyboardButton(text="📝 Описание магазина")],
         [KeyboardButton(text="📢 Управление каналами")],
         [KeyboardButton(text="📤 Поделиться витриной")]
     ]
@@ -453,6 +534,182 @@ async def process_shop_name(message: Message, state: FSMContext):
                     await message.answer(f"✅ Название магазина установлено: **{shop_name}**", parse_mode="Markdown")
                 else:
                     await message.answer("✅ Название магазина удалено. Будет использоваться 'Магазин'.")
+            else:
+                error_text = await resp.text()
+                await message.answer(f"❌ Ошибка: {error_text}")
+    
+    await state.clear()
+    await cmd_manage(message)
+
+# Управление логотипом магазина
+@dp.message(F.text == "🖼️ Логотип магазина")
+async def manage_welcome_image(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    # Получаем текущие настройки
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
+            if resp.status != 200:
+                return await message.answer("❌ Ошибка при получении настроек магазина")
+            settings = await resp.json()
+    
+    current_image = settings.get('welcome_image_url', None)
+    
+    if current_image:
+        text = "🖼️ **Текущий логотип магазина установлен**\n\n"
+        text += "Отправьте новое фото, чтобы изменить логотип.\n"
+        text += "Или отправьте /clear чтобы удалить логотип.\n"
+        text += "Или отправьте /cancel чтобы отменить."
+    else:
+        text = "🖼️ **Логотип магазина не установлен**\n\n"
+        text += "Отправьте фото, чтобы установить логотип магазина.\n"
+        text += "Это фото будет отображаться в приветственных сообщениях при шаринге магазина.\n"
+        text += "Или отправьте /cancel чтобы отменить."
+    
+    await message.answer(text, parse_mode="Markdown")
+    await state.set_state(SetWelcomeImage.image)
+
+@dp.message(SetWelcomeImage.image, F.photo)
+async def process_welcome_image(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    # Получаем фото
+    photo = message.photo[-1]  # Берем фото наибольшего размера
+    
+    try:
+        # Скачиваем фото во временный файл
+        file_info = await bot.get_file(photo.file_id)
+        file_ext = os.path.splitext(file_info.file_path)[1] or '.jpg'
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+            tmp_path = tmp_file.name
+            await bot.download_file(file_info.file_path, tmp_path)
+        
+        # Отправляем фото на backend
+        async with aiohttp.ClientSession() as session:
+            with open(tmp_path, 'rb') as f:
+                form_data = aiohttp.FormData()
+                form_data.add_field('image', f, filename=f"welcome_{photo.file_id}{file_ext}", content_type='image/jpeg')
+                
+                async with session.post(
+                    f"{API_URL}/shop-settings/welcome-image",
+                    data=form_data,
+                    params={"user_id": user_id}
+                ) as resp:
+                    if resp.status == 200:
+                        await message.answer("✅ Логотип магазина установлен!")
+                    else:
+                        error_text = await resp.text()
+                        await message.answer(f"❌ Ошибка: {error_text}")
+        
+        # Удаляем временный файл
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
+            
+    except Exception as e:
+        logging.error(f"Error processing welcome image: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка при обработке фото: {str(e)}")
+    
+    await state.clear()
+    await cmd_manage(message)
+
+@dp.message(SetWelcomeImage.image)
+async def process_welcome_image_text(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if message.text == "/clear":
+        # Удаляем логотип
+        async with aiohttp.ClientSession() as session:
+            async with session.delete(
+                f"{API_URL}/shop-settings/welcome-image",
+                params={"user_id": user_id}
+            ) as resp:
+                if resp.status == 200:
+                    await message.answer("✅ Логотип магазина удален.")
+                else:
+                    error_text = await resp.text()
+                    await message.answer(f"❌ Ошибка: {error_text}")
+    elif message.text == "/cancel":
+        await state.clear()
+        return await cmd_manage(message)
+    else:
+        await message.answer("❌ Пожалуйста, отправьте фото или используйте команды /clear или /cancel")
+        return
+    
+    await state.clear()
+    await cmd_manage(message)
+
+# Управление описанием магазина
+@dp.message(F.text == "📝 Описание магазина")
+async def manage_welcome_description(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    # Получаем текущие настройки
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
+            if resp.status != 200:
+                return await message.answer("❌ Ошибка при получении настроек магазина")
+            settings = await resp.json()
+    
+    current_description = settings.get('welcome_description', None)
+    
+    if current_description:
+        text = "📝 **Текущее описание магазина:**\n\n"
+        text += f"{current_description}\n\n"
+        text += "Отправьте новое описание, чтобы изменить его.\n"
+        text += "Или отправьте /clear чтобы удалить описание.\n"
+        text += "Или отправьте /cancel чтобы отменить."
+    else:
+        text = "📝 **Описание магазина не установлено**\n\n"
+        text += "Отправьте описание магазина, чтобы установить его.\n"
+        text += "Это описание будет отображаться в приветственных сообщениях при шаринге магазина.\n"
+        text += "Или отправьте /cancel чтобы отменить."
+    
+    await message.answer(text, parse_mode="Markdown")
+    await state.set_state(SetWelcomeDescription.description)
+
+@dp.message(SetWelcomeDescription.description)
+async def process_welcome_description(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if message.text == "/clear":
+        welcome_description = None
+    elif message.text == "/cancel":
+        await state.clear()
+        return await cmd_manage(message)
+    else:
+        welcome_description = message.text.strip()
+        if len(welcome_description) > 500:
+            return await message.answer("❌ Описание магазина слишком длинное (максимум 500 символов). Попробуйте снова:")
+    
+    # Обновляем описание магазина через API
+    async with aiohttp.ClientSession() as session:
+        # Сначала получаем текущие настройки
+        async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
+            if resp.status != 200:
+                return await message.answer("❌ Ошибка при получении настроек магазина")
+            current_settings = await resp.json()
+        
+        # Обновляем настройки с новым описанием
+        update_data = {
+            "reservations_enabled": current_settings.get("reservations_enabled", True),
+            "shop_name": current_settings.get("shop_name", None),
+            "welcome_image_url": current_settings.get("welcome_image_url", None),
+            "welcome_description": welcome_description
+        }
+        
+        async with session.put(
+            f"{API_URL}/shop-settings/",
+            json=update_data,
+            params={"user_id": user_id}
+        ) as resp:
+            if resp.status == 200:
+                if welcome_description:
+                    await message.answer(f"✅ Описание магазина установлено:\n\n**{welcome_description}**", parse_mode="Markdown")
+                else:
+                    await message.answer("✅ Описание магазина удалено.")
             else:
                 error_text = await resp.text()
                 await message.answer(f"❌ Ошибка: {error_text}")
@@ -668,13 +925,16 @@ async def send_store_to_channel(callback: types.CallbackQuery):
     
     share_url = f"{WEBAPP_URL}?user_id={user_id}"
     
-    # Получаем название магазина
-    shop_name = await get_shop_name(user_id)
+    # Получаем настройки магазина
+    shop_settings = await get_shop_settings(user_id)
+    shop_name = shop_settings.get('shop_name', 'магазин')
     shop_name_display = shop_name if shop_name != 'магазин' else 'Магазин'
     button_text = f"Открыть {shop_name_display}" if shop_name != 'магазин' else "🛍️ Открыть магазин"
+    welcome_description = shop_settings.get('welcome_description')
     
     msg = f"**{shop_name_display}**\n\n"
-    msg += "Нажмите кнопку ниже, чтобы открыть витрину с товарами!"
+    if welcome_description:
+        msg += f"{welcome_description}\n\n"
     
     chat_type = channel.get('chat_type', '').lower()
     
@@ -697,15 +957,10 @@ async def send_store_to_channel(callback: types.CallbackQuery):
                 url=bot_link
             ))
             
-            msg += "\n\n💡 Нажмите кнопку - откроется бот, и магазин запустится внутри Telegram!"
+            msg += "💡 Нажмите кнопку - откроется бот, и магазин запустится внутри Telegram!"
             
             try:
-                sent_msg = await bot.send_message(
-                    chat_id=channel['chat_id'],
-                    text=msg,
-                    reply_markup=builder.as_markup(),
-                    parse_mode="Markdown"
-                )
+                sent_msg = await send_shop_message(bot, channel['chat_id'], msg, builder.as_markup(), user_id)
                 logging.info(f"✅ Successfully sent store to supergroup {channel['chat_id']} with deep link, message_id: {sent_msg.message_id}")
                 await callback.answer(f"✅ Витрина отправлена в '{channel['title']}'!")
                 return
@@ -734,15 +989,10 @@ async def send_store_to_channel(callback: types.CallbackQuery):
                 url=bot_link
             ))
             
-            msg += "\n\n💡 Нажмите кнопку - откроется бот, и магазин запустится внутри Telegram!"
+            msg += "💡 Нажмите кнопку - откроется бот, и магазин запустится внутри Telegram!"
             
             try:
-                sent_msg = await bot.send_message(
-                    chat_id=channel['chat_id'],
-                    text=msg,
-                    reply_markup=builder.as_markup(),
-                    parse_mode="Markdown"
-                )
+                sent_msg = await send_shop_message(bot, channel['chat_id'], msg, builder.as_markup(), user_id)
                 logging.info(f"Successfully sent store to {chat_type} {channel['chat_id']} with deep link, message_id: {sent_msg.message_id}")
                 await callback.answer(f"✅ Витрина отправлена в '{channel['title']}'!")
                 return
@@ -755,9 +1005,9 @@ async def send_store_to_channel(callback: types.CallbackQuery):
     
     # Для каналов и обычных групп используем deep link на бота
     if chat_type == 'channel':
-        msg += "\n\n💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!"
+        msg += "💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!"
     elif chat_type == 'group':
-        msg += "\n\n💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!\n"
+        msg += "💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!\n"
         msg += "💡 **Совет:** Конвертируйте группу в супергруппу, чтобы магазин открывался сразу внутри Telegram"
     
     bot_link = await get_bot_deeplink(user_id)
@@ -768,12 +1018,7 @@ async def send_store_to_channel(callback: types.CallbackQuery):
     ))
     
     try:
-        sent_msg = await bot.send_message(
-            chat_id=channel['chat_id'],
-            text=msg,
-            reply_markup=builder_url.as_markup(),
-            parse_mode="Markdown"
-        )
+        sent_msg = await send_shop_message(bot, channel['chat_id'], msg, builder_url.as_markup(), user_id)
         logging.info(f"Successfully sent store to {chat_type} {channel['chat_id']} with URL, message_id: {sent_msg.message_id}")
         await callback.answer(f"✅ Витрина отправлена в '{channel['title']}'!")
     except Exception as e:
