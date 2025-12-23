@@ -1082,3 +1082,85 @@ main {
         opacity: 1;
     }
 }
+
+/* Модальное окно редактирования товара */
+.edit-product-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary) !important;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.edit-product-form {
+    padding: 20px;
+}
+
+.edit-product-field {
+    margin-bottom: 20px;
+}
+
+.edit-product-field label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.edit-product-field input {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.edit-product-field input:focus {
+    outline: none;
+    border-color: var(--tg-theme-button-color, #5ac8fa);
+    box-shadow: 0 0 0 2px rgba(90, 200, 250, 0.2);
+}
+
+.edit-product-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.edit-product-btn {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.edit-product-btn.save {
+    background: var(--tg-theme-button-color, #5ac8fa);
+    color: var(--tg-theme-button-text-color, #ffffff);
+}
+
+.edit-product-btn.save:active {
+    opacity: 0.8;
+    transform: scale(0.98);
+}
+
+.edit-product-btn.cancel {
+    background: var(--bg-glass-light);
+    color: var(--text-primary);
+    border: 1px solid var(--border-glass);
+}
+
+.edit-product-btn.cancel:active {
+    opacity: 0.8;
+    transform: scale(0.98);
+}

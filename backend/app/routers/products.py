@@ -290,6 +290,176 @@ def toggle_hot_offer(
         "message": f"Горящее предложение {'включено' if db_product.is_hot_offer else 'выключено'}"
     }
 
+@router.patch("/{product_id}/update-price-discount")
+def update_price_discount(
+    product_id: int,
+    price_discount_update: schemas.PriceDiscountUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление цены и скидки товара с отправкой уведомлений пользователям"""
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Сохраняем старые значения для сравнения
+    old_price = db_product.price
+    old_discount = db_product.discount
+    
+    # Обновляем значения
+    db_product.price = price_discount_update.price
+    db_product.discount = price_discount_update.discount
+    db.commit()
+    db.refresh(db_product)
+    
+    # Определяем, что изменилось
+    price_changed = old_price != price_discount_update.price
+    discount_changed = old_discount != price_discount_update.discount
+    
+    # Отправляем уведомления пользователям, которые посещали магазин
+    if price_changed or discount_changed:
+        try:
+            # Получаем всех пользователей для уведомлений:
+            # 1. Те, кто делал резервации в этом магазине
+            # 2. Те, кто просматривал конкретный товар (модальное окно)
+            # 3. Те, кто посещал магазин в целом (просмотр списка товаров)
+            from sqlalchemy import distinct, or_
+            
+            visited_user_ids = set()
+            
+            # 1. Пользователи, которые делали резервации в этом магазине
+            reservations = db.query(distinct(models.Reservation.reserved_by_user_id)).filter(
+                models.Reservation.user_id == user_id
+            ).all()
+            reservation_users = []
+            for row in reservations:
+                if row[0] is not None:
+                    visited_user_ids.add(row[0])
+                    reservation_users.append(row[0])
+            print(f"📊 Notification: Found {len(reservation_users)} users from reservations: {reservation_users}")
+            
+            # 2. Пользователи, которые просматривали конкретный товар (модальное окно)
+            product_views = db.query(distinct(models.ShopVisit.visitor_id)).filter(
+                models.ShopVisit.shop_owner_id == user_id,
+                models.ShopVisit.product_id == product_id
+            ).all()
+            product_view_users = []
+            for row in product_views:
+                if row[0] is not None:
+                    visited_user_ids.add(row[0])
+                    product_view_users.append(row[0])
+            print(f"📊 Notification: Found {len(product_view_users)} users who viewed product {product_id}: {product_view_users}")
+            
+            # 3. Пользователи, которые посещали магазин в целом (просмотр списка товаров)
+            shop_visits = db.query(distinct(models.ShopVisit.visitor_id)).filter(
+                models.ShopVisit.shop_owner_id == user_id,
+                models.ShopVisit.product_id.is_(None)
+            ).all()
+            shop_visit_users = []
+            for row in shop_visits:
+                if row[0] is not None:
+                    visited_user_ids.add(row[0])
+                    shop_visit_users.append(row[0])
+            print(f"📊 Notification: Found {len(shop_visit_users)} users who visited shop: {shop_visit_users}")
+            
+            # Преобразуем в список для итерации
+            visited_user_ids = list(visited_user_ids)
+            
+            print(f"📢 Notification: Found {len(visited_user_ids)} users to notify for product {product_id}")
+            print(f"📢 Notification: User IDs: {visited_user_ids}")
+            
+            if not visited_user_ids:
+                print("⚠️ Notification: No users found to notify")
+                return {
+                    "id": db_product.id,
+                    "price": db_product.price,
+                    "discount": db_product.discount,
+                    "message": "Товар обновлен, но нет пользователей для уведомлений"
+                }
+            
+            # Отправляем уведомления через HTTP запрос к боту
+            import requests
+            import os
+            
+            bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+            if not bot_token:
+                print("❌ Notification: TELEGRAM_BOT_TOKEN not set")
+                return {
+                    "id": db_product.id,
+                    "price": db_product.price,
+                    "discount": db_product.discount,
+                    "message": "Товар обновлен, но токен бота не настроен"
+                }
+            
+            bot_api_url = f"https://api.telegram.org/bot{bot_token}"
+            
+            # Формируем сообщение
+            shop_settings = db.query(models.ShopSettings).filter(
+                models.ShopSettings.user_id == user_id
+            ).first()
+            shop_name = shop_settings.shop_name if shop_settings and shop_settings.shop_name else "магазин"
+            
+            final_price = price_discount_update.price * (1 - price_discount_update.discount / 100)
+            
+            message = f"🔔 **Обновление в {shop_name}**\n\n"
+            message += f"📦 Товар: {db_product.name}\n\n"
+            
+            if price_changed:
+                message += f"💰 **Новая цена:** {price_discount_update.price} ₽"
+                if old_price:
+                    message += f" (было: {old_price} ₽)"
+                message += "\n"
+            
+            if discount_changed:
+                message += f"🎯 **Скидка:** {price_discount_update.discount}%"
+                if old_discount:
+                    message += f" (было: {old_discount}%)"
+                message += "\n"
+            
+            if price_discount_update.discount > 0:
+                message += f"\n💵 **Цена со скидкой:** {final_price:.0f} ₽"
+            
+            # Отправляем уведомления всем пользователям
+            sent_count = 0
+            failed_count = 0
+            for visited_user_id in visited_user_ids:
+                try:
+                    print(f"📤 Sending notification to user {visited_user_id}...")
+                    response = requests.post(
+                        f"{bot_api_url}/sendMessage",
+                        json={
+                            "chat_id": visited_user_id,
+                            "text": message,
+                            "parse_mode": "Markdown"
+                        },
+                        timeout=5
+                    )
+                    if response.status_code == 200:
+                        print(f"✅ Notification sent successfully to user {visited_user_id}")
+                        sent_count += 1
+                    else:
+                        print(f"❌ Failed to send notification to user {visited_user_id}: status={response.status_code}, response={response.text}")
+                        failed_count += 1
+                except Exception as e:
+                    print(f"❌ Error sending notification to user {visited_user_id}: {e}")
+                    failed_count += 1
+                    # Продолжаем отправку другим пользователям даже при ошибке
+            
+            print(f"📊 Notification summary: {sent_count} sent, {failed_count} failed out of {len(visited_user_ids)} total")
+        except Exception as e:
+            print(f"Error sending notifications: {e}")
+            # Не прерываем обновление товара, даже если уведомления не отправились
+    
+    return {
+        "id": db_product.id,
+        "price": db_product.price,
+        "discount": db_product.discount,
+        "message": "Товар обновлен, уведомления отправлены"
+    }
+
 @router.delete("/{product_id}")
 def delete_product(
     product_id: int,

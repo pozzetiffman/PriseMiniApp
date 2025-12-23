@@ -66,6 +66,28 @@
         </div>
     </div>
     
+    <!-- Модальное окно для редактирования товара -->
+    <div id="edit-product-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close edit-product-close">&times;</span>
+            <h2 class="edit-product-title">✏️ Редактировать товар</h2>
+            <div class="edit-product-form">
+                <div class="edit-product-field">
+                    <label for="edit-price">Цена (₽)</label>
+                    <input type="number" id="edit-price" step="0.01" min="0" placeholder="Введите цену">
+                </div>
+                <div class="edit-product-field">
+                    <label for="edit-discount">Скидка (%)</label>
+                    <input type="number" id="edit-discount" step="0.1" min="0" max="100" placeholder="Введите скидку">
+                </div>
+                <div class="edit-product-actions">
+                    <button id="edit-product-save" class="edit-product-btn save">💾 Сохранить</button>
+                    <button id="edit-product-cancel" class="edit-product-btn cancel">❌ Отменить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script type="module" src="js/app.js"></script>
 </body>
 </html>

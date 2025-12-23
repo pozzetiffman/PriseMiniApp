@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, getShopSettings, toggleHotOffer } from './api.js';
+import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, getShopSettings, toggleHotOffer, trackShopVisit, updateProductAPI } from './api.js';
 import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -212,6 +212,13 @@ window.loadData = async function loadData() {
         const products = await fetchProducts(appContext.shop_owner_id, currentCategoryId);
         console.log('✅ Step 2 complete: Products loaded:', products.length);
         renderProducts(products);
+        
+        // Отслеживаем общее посещение магазина (только для клиентов, не для владельца)
+        if (appContext && appContext.role === 'client' && appContext.shop_owner_id) {
+            trackShopVisit(appContext.shop_owner_id).catch(err => {
+                console.warn('Failed to track shop visit:', err);
+            });
+        }
         
         // Обновляем корзину
         console.log('🛒 Step 3: Updating cart...');
@@ -580,6 +587,13 @@ function showProductModal(prod, finalPrice, fullImages) {
     currentImages = fullImages;
     currentImageIndex = 0;
     
+    // Отслеживаем просмотр конкретного товара (только для клиентов, не для владельца)
+    if (appContext && appContext.role === 'client' && appContext.shop_owner_id) {
+        trackShopVisit(appContext.shop_owner_id, prod.id).catch(err => {
+            console.warn('Failed to track product view:', err);
+        });
+    }
+    
     // Управление горящим предложением (только для владельца) - сразу после фото
     const modalHotOfferControl = document.getElementById('modal-hot-offer-control');
     if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
@@ -627,6 +641,33 @@ function showProductModal(prod, finalPrice, fullImages) {
         modalHotOfferControl.appendChild(hotOfferContainer);
     } else {
         modalHotOfferControl.style.display = 'none';
+    }
+    
+    // Кнопка редактирования (только для владельца)
+    const modalEditControl = document.getElementById('modal-edit-control');
+    if (!modalEditControl) {
+        // Создаем контейнер для кнопки редактирования, если его еще нет
+        const editControlDiv = document.createElement('div');
+        editControlDiv.id = 'modal-edit-control';
+        editControlDiv.style.cssText = 'margin: 12px 0;';
+        const modalContent = document.querySelector('#product-modal .modal-content');
+        const modalName = document.getElementById('modal-name');
+        modalContent.insertBefore(editControlDiv, modalName);
+    }
+    
+    const editControl = document.getElementById('modal-edit-control');
+    editControl.innerHTML = '';
+    
+    if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'reserve-btn';
+        editBtn.style.cssText = 'width: 100%; background: var(--tg-theme-button-color, #3390ec); color: var(--tg-theme-button-text-color, #ffffff);';
+        editBtn.textContent = '✏️ Редактировать цену и скидку';
+        editBtn.onclick = () => showEditProductModal(prod);
+        editControl.appendChild(editBtn);
+        editControl.style.display = 'block';
+    } else {
+        editControl.style.display = 'none';
     }
     
     document.getElementById('modal-name').textContent = prod.name;
@@ -818,6 +859,89 @@ async function cancelReservation(reservationId, productId) {
         }, 500);
     } catch (e) {
         console.error('Cancel reservation error:', e);
+        alert(`❌ Ошибка: ${e.message}`);
+    }
+}
+
+// Показ модального окна редактирования товара
+function showEditProductModal(prod) {
+    const editProductModal = document.getElementById('edit-product-modal');
+    const editPriceInput = document.getElementById('edit-price');
+    const editDiscountInput = document.getElementById('edit-discount');
+    
+    // Заполняем поля текущими значениями
+    editPriceInput.value = prod.price || '';
+    editDiscountInput.value = prod.discount || 0;
+    
+    // Показываем модальное окно
+    editProductModal.style.display = 'block';
+    
+    // Обработчик сохранения
+    const saveBtn = document.getElementById('edit-product-save');
+    const cancelBtn = document.getElementById('edit-product-cancel');
+    
+    // Удаляем старые обработчики, если есть
+    const newSaveBtn = saveBtn.cloneNode(true);
+    saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+    
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+    
+    // Добавляем новые обработчики
+    newSaveBtn.onclick = async () => {
+        await saveProductEdit(prod.id);
+    };
+    
+    newCancelBtn.onclick = () => {
+        editProductModal.style.display = 'none';
+    };
+}
+
+// Сохранение изменений товара
+async function saveProductEdit(productId) {
+    const editPriceInput = document.getElementById('edit-price');
+    const editDiscountInput = document.getElementById('edit-discount');
+    
+    const newPrice = parseFloat(editPriceInput.value);
+    const newDiscount = parseFloat(editDiscountInput.value);
+    
+    // Валидация
+    if (isNaN(newPrice) || newPrice <= 0) {
+        alert('❌ Введите корректную цену (больше 0)');
+        return;
+    }
+    
+    if (isNaN(newDiscount) || newDiscount < 0 || newDiscount > 100) {
+        alert('❌ Введите корректную скидку (от 0 до 100%)');
+        return;
+    }
+    
+    try {
+        if (!appContext) {
+            alert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        // Обновляем товар через API
+        await updateProductAPI(productId, appContext.shop_owner_id, newPrice, newDiscount);
+        
+        // Закрываем модальное окно редактирования
+        const editProductModal = document.getElementById('edit-product-modal');
+        editProductModal.style.display = 'none';
+        
+        // Закрываем модальное окно товара
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Показываем уведомление
+        alert('✅ Товар обновлен! Уведомления отправлены пользователям.');
+        
+        // Обновляем данные
+        setTimeout(async () => {
+            await loadData();
+        }, 500);
+    } catch (e) {
+        console.error('Save product edit error:', e);
         alert(`❌ Ошибка: ${e.message}`);
     }
 }
@@ -1098,6 +1222,23 @@ function setupModals() {
         }
     };
     
+    // Закрытие модального окна редактирования товара
+    const editProductModal = document.getElementById('edit-product-modal');
+    const editProductClose = document.querySelector('.edit-product-close');
+    if (editProductClose) {
+        editProductClose.onclick = () => {
+            editProductModal.style.display = 'none';
+        };
+    }
+    
+    if (editProductModal) {
+        editProductModal.onclick = (e) => {
+            if (e.target === editProductModal) {
+                editProductModal.style.display = 'none';
+            }
+        };
+    }
+    
     // Закрытие по Escape
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -1115,6 +1256,9 @@ function setupModals() {
             const adminModal = document.getElementById('admin-modal');
             if (adminModal && adminModal.style.display === 'block') {
                 adminModal.style.display = 'none';
+            }
+            if (editProductModal && editProductModal.style.display === 'block') {
+                editProductModal.style.display = 'none';
             }
         }
     });

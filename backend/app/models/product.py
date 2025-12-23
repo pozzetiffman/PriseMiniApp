@@ -25,5 +25,9 @@ class Product(ProductBase):
 class HotOfferUpdate(BaseModel):
     is_hot_offer: bool
 
+class PriceDiscountUpdate(BaseModel):
+    price: float
+    discount: float
+
 
 

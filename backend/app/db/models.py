@@ -63,6 +63,17 @@ class ShopSettings(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class ShopVisit(Base):
+    __tablename__ = "shop_visits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shop_owner_id = Column(BigInteger, index=True)  # ID владельца магазина
+    visitor_id = Column(BigInteger, index=True)  # ID пользователя, который посетил магазин/просмотрел товар
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True, index=True)  # ID товара (null = общее посещение магазина)
+    visited_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время посещения/просмотра
+    
+    product = relationship("Product", backref="visits")
+
 
 
 

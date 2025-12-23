@@ -276,3 +276,62 @@ export async function toggleHotOffer(productId, shopOwnerId, isHotOffer) {
     
     return JSON.parse(responseText);
 }
+
+// Отслеживание посещения магазина или просмотра товара
+export async function trackShopVisit(shopOwnerId, productId = null) {
+    const url = `${API_BASE}/api/shop-visits/track?shop_owner_id=${shopOwnerId}${productId ? `&product_id=${productId}` : ''}`;
+    console.log(`Tracking visit: shopOwnerId=${shopOwnerId}, productId=${productId}`);
+    
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: getBaseHeaders()
+        });
+        
+        const responseText = await response.text();
+        console.log(`Track visit response: status=${response.status}, body=${responseText}`);
+        
+        if (!response.ok) {
+            // Не показываем ошибку пользователю, просто логируем
+            console.warn('Failed to track visit:', responseText);
+            return null;
+        }
+        
+        return JSON.parse(responseText);
+    } catch (e) {
+        // Не показываем ошибку пользователю, просто логируем
+        console.warn('Error tracking visit:', e);
+        return null;
+    }
+}
+
+// Обновление цены и скидки товара
+export async function updateProductAPI(productId, shopOwnerId, price, discount) {
+    const url = `${API_BASE}/api/products/${productId}/update-price-discount?user_id=${shopOwnerId}`;
+    console.log(`Updating product: productId=${productId}, price=${price}, discount=${discount}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            price: price,
+            discount: discount
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update product response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить товар';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
