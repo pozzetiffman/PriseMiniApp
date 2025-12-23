@@ -389,3 +389,83 @@ export async function updateProductQuantityAPI(productId, shopOwnerId, quantity)
     
     return JSON.parse(responseText);
 }
+
+// Удаление товара
+export async function deleteProductAPI(productId, shopOwnerId) {
+    const url = `${API_BASE}/api/products/${productId}?user_id=${shopOwnerId}`;
+    console.log(`Deleting product: productId=${productId}`);
+    
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Delete product response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось удалить товар';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Пометить товар как проданный
+export async function markProductSoldAPI(productId, shopOwnerId) {
+    const url = `${API_BASE}/api/products/${productId}/mark-sold?user_id=${shopOwnerId}`;
+    console.log(`Marking product as sold: productId=${productId}`);
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Mark sold response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось пометить товар как проданный';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Получить список проданных товаров
+export async function getSoldProductsAPI(shopOwnerId) {
+    const url = `${API_BASE}/api/products/sold?user_id=${shopOwnerId}`;
+    console.log(`Fetching sold products: shopOwnerId=${shopOwnerId}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Get sold products response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось загрузить проданные товары';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}

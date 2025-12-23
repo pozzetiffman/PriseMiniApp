@@ -983,6 +983,61 @@ main {
 
 .admin-modal-body {
     padding: 25px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Вкладки админки */
+.admin-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-glass);
+    background: var(--bg-glass-light);
+}
+
+.admin-tab {
+    flex: 1;
+    padding: 14px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-hint);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.admin-tab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.admin-tab.active {
+    color: var(--tg-theme-link-color, #5ac8fa);
+    border-bottom-color: var(--tg-theme-link-color, #5ac8fa);
+    background: rgba(90, 200, 250, 0.1);
+}
+
+.admin-tab-content {
+    display: none;
+}
+
+.admin-tab-content.active {
+    display: block;
+}
+
+/* Список проданных товаров */
+.sold-products-list {
+    padding: 0;
+}
+
+.sold-product-item {
+    background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .admin-setting {

@@ -25,6 +25,7 @@ class Product(Base):
     user_id = Column(BigInteger, index=True)  # ID пользователя Telegram
     is_hot_offer = Column(Boolean, default=False)  # Горящее предложение
     quantity = Column(Integer, default=0)  # Количество товара на складе
+    is_sold = Column(Boolean, default=False)  # Продан ли товар (скрыт с витрины)
     
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship("Category", back_populates="products")
@@ -75,6 +76,24 @@ class ShopVisit(Base):
     visited_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время посещения/просмотра
     
     product = relationship("Product", backref="visits")
+
+class SoldProduct(Base):
+    __tablename__ = "sold_products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)  # ID оригинального товара
+    user_id = Column(BigInteger, index=True)  # ID владельца магазина
+    name = Column(String, index=True)  # Название товара на момент продажи
+    description = Column(Text, nullable=True)  # Описание товара на момент продажи
+    price = Column(Float)  # Цена на момент продажи
+    discount = Column(Float, default=0.0)  # Скидка на момент продажи
+    image_url = Column(String, nullable=True)  # Первое изображение
+    images_urls = Column(Text, nullable=True)  # JSON массив URL изображений
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    sold_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время продажи
+    
+    product = relationship("Product", backref="sold_records")
+    category = relationship("Category", backref="sold_products")
 
 
 

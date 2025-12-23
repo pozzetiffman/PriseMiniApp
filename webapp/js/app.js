@@ -1,12 +1,17 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, getShopSettings, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
+import { API_BASE, cancelReservationAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
 import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
 // Глобальные переменные
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
 let currentCategoryId = null;
+
+// Экспортируем функцию для получения appContext (для использования в других модулях)
+window.getAppContext = function() {
+    return appContext;
+};
 
 // Элементы DOM
 const userNameElement = document.getElementById('user-name');
@@ -674,13 +679,13 @@ function showProductModal(prod, finalPrice, fullImages) {
         modalHotOfferControl.style.display = 'none';
     }
     
-    // Кнопка редактирования (только для владельца)
+    // Кнопки управления товаром (только для владельца)
     const modalEditControl = document.getElementById('modal-edit-control');
     if (!modalEditControl) {
-        // Создаем контейнер для кнопки редактирования, если его еще нет
+        // Создаем контейнер для кнопок управления, если его еще нет
         const editControlDiv = document.createElement('div');
         editControlDiv.id = 'modal-edit-control';
-        editControlDiv.style.cssText = 'margin: 12px 0;';
+        editControlDiv.style.cssText = 'margin: 12px 0; display: flex; flex-direction: column; gap: 8px;';
         const modalContent = document.querySelector('#product-modal .modal-content');
         const modalName = document.getElementById('modal-name');
         modalContent.insertBefore(editControlDiv, modalName);
@@ -690,13 +695,31 @@ function showProductModal(prod, finalPrice, fullImages) {
     editControl.innerHTML = '';
     
     if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
+        // Кнопка редактирования
         const editBtn = document.createElement('button');
         editBtn.className = 'reserve-btn';
         editBtn.style.cssText = 'width: 100%; background: var(--tg-theme-button-color, #3390ec); color: var(--tg-theme-button-text-color, #ffffff);';
         editBtn.textContent = '✏️ Редактировать товар';
         editBtn.onclick = () => showEditProductModal(prod);
         editControl.appendChild(editBtn);
-        editControl.style.display = 'block';
+        
+        // Кнопка "Продан"
+        const soldBtn = document.createElement('button');
+        soldBtn.className = 'reserve-btn';
+        soldBtn.style.cssText = 'width: 100%; background: #4CAF50; color: #ffffff;';
+        soldBtn.textContent = '✅ Продан';
+        soldBtn.onclick = () => markAsSold(prod.id);
+        editControl.appendChild(soldBtn);
+        
+        // Кнопка "Удалить"
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'reserve-btn';
+        deleteBtn.style.cssText = 'width: 100%; background: #ff4d4d; color: #ffffff;';
+        deleteBtn.textContent = '🗑️ Удалить товар';
+        deleteBtn.onclick = () => deleteProduct(prod.id);
+        editControl.appendChild(deleteBtn);
+        
+        editControl.style.display = 'flex';
     } else {
         editControl.style.display = 'none';
     }
@@ -1389,3 +1412,61 @@ window.cancelReservationFromCart = async function(reservationId, productId) {
     loadCart();
     await updateCartUI();
 };
+
+// Пометить товар как проданный
+async function markAsSold(productId) {
+    if (!confirm('Пометить товар как проданный? Товар будет скрыт с витрины и добавлен в историю продаж.')) {
+        return;
+    }
+    
+    try {
+        if (!appContext) {
+            alert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        await markProductSoldAPI(productId, appContext.shop_owner_id);
+        alert('✅ Товар помечен как проданный');
+        
+        // Закрываем модальное окно
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Обновляем данные
+        setTimeout(async () => {
+            await loadData();
+        }, 500);
+    } catch (e) {
+        console.error('Mark as sold error:', e);
+        alert(`❌ Ошибка: ${e.message}`);
+    }
+}
+
+// Удалить товар
+async function deleteProduct(productId) {
+    if (!confirm('Вы уверены, что хотите удалить этот товар? Это действие нельзя отменить.')) {
+        return;
+    }
+    
+    try {
+        if (!appContext) {
+            alert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        await deleteProductAPI(productId, appContext.shop_owner_id);
+        alert('✅ Товар удален');
+        
+        // Закрываем модальное окно
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Обновляем данные
+        setTimeout(async () => {
+            await loadData();
+        }, 500);
+    } catch (e) {
+        console.error('Delete product error:', e);
+        alert(`❌ Ошибка: ${e.message}`);
+    }
+}

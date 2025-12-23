@@ -3,11 +3,12 @@ import os
 import uuid
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..db import models, database
 from ..models import product as schemas
+from ..utils.telegram_auth import get_user_id_from_init_data
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -50,7 +51,10 @@ def get_products(
     db: Session = Depends(database.get_db)
 ):
     print(f"DEBUG: get_products called with user_id={user_id}, category_id={category_id}")
-    query = db.query(models.Product).filter(models.Product.user_id == user_id)
+    query = db.query(models.Product).filter(
+        models.Product.user_id == user_id,
+        models.Product.is_sold == False  # Не показываем проданные товары на витрине
+    )
     if category_id is not None:
         query = query.filter(models.Product.category_id == category_id)
     products = query.all()
@@ -527,15 +531,37 @@ def update_quantity(
 @router.delete("/{product_id}")
 def delete_product(
     product_id: int,
-    user_id: int,
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
+    # Проверяем авторизацию через initData
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    import os
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not bot_token:
+        raise HTTPException(status_code=500, detail="Bot token is not configured")
+    
+    try:
+        authenticated_user_id = get_user_id_from_init_data(x_telegram_init_data, bot_token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Проверяем, что пользователь является владельцем товара
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
     ).first()
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Проверяем, что авторизованный пользователь является владельцем
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to delete this product")
     
     # Удаляем файлы изображений с диска
     images_to_delete = []
@@ -565,3 +591,134 @@ def delete_product(
     db.delete(db_product)
     db.commit()
     return {"message": "Product deleted"}
+    
+@router.post("/{product_id}/mark-sold")
+def mark_product_sold(
+    product_id: int,
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Помечает товар как проданный: скрывает с витрины и добавляет в историю продаж"""
+    # Проверяем авторизацию через initData
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    import os
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not bot_token:
+        raise HTTPException(status_code=500, detail="Bot token is not configured")
+    
+    try:
+        authenticated_user_id = get_user_id_from_init_data(x_telegram_init_data, bot_token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Проверяем, что товар существует и принадлежит пользователю
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Проверяем, что авторизованный пользователь является владельцем
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to mark this product as sold")
+    
+    # Проверяем, что товар еще не продан
+    if db_product.is_sold:
+        raise HTTPException(status_code=400, detail="Product is already marked as sold")
+    
+    # Помечаем товар как проданный
+    db_product.is_sold = True
+    
+    # Создаем запись в истории продаж
+    sold_product = models.SoldProduct(
+        product_id=product_id,
+        user_id=user_id,
+        name=db_product.name,
+        description=db_product.description,
+        price=db_product.price,
+        discount=db_product.discount,
+        image_url=db_product.image_url,
+        images_urls=db_product.images_urls,
+        category_id=db_product.category_id,
+        sold_at=datetime.utcnow()
+    )
+    db.add(sold_product)
+    db.commit()
+    db.refresh(sold_product)
+    
+    return {
+        "message": "Product marked as sold",
+        "product_id": product_id,
+        "sold_product_id": sold_product.id
+    }
+
+@router.get("/sold", response_model=List[dict])
+def get_sold_products(
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Получает список проданных товаров (история продаж)"""
+    # Проверяем авторизацию через initData
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    import os
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not bot_token:
+        raise HTTPException(status_code=500, detail="Bot token is not configured")
+    
+    try:
+        authenticated_user_id = get_user_id_from_init_data(x_telegram_init_data, bot_token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Проверяем, что авторизованный пользователь запрашивает свои продажи
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to view these sold products")
+    
+    # Получаем проданные товары, отсортированные по дате продажи (новые сначала)
+    sold_products = db.query(models.SoldProduct).filter(
+        models.SoldProduct.user_id == user_id
+    ).order_by(models.SoldProduct.sold_at.desc()).all()
+    
+    result = []
+    for sold in sold_products:
+        # Преобразуем images_urls из JSON строки в список
+        images_list = []
+        if sold.images_urls:
+            try:
+                images_list = json.loads(sold.images_urls)
+            except:
+                images_list = []
+        
+        # Для обратной совместимости: если есть image_url, но нет images_urls, добавляем его
+        if not images_list and sold.image_url:
+            images_list = [sold.image_url]
+        
+        # Преобразуем относительные пути в полные HTTPS URL
+        images_list = [make_full_url(img_url) for img_url in images_list if img_url]
+        image_url_full = make_full_url(sold.image_url) if sold.image_url else None
+        
+        result.append({
+            "id": sold.id,
+            "product_id": sold.product_id,
+            "name": sold.name,
+            "description": sold.description,
+            "price": sold.price,
+            "discount": sold.discount,
+            "image_url": image_url_full,
+            "images_urls": images_list,
+            "category_id": sold.category_id,
+            "sold_at": sold.sold_at.isoformat() if sold.sold_at else None
+        })
+    
+    return result
