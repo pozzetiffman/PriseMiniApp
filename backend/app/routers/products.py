@@ -137,10 +137,17 @@ def get_products(
             "discount": prod.discount,
             "category_id": prod.category_id,
             "user_id": prod.user_id,
-            "is_hot_offer": getattr(prod, 'is_hot_offer', False),  # Горящее предложение
+            "is_hot_offer": bool(getattr(prod, 'is_hot_offer', False)),  # Горящее предложение
             "quantity": getattr(prod, 'quantity', 0),  # Количество товара на складе
+            "is_made_to_order": bool(getattr(prod, 'is_made_to_order', False)),  # Товар под заказ (явное преобразование в bool)
             "reservation": reservation_info
         }
+        
+        # Отладочный вывод для проверки is_made_to_order
+        is_made_to_order_raw = getattr(prod, 'is_made_to_order', False)
+        is_made_to_order_value = bool(is_made_to_order_raw)
+        print(f"DEBUG: Product {prod.id} '{prod.name}' - is_made_to_order raw={is_made_to_order_raw} (type: {type(is_made_to_order_raw)}), converted={is_made_to_order_value}")
+        
         result.append(prod_dict)
         
         print(f"DEBUG: Product {prod.id} '{prod.name}' - images_urls: {len(images_list)} images")
@@ -526,6 +533,35 @@ def update_quantity(
         "id": db_product.id,
         "quantity": db_product.quantity,
         "message": "Количество товара обновлено"
+    }
+
+@router.patch("/{product_id}/update-made-to-order")
+def update_made_to_order(
+    product_id: int,
+    made_to_order_update: schemas.MadeToOrderUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление статуса 'под заказ' для товара (без уведомлений)"""
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Обновляем статус 'под заказ'
+    db_product.is_made_to_order = bool(made_to_order_update.is_made_to_order)
+    db.commit()
+    db.refresh(db_product)
+    
+    # Отладочный вывод
+    print(f"DEBUG: update_made_to_order - product_id={product_id}, user_id={user_id}, is_made_to_order={made_to_order_update.is_made_to_order}, saved={db_product.is_made_to_order}")
+    
+    return {
+        "id": db_product.id,
+        "is_made_to_order": bool(db_product.is_made_to_order),  # Явное преобразование в bool
+        "message": "Статус 'под заказ' обновлен"
     }
 
 @router.delete("/{product_id}")

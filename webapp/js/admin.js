@@ -382,62 +382,62 @@ async function loadSoldProducts() {
                 background: var(--bg-glass, rgba(28, 28, 30, 0.8));
                 backdrop-filter: blur(20px);
                 border-radius: 12px;
-                padding: 16px;
-                margin-bottom: 12px;
+                padding: 14px 16px;
+                margin-bottom: 8px;
                 border: 1px solid rgba(255, 255, 255, 0.1);
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
             `;
-            
-            // Изображение
-            const imageDiv = document.createElement('div');
-            imageDiv.style.cssText = 'width: 100%; aspect-ratio: 3/4; border-radius: 8px; overflow: hidden; margin-bottom: 12px; background: var(--tg-theme-secondary-bg-color);';
-            
-            const imagesList = sold.images_urls && Array.isArray(sold.images_urls) ? sold.images_urls : (sold.image_url ? [sold.image_url] : []);
-            if (imagesList.length > 0) {
-                const img = document.createElement('img');
-                img.src = imagesList[0];
-                img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
-                img.alt = sold.name;
-                imageDiv.appendChild(img);
-            } else {
-                imageDiv.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
-            }
             
             // Название
             const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--tg-theme-text-color);';
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color);';
             nameDiv.textContent = sold.name;
+            
+            // Цена и дата в одной строке
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;';
             
             // Цена
             const finalPrice = sold.discount > 0 ? Math.round(sold.price * (1 - sold.discount / 100)) : sold.price;
             const priceDiv = document.createElement('div');
-            priceDiv.style.cssText = 'font-size: 18px; font-weight: 700; color: var(--tg-theme-link-color); margin-bottom: 8px;';
+            priceDiv.style.cssText = 'font-size: 16px; font-weight: 700; color: var(--tg-theme-link-color);';
             priceDiv.textContent = `${finalPrice} ₽`;
             if (sold.discount > 0) {
                 const oldPrice = document.createElement('span');
-                oldPrice.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color); text-decoration: line-through; margin-left: 8px;';
+                oldPrice.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color); text-decoration: line-through; margin-left: 6px;';
                 oldPrice.textContent = `${sold.price} ₽`;
                 priceDiv.appendChild(oldPrice);
             }
             
             // Дата продажи
             const dateDiv = document.createElement('div');
-            dateDiv.style.cssText = 'font-size: 12px; color: var(--tg-theme-hint-color);';
+            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color);';
             if (sold.sold_at) {
                 const soldDate = new Date(sold.sold_at);
                 const dateStr = soldDate.toLocaleDateString('ru-RU', {
                     year: 'numeric',
-                    month: 'long',
+                    month: 'short',
                     day: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'
                 });
-                dateDiv.textContent = `Продано: ${dateStr}`;
+                dateDiv.textContent = soldDate.toLocaleDateString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                }) + ' ' + soldDate.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
             }
             
-            soldItem.appendChild(imageDiv);
+            infoDiv.appendChild(priceDiv);
+            infoDiv.appendChild(dateDiv);
+            
             soldItem.appendChild(nameDiv);
-            soldItem.appendChild(priceDiv);
-            soldItem.appendChild(dateDiv);
+            soldItem.appendChild(infoDiv);
             
             soldProductsList.appendChild(soldItem);
         });

@@ -93,6 +93,18 @@
                     <label for="edit-quantity">Количество товара (шт.)</label>
                     <input type="number" id="edit-quantity" step="1" min="0" placeholder="Введите количество">
                 </div>
+                <div class="edit-product-field">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label for="edit-made-to-order" style="margin-bottom: 0;">Под заказ</label>
+                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Если включено, вместо количества будет показано "Под заказ"</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="edit-made-to-order">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
                 <div class="edit-product-actions">
                     <button id="edit-product-save" class="edit-product-btn save">💾 Сохранить</button>
                     <button id="edit-product-cancel" class="edit-product-btn cancel">❌ Отменить</button>

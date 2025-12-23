@@ -11,6 +11,7 @@ class ProductBase(BaseModel):
     category_id: int
     is_hot_offer: bool = False  # Горящее предложение
     quantity: int = 0  # Количество товара на складе
+    is_made_to_order: bool = False  # Товар под заказ
 
 class ProductCreate(ProductBase):
     pass
@@ -36,6 +37,9 @@ class NameDescriptionUpdate(BaseModel):
 
 class QuantityUpdate(BaseModel):
     quantity: int
+
+class MadeToOrderUpdate(BaseModel):
+    is_made_to_order: bool
 
 
 

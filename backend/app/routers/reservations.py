@@ -77,6 +77,14 @@ def create_reservation(
             detail="Резервация товаров отключена владельцем магазина"
         )
     
+    # Проверяем, не является ли товар под заказ (товары под заказ нельзя резервировать)
+    if getattr(product, 'is_made_to_order', False):
+        print(f"WARNING: Product {product_id} is made-to-order, cannot be reserved")
+        raise HTTPException(
+            status_code=400,
+            detail="Товары под заказ нельзя резервировать"
+        )
+    
     # Проверяем, что пользователь не пытается зарезервировать свой собственный товар
     if reserved_by_user_id == product.user_id:
         print(f"WARNING: User {reserved_by_user_id} tried to reserve their own product {product_id}")

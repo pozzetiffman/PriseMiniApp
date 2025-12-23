@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelReservationAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
+import { API_BASE, cancelReservationAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
 import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -273,6 +273,12 @@ function renderCategories(categories) {
 function renderProducts(products) {
     productsGrid.innerHTML = '';
     
+    // Отладочный вывод - проверяем, что приходит с сервера
+    console.log('[RENDER DEBUG] Products received:', products);
+    if (products && products.length > 0) {
+        console.log('[RENDER DEBUG] First product is_made_to_order:', products[0].is_made_to_order, 'type:', typeof products[0].is_made_to_order);
+    }
+    
     if (!products || products.length === 0) {
         if (appContext.role === 'client') {
             productsGrid.innerHTML = '<p class="loading">В этой витрине пока нет товаров.</p>';
@@ -380,22 +386,47 @@ function renderProducts(products) {
             hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
         }
         
-        // Создаем badge количества товара (только если quantity_enabled включен)
+        // Создаем badge количества товара или "Под заказ" (только если quantity_enabled включен)
         let quantityBadge = null;
         const shopSettings = getCurrentShopSettings();
         const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
-        if (quantityEnabled && prod.quantity !== undefined && prod.quantity !== null) {
-            quantityBadge = document.createElement('div');
-            quantityBadge.className = 'product-quantity-badge';
-            const quantity = prod.quantity;
-            if (quantity > 0) {
-                quantityBadge.textContent = `В наличии: ${quantity}`;
-                quantityBadge.style.background = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
+        if (quantityEnabled) {
+            // Отладочный вывод
+            if (prod.id) {
+                console.log(`[BADGE DEBUG] Product ${prod.id} "${prod.name}":`, {
+                    is_made_to_order: prod.is_made_to_order,
+                    type: typeof prod.is_made_to_order,
+                    quantity: prod.quantity,
+                    full_product: prod
+                });
+            }
+            // Если товар под заказ, показываем "Под заказ"
+            // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
+            const isMadeToOrder = prod.is_made_to_order === true || 
+                                  prod.is_made_to_order === 1 || 
+                                  prod.is_made_to_order === '1' ||
+                                  prod.is_made_to_order === 'true' ||
+                                  String(prod.is_made_to_order).toLowerCase() === 'true';
+            console.log(`[BADGE DEBUG] Product ${prod.id} isMadeToOrder check: raw=${prod.is_made_to_order} (${typeof prod.is_made_to_order}), converted=${isMadeToOrder}`);
+            if (isMadeToOrder) {
+                quantityBadge = document.createElement('div');
+                quantityBadge.className = 'product-quantity-badge';
+                quantityBadge.textContent = 'Под заказ';
+                quantityBadge.style.background = 'rgba(90, 200, 250, 0.95)'; // Синий для под заказ
                 quantityBadge.style.color = '#ffffff';
-            } else {
-                quantityBadge.textContent = 'Нет в наличии';
-                quantityBadge.style.background = 'rgba(255, 59, 48, 0.95)'; // Красный для отсутствия
-                quantityBadge.style.color = '#ffffff';
+            } else if (prod.quantity !== undefined && prod.quantity !== null) {
+                quantityBadge = document.createElement('div');
+                quantityBadge.className = 'product-quantity-badge';
+                const quantity = prod.quantity;
+                if (quantity > 0) {
+                    quantityBadge.textContent = `В наличии: ${quantity}`;
+                    quantityBadge.style.background = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
+                    quantityBadge.style.color = '#ffffff';
+                } else {
+                    quantityBadge.textContent = 'Нет в наличии';
+                    quantityBadge.style.background = 'rgba(255, 59, 48, 0.95)'; // Красный для отсутствия
+                    quantityBadge.style.color = '#ffffff';
+                }
             }
         }
         
@@ -685,7 +716,7 @@ function showProductModal(prod, finalPrice, fullImages) {
         // Создаем контейнер для кнопок управления, если его еще нет
         const editControlDiv = document.createElement('div');
         editControlDiv.id = 'modal-edit-control';
-        editControlDiv.style.cssText = 'margin: 12px 0; display: flex; flex-direction: column; gap: 8px;';
+        editControlDiv.style.cssText = 'margin: 12px 0; display: flex; flex-direction: column; gap: 6px;';
         const modalContent = document.querySelector('#product-modal .modal-content');
         const modalName = document.getElementById('modal-name');
         modalContent.insertBefore(editControlDiv, modalName);
@@ -697,25 +728,22 @@ function showProductModal(prod, finalPrice, fullImages) {
     if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
         // Кнопка редактирования
         const editBtn = document.createElement('button');
-        editBtn.className = 'reserve-btn';
-        editBtn.style.cssText = 'width: 100%; background: var(--tg-theme-button-color, #3390ec); color: var(--tg-theme-button-text-color, #ffffff);';
-        editBtn.textContent = '✏️ Редактировать товар';
+        editBtn.className = 'reserve-btn btn-edit';
+        editBtn.textContent = '✏️ Редактировать';
         editBtn.onclick = () => showEditProductModal(prod);
         editControl.appendChild(editBtn);
         
         // Кнопка "Продан"
         const soldBtn = document.createElement('button');
-        soldBtn.className = 'reserve-btn';
-        soldBtn.style.cssText = 'width: 100%; background: #4CAF50; color: #ffffff;';
+        soldBtn.className = 'reserve-btn btn-sold';
         soldBtn.textContent = '✅ Продан';
         soldBtn.onclick = () => markAsSold(prod.id);
         editControl.appendChild(soldBtn);
         
         // Кнопка "Удалить"
         const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'reserve-btn';
-        deleteBtn.style.cssText = 'width: 100%; background: #ff4d4d; color: #ffffff;';
-        deleteBtn.textContent = '🗑️ Удалить товар';
+        deleteBtn.className = 'reserve-btn btn-delete';
+        deleteBtn.textContent = '🗑️ Удалить';
         deleteBtn.onclick = () => deleteProduct(prod.id);
         editControl.appendChild(deleteBtn);
         
@@ -753,9 +781,24 @@ function showProductModal(prod, finalPrice, fullImages) {
     if (modalQuantityDiv) {
         const shopSettingsForModal = getCurrentShopSettings();
         const quantityEnabledForModal = shopSettingsForModal ? (shopSettingsForModal.quantity_enabled !== false) : true;
-        if (quantityEnabledForModal && prod.quantity !== undefined && prod.quantity !== null) {
-            modalQuantityDiv.style.display = 'block';
-            modalQuantityDiv.textContent = `📦 В наличии: ${prod.quantity} шт.`;
+        if (quantityEnabledForModal) {
+            // Если товар под заказ, показываем "Под заказ"
+            // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
+            const isMadeToOrder = prod.is_made_to_order === true || 
+                                  prod.is_made_to_order === 1 || 
+                                  prod.is_made_to_order === '1' ||
+                                  prod.is_made_to_order === 'true' ||
+                                  String(prod.is_made_to_order).toLowerCase() === 'true';
+            console.log(`[MODAL DEBUG] Product ${prod.id} isMadeToOrder check: raw=${prod.is_made_to_order} (${typeof prod.is_made_to_order}), converted=${isMadeToOrder}`);
+            if (isMadeToOrder) {
+                modalQuantityDiv.style.display = 'block';
+                modalQuantityDiv.textContent = '📦 Под заказ';
+            } else if (prod.quantity !== undefined && prod.quantity !== null) {
+                modalQuantityDiv.style.display = 'block';
+                modalQuantityDiv.textContent = `📦 В наличии: ${prod.quantity} шт.`;
+            } else {
+                modalQuantityDiv.style.display = 'none';
+            }
         } else {
             modalQuantityDiv.style.display = 'none';
         }
@@ -839,7 +882,7 @@ function showProductModal(prod, finalPrice, fullImages) {
         if (canCancel) {
             const cancelBtn = document.createElement('button');
             cancelBtn.className = 'reserve-btn cancel-reservation-btn';
-            cancelBtn.textContent = '❌ Снять резервацию';
+            cancelBtn.textContent = '❌ Снять резерв';
             cancelBtn.onclick = () => cancelReservation(prod.reservation.id, prod.id);
             modalReservationButton.appendChild(cancelBtn);
         }
@@ -854,6 +897,14 @@ function showProductModal(prod, finalPrice, fullImages) {
     const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
     const reservationsEnabled = shopSettings ? (shopSettings.reservations_enabled === true) : true; // По умолчанию включено
     
+    // Проверяем, не является ли товар под заказ
+    // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
+    const isMadeToOrder = prod.is_made_to_order === true || 
+                          prod.is_made_to_order === 1 || 
+                          prod.is_made_to_order === '1' ||
+                          prod.is_made_to_order === 'true' ||
+                          String(prod.is_made_to_order).toLowerCase() === 'true';
+    
     console.log('🔒 Reservation check:', {
         hasActiveReservation,
         activeReservationsCount,
@@ -862,23 +913,27 @@ function showProductModal(prod, finalPrice, fullImages) {
         role: appContext.role,
         can_reserve: appContext.permissions.can_reserve,
         reservationsEnabled,
-        quantityEnabled
+        quantityEnabled,
+        is_made_to_order: prod.is_made_to_order,
+        isMadeToOrder: isMadeToOrder
     });
     
     // Показываем кнопку резервации, если:
     // - Нет активной резервации ИЛИ
     // - Есть активная резервация, но можно еще резервировать (quantity > active_count)
     // - И количество товаров включено, И резервация включена
+    // - И товар НЕ под заказ (товары под заказ нельзя резервировать)
     const shouldShowReserveButton = (!hasActiveReservation || canStillReserve) && 
                                      appContext.role === 'client' && 
                                      appContext.permissions.can_reserve && 
                                      quantityEnabled &&
-                                     reservationsEnabled;
+                                     reservationsEnabled &&
+                                     !isMadeToOrder; // Товары под заказ нельзя резервировать
     
     if (shouldShowReserveButton) {
         const reserveBtn = document.createElement('button');
         reserveBtn.className = 'reserve-btn';
-        reserveBtn.textContent = '🔒 Зарезервировать товар';
+        reserveBtn.textContent = '🔒 Зарезервировать';
         reserveBtn.onclick = () => showReservationModal(prod.id);
         modalReservationButton.appendChild(reserveBtn);
     } else if (!reservationsEnabled || !quantityEnabled) {
@@ -971,6 +1026,7 @@ function showEditProductModal(prod) {
     const editPriceInput = document.getElementById('edit-price');
     const editDiscountInput = document.getElementById('edit-discount');
     const editQuantityInput = document.getElementById('edit-quantity');
+    const editMadeToOrderInput = document.getElementById('edit-made-to-order');
     
     // Заполняем поля текущими значениями
     editNameInput.value = prod.name || '';
@@ -978,6 +1034,17 @@ function showEditProductModal(prod) {
     editPriceInput.value = prod.price || '';
     editDiscountInput.value = prod.discount || 0;
     editQuantityInput.value = prod.quantity !== undefined && prod.quantity !== null ? prod.quantity : 0;
+    // Проверяем is_made_to_order - может быть true, false, 1, 0, "true", "false", или undefined
+    // Преобразуем в boolean для надежности
+    const isMadeToOrder = prod.is_made_to_order === true || 
+                          prod.is_made_to_order === 1 || 
+                          prod.is_made_to_order === '1' ||
+                          prod.is_made_to_order === 'true' ||
+                          String(prod.is_made_to_order).toLowerCase() === 'true';
+    editMadeToOrderInput.checked = isMadeToOrder;
+    
+    console.log('🔧 Edit product modal - full product object:', JSON.stringify(prod, null, 2));
+    console.log('🔧 Edit product modal - is_made_to_order raw:', prod.is_made_to_order, 'type:', typeof prod.is_made_to_order, 'checked:', isMadeToOrder);
     
     // Показываем модальное окно
     editProductModal.style.display = 'block';
@@ -1010,12 +1077,14 @@ async function saveProductEdit(productId) {
     const editPriceInput = document.getElementById('edit-price');
     const editDiscountInput = document.getElementById('edit-discount');
     const editQuantityInput = document.getElementById('edit-quantity');
+    const editMadeToOrderInput = document.getElementById('edit-made-to-order');
     
     const newName = editNameInput.value.trim();
     const newDescription = editDescriptionInput.value.trim();
     const newPrice = parseFloat(editPriceInput.value);
     const newDiscount = parseFloat(editDiscountInput.value);
     const newQuantity = parseInt(editQuantityInput.value, 10);
+    const newMadeToOrder = editMadeToOrderInput.checked;
     
     // Валидация
     if (!newName || newName.length === 0) {
@@ -1053,6 +1122,11 @@ async function saveProductEdit(productId) {
         // Обновляем количество (без уведомлений)
         await updateProductQuantityAPI(productId, appContext.shop_owner_id, newQuantity);
         
+        // Обновляем статус 'под заказ' (без уведомлений)
+        console.log(`💾 Saving made-to-order: productId=${productId}, isMadeToOrder=${newMadeToOrder}`);
+        const madeToOrderResult = await updateProductMadeToOrderAPI(productId, appContext.shop_owner_id, newMadeToOrder);
+        console.log(`✅ Made-to-order saved:`, madeToOrderResult);
+        
         // Закрываем модальное окно редактирования
         const editProductModal = document.getElementById('edit-product-modal');
         editProductModal.style.display = 'none';
@@ -1064,9 +1138,11 @@ async function saveProductEdit(productId) {
         // Показываем уведомление
         alert('✅ Товар обновлен!');
         
-        // Обновляем данные
+        // Обновляем данные и сбрасываем currentProduct
+        currentProduct = null;
         setTimeout(async () => {
             await loadData();
+            console.log('✅ Data reloaded after product edit');
         }, 500);
     } catch (e) {
         console.error('Save product edit error:', e);

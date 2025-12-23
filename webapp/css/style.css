@@ -647,44 +647,107 @@ header h1 {
 
 .reserve-btn {
     width: 100%;
-    padding: 14px;
+    padding: 10px 16px;
     border-radius: 12px;
-    background: rgba(90, 200, 250, 0.3);
-    backdrop-filter: var(--blur-small);
-    -webkit-backdrop-filter: var(--blur-small);
-    border: 1px solid rgba(90, 200, 250, 0.4);
-    color: var(--tg-theme-button-color);
-    font-size: 16px;
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 8px rgba(90, 200, 250, 0.2);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(90, 200, 250, 0.2);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    letter-spacing: 0.2px;
 }
 
 .reserve-btn:hover {
-    background: rgba(90, 200, 250, 0.4);
-    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.3);
-    transform: translateY(-2px);
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.35) 0%, rgba(90, 200, 250, 0.2) 100%);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset,
+                0 4px 12px rgba(90, 200, 250, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
 }
 
 .reserve-btn:active {
     transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
 
 .reserve-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    transform: none;
+}
+
+/* Кнопка редактирования */
+.btn-edit {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%);
+    border-color: rgba(90, 200, 250, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(90, 200, 250, 0.2);
+}
+
+.btn-edit:hover {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.35) 0%, rgba(90, 200, 250, 0.2) 100%);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset,
+                0 4px 12px rgba(90, 200, 250, 0.4);
+}
+
+/* Кнопка "Продан" */
+.btn-sold {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(76, 175, 80, 0.1) 100%);
+    border-color: rgba(76, 175, 80, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(76, 175, 80, 0.2);
+}
+
+.btn-sold:hover {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.35) 0%, rgba(76, 175, 80, 0.2) 100%);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset,
+                0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+/* Кнопка "Удалить" */
+.btn-delete {
+    background: linear-gradient(135deg, rgba(255, 77, 77, 0.2) 0%, rgba(255, 77, 77, 0.1) 100%);
+    border-color: rgba(255, 77, 77, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(255, 77, 77, 0.2);
+}
+
+.btn-delete:hover {
+    background: linear-gradient(135deg, rgba(255, 77, 77, 0.35) 0%, rgba(255, 77, 77, 0.2) 100%);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset,
+                0 4px 12px rgba(255, 77, 77, 0.4);
 }
 
 .cancel-reservation-btn {
-    background: rgba(255, 59, 48, 0.2);
-    border: 1px solid rgba(255, 59, 48, 0.4);
-    color: #ff3b30;
+    background: linear-gradient(135deg, rgba(255, 59, 48, 0.2) 0%, rgba(255, 59, 48, 0.1) 100%);
+    border-color: rgba(255, 59, 48, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(255, 59, 48, 0.2);
 }
 
 .cancel-reservation-btn:hover {
-    background: rgba(255, 59, 48, 0.3);
-    border-color: rgba(255, 59, 48, 0.6);
+    background: linear-gradient(135deg, rgba(255, 59, 48, 0.35) 0%, rgba(255, 59, 48, 0.2) 100%);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset,
+                0 4px 12px rgba(255, 59, 48, 0.4);
+    border-color: rgba(255, 59, 48, 0.5);
 }
 
 .cancel-reservation-btn:active {
@@ -1035,9 +1098,14 @@ main {
     background: var(--bg-glass, rgba(28, 28, 30, 0.8));
     backdrop-filter: blur(20px);
     border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 12px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: background 0.2s ease;
+}
+
+.sold-product-item:hover {
+    background: rgba(28, 28, 30, 0.9);
 }
 
 .admin-setting {

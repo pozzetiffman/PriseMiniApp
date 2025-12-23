@@ -390,6 +390,41 @@ export async function updateProductQuantityAPI(productId, shopOwnerId, quantity)
     return JSON.parse(responseText);
 }
 
+// Обновление статуса 'под заказ' товара (без уведомлений)
+export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMadeToOrder) {
+    const url = `${API_BASE}/api/products/${productId}/update-made-to-order?user_id=${shopOwnerId}`;
+    console.log(`Updating product made-to-order: productId=${productId}, isMadeToOrder=${isMadeToOrder}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            is_made_to_order: isMadeToOrder
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update product made-to-order response: status=${response.status}, body=${responseText}`);
+    
+    if (response.ok) {
+        const result = JSON.parse(responseText);
+        console.log(`✅ Made-to-order updated successfully: is_made_to_order=${result.is_made_to_order}`);
+    }
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить статус "под заказ"';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
 // Удаление товара
 export async function deleteProductAPI(productId, shopOwnerId) {
     const url = `${API_BASE}/api/products/${productId}?user_id=${shopOwnerId}`;

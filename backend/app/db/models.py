@@ -26,6 +26,7 @@ class Product(Base):
     is_hot_offer = Column(Boolean, default=False)  # Горящее предложение
     quantity = Column(Integer, default=0)  # Количество товара на складе
     is_sold = Column(Boolean, default=False)  # Продан ли товар (скрыт с витрины)
+    is_made_to_order = Column(Boolean, default=False)  # Товар под заказ
     
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship("Category", back_populates="products")
