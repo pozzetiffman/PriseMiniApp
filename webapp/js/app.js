@@ -375,6 +375,23 @@ function renderProducts(products) {
             hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
         }
         
+        // Создаем badge количества товара
+        let quantityBadge = null;
+        if (prod.quantity !== undefined && prod.quantity !== null) {
+            quantityBadge = document.createElement('div');
+            quantityBadge.className = 'product-quantity-badge';
+            const quantity = prod.quantity;
+            if (quantity > 0) {
+                quantityBadge.textContent = `В наличии: ${quantity}`;
+                quantityBadge.style.background = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
+                quantityBadge.style.color = '#ffffff';
+            } else {
+                quantityBadge.textContent = 'Нет в наличии';
+                quantityBadge.style.background = 'rgba(255, 59, 48, 0.95)'; // Красный для отсутствия
+                quantityBadge.style.color = '#ffffff';
+            }
+        }
+        
         // КРИТИЧЕСКИ ВАЖНО: Добавляем imageDiv в card ПЕРЕД созданием img
         // Это гарантирует, что элемент будет в DOM когда мы установим src
         card.appendChild(imageDiv);
@@ -575,6 +592,18 @@ function renderProducts(products) {
         }
         card.appendChild(nameDiv);
         card.appendChild(priceContainer);
+        
+        // Количество товара под ценой
+        if (quantityBadge) {
+            // Убираем абсолютное позиционирование, так как теперь это обычный блок
+            quantityBadge.style.position = 'static';
+            quantityBadge.style.zIndex = 'auto';
+            quantityBadge.style.bottom = 'auto';
+            quantityBadge.style.right = 'auto';
+            quantityBadge.style.left = 'auto';
+            card.appendChild(quantityBadge);
+        }
+        
         card.onclick = () => showProductModal(prod, finalPrice, fullImages);
         
         // card уже добавлен в DOM выше (перед установкой img.src)
@@ -692,6 +721,17 @@ function showProductModal(prod, finalPrice, fullImages) {
         oldPriceSpan.className = 'old-price';
         oldPriceSpan.textContent = `${prod.price} ₽`;
         modalPriceContainer.appendChild(oldPriceSpan);
+    }
+    
+    // Количество товара в модальном окне
+    const modalQuantityDiv = document.getElementById('modal-quantity');
+    if (modalQuantityDiv) {
+        if (prod.quantity !== undefined && prod.quantity !== null) {
+            modalQuantityDiv.style.display = 'block';
+            modalQuantityDiv.textContent = `📦 В наличии: ${prod.quantity} шт.`;
+        } else {
+            modalQuantityDiv.style.display = 'none';
+        }
     }
     
     // Резервация
