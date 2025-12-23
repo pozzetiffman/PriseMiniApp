@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, getShopSettings, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductNameDescriptionAPI } from './api.js';
+import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, getShopSettings, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
 import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -910,12 +910,14 @@ function showEditProductModal(prod) {
     const editDescriptionInput = document.getElementById('edit-description');
     const editPriceInput = document.getElementById('edit-price');
     const editDiscountInput = document.getElementById('edit-discount');
+    const editQuantityInput = document.getElementById('edit-quantity');
     
     // Заполняем поля текущими значениями
     editNameInput.value = prod.name || '';
     editDescriptionInput.value = prod.description || '';
     editPriceInput.value = prod.price || '';
     editDiscountInput.value = prod.discount || 0;
+    editQuantityInput.value = prod.quantity !== undefined && prod.quantity !== null ? prod.quantity : 0;
     
     // Показываем модальное окно
     editProductModal.style.display = 'block';
@@ -947,11 +949,13 @@ async function saveProductEdit(productId) {
     const editDescriptionInput = document.getElementById('edit-description');
     const editPriceInput = document.getElementById('edit-price');
     const editDiscountInput = document.getElementById('edit-discount');
+    const editQuantityInput = document.getElementById('edit-quantity');
     
     const newName = editNameInput.value.trim();
     const newDescription = editDescriptionInput.value.trim();
     const newPrice = parseFloat(editPriceInput.value);
     const newDiscount = parseFloat(editDiscountInput.value);
+    const newQuantity = parseInt(editQuantityInput.value, 10);
     
     // Валидация
     if (!newName || newName.length === 0) {
@@ -969,6 +973,11 @@ async function saveProductEdit(productId) {
         return;
     }
     
+    if (isNaN(newQuantity) || newQuantity < 0) {
+        alert('❌ Введите корректное количество (0 или больше)');
+        return;
+    }
+    
     try {
         if (!appContext) {
             alert('❌ Ошибка: контекст не загружен');
@@ -980,6 +989,9 @@ async function saveProductEdit(productId) {
         
         // Обновляем цену и скидку (с уведомлениями)
         await updateProductAPI(productId, appContext.shop_owner_id, newPrice, newDiscount);
+        
+        // Обновляем количество (без уведомлений)
+        await updateProductQuantityAPI(productId, appContext.shop_owner_id, newQuantity);
         
         // Закрываем модальное окно редактирования
         const editProductModal = document.getElementById('edit-product-modal');

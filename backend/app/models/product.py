@@ -34,5 +34,8 @@ class NameDescriptionUpdate(BaseModel):
     name: str
     description: Optional[str] = None
 
+class QuantityUpdate(BaseModel):
+    quantity: int
+
 
 

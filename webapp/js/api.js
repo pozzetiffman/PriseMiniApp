@@ -366,3 +366,33 @@ export async function updateProductNameDescriptionAPI(productId, shopOwnerId, na
     
     return JSON.parse(responseText);
 }
+
+// Обновление количества товара (без уведомлений)
+export async function updateProductQuantityAPI(productId, shopOwnerId, quantity) {
+    const url = `${API_BASE}/api/products/${productId}/update-quantity?user_id=${shopOwnerId}`;
+    console.log(`Updating product quantity: productId=${productId}, quantity=${quantity}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            quantity: quantity
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update product quantity response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить количество товара';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}

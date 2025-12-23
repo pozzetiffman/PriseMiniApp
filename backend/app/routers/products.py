@@ -492,6 +492,32 @@ def update_name_description(
         "message": "Название и описание товара обновлены"
     }
 
+@router.patch("/{product_id}/update-quantity")
+def update_quantity(
+    product_id: int,
+    quantity_update: schemas.QuantityUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление количества товара (без уведомлений)"""
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Обновляем количество
+    db_product.quantity = quantity_update.quantity
+    db.commit()
+    db.refresh(db_product)
+    
+    return {
+        "id": db_product.id,
+        "quantity": db_product.quantity,
+        "message": "Количество товара обновлено"
+    }
+
 @router.delete("/{product_id}")
 def delete_product(
     product_id: int,
