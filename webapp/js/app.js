@@ -742,6 +742,11 @@ function showProductModal(prod, finalPrice, fullImages) {
     
     // Используем контекст для определения прав (backend уже проверил все)
     const hasActiveReservation = prod.reservation && prod.reservation.reserved_until;
+    const activeReservationsCount = prod.reservation && prod.reservation.active_count ? prod.reservation.active_count : 0;
+    const productQuantity = prod.quantity !== undefined && prod.quantity !== null ? prod.quantity : 0;
+    
+    // Проверяем, можно ли еще резервировать товар (для товаров с quantity > 1)
+    const canStillReserve = productQuantity > 0 && activeReservationsCount < productQuantity;
     
     if (hasActiveReservation) {
         // Backend уже вернул только активные резервации, просто показываем время
@@ -785,7 +790,14 @@ function showProductModal(prod, finalPrice, fullImages) {
         }
         
         modalReservationStatus.style.display = 'block';
-        modalReservationStatus.textContent = `⏰ Товар зарезервирован на ${timeText}`;
+        
+        // Показываем информацию о резервации с учетом количества
+        if (productQuantity > 1 && activeReservationsCount > 0) {
+            const availableCount = productQuantity - activeReservationsCount;
+            modalReservationStatus.textContent = `⏰ Зарезервировано: ${activeReservationsCount} из ${productQuantity} шт. (доступно: ${availableCount} шт.) до ${timeText}`;
+        } else {
+            modalReservationStatus.textContent = `⏰ Товар зарезервирован на ${timeText}`;
+        }
         
         // Проверяем права на отмену через контекст
         const isProductOwner = appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id;
@@ -803,19 +815,30 @@ function showProductModal(prod, finalPrice, fullImages) {
     
     // Показываем кнопку резервации только если:
     // 1. Это не наш магазин (клиент)
-    // 2. Нет активной резервации
+    // 2. Нет активной резервации ИЛИ можно еще резервировать (для товаров с quantity > 1)
     // 3. Резервация включена в настройках магазина
     const shopSettings = getCurrentShopSettings();
     const reservationsEnabled = shopSettings ? shopSettings.reservations_enabled : true; // По умолчанию включено
     
     console.log('🔒 Reservation check:', {
         hasActiveReservation,
+        activeReservationsCount,
+        productQuantity,
+        canStillReserve,
         role: appContext.role,
         can_reserve: appContext.permissions.can_reserve,
         reservationsEnabled
     });
     
-    if (!hasActiveReservation && appContext.role === 'client' && appContext.permissions.can_reserve && reservationsEnabled) {
+    // Показываем кнопку резервации, если:
+    // - Нет активной резервации ИЛИ
+    // - Есть активная резервация, но можно еще резервировать (quantity > active_count)
+    const shouldShowReserveButton = (!hasActiveReservation || canStillReserve) && 
+                                     appContext.role === 'client' && 
+                                     appContext.permissions.can_reserve && 
+                                     reservationsEnabled;
+    
+    if (shouldShowReserveButton) {
         const reserveBtn = document.createElement('button');
         reserveBtn.className = 'reserve-btn';
         reserveBtn.textContent = '🔒 Зарезервировать товар';

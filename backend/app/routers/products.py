@@ -92,14 +92,19 @@ def get_products(
         if expired:
             db.commit()
         
-        # Получаем активную резервацию
-        reservation = db.query(models.Reservation).filter(
+        # Получаем все активные резервации для подсчета
+        active_reservations = db.query(models.Reservation).filter(
             and_(
                 models.Reservation.product_id == prod.id,
                 models.Reservation.is_active == True,
                 models.Reservation.reserved_until > datetime.utcnow()
             )
-        ).first()
+        ).all()
+        
+        active_reservations_count = len(active_reservations)
+        
+        # Получаем первую резервацию для отображения информации (если есть)
+        reservation = active_reservations[0] if active_reservations else None
         
         reservation_info = None
         if reservation:
@@ -110,9 +115,10 @@ def get_products(
             reservation_info = {
                 "reserved_until": reserved_until_str,
                 "reserved_by_user_id": reservation.reserved_by_user_id,
-                "id": reservation.id
+                "id": reservation.id,
+                "active_count": active_reservations_count  # Количество активных резерваций
             }
-            print(f"DEBUG: Product {prod.id} '{prod.name}' has active reservation until {reservation.reserved_until}, reserved_by={reservation.reserved_by_user_id}")
+            print(f"DEBUG: Product {prod.id} '{prod.name}' has {active_reservations_count} active reservation(s), first until {reservation.reserved_until}, reserved_by={reservation.reserved_by_user_id}")
         else:
             print(f"DEBUG: Product {prod.id} '{prod.name}' has no active reservation")
         

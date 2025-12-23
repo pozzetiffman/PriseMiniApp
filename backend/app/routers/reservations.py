@@ -51,7 +51,7 @@ def create_reservation(
         print(f"ERROR: Product {product_id} not found")
         raise HTTPException(status_code=404, detail="Product not found")
     
-    print(f"DEBUG: Product found - name={product.name}, owner_id={product.user_id}")
+    print(f"DEBUG: Product found - name={product.name}, owner_id={product.user_id}, quantity={product.quantity}")
     
     # Проверяем настройки магазина - включена ли резервация
     shop_settings = db.query(models.ShopSettings).filter(
@@ -104,77 +104,107 @@ def create_reservation(
     
     db.commit()
     
-    # Проверяем, не зарезервирован ли уже товар
-    active_reservation = db.query(models.Reservation).filter(
+    # Проверяем, не резервировал ли этот пользователь этот товар в последние 3 часа
+    # Но только если у него есть активная резервация ИЛИ если прошло меньше 3 часов с момента создания последней резервации
+    three_hours_ago = datetime.utcnow() - timedelta(hours=3)
+    print(f"DEBUG: Checking 3-hour restriction for user {reserved_by_user_id}, product {product_id}")
+    
+    # Сначала проверяем, есть ли активная резервация от этого пользователя
+    active_user_reservation = db.query(models.Reservation).filter(
         and_(
             models.Reservation.product_id == product_id,
+            models.Reservation.reserved_by_user_id == reserved_by_user_id,
             models.Reservation.is_active == True,
             models.Reservation.reserved_until > datetime.utcnow()
         )
     ).first()
     
-    if active_reservation:
-        # Проверяем, не пытается ли тот же пользователь зарезервировать снова
-        if active_reservation.reserved_by_user_id == reserved_by_user_id:
-            # Пользователь уже зарезервировал этот товар - обновляем время
-            print(f"DEBUG: User {reserved_by_user_id} already reserved product {product_id}, updating time")
-            active_reservation.reserved_until = reserved_until
-            db.commit()
-            db.refresh(active_reservation)
-            
-            # Отправляем уведомление об обновлении резервации
-            if TELEGRAM_BOT_TOKEN and WEBAPP_URL and TELEGRAM_API_URL:
-                try:
-                    hours = (reserved_until - datetime.utcnow()).total_seconds() / 3600
-                    hours_text = f"{int(hours)} ч."
-                    if hours < 1:
-                        minutes = int((reserved_until - datetime.utcnow()).total_seconds() / 60)
-                        hours_text = f"{minutes} мин."
-                    
-                    message = f"🔄 **Резервация обновлена**\n\n"
-                    message += f"📦 Товар: {product.name}\n"
-                    message += f"⏰ Новая резервация до: {hours_text}"
-                    
-                    product_url = f"{WEBAPP_URL}?user_id={product.user_id}&product_id={product_id}"
-                    keyboard = {
-                        "inline_keyboard": [[
-                            {
-                                "text": "📦 Посмотреть товар",
-                                "web_app": {"url": product_url}
-                            }
-                        ]]
-                    }
-                    
-                    send_message_url = f"{TELEGRAM_API_URL}/sendMessage"
-                    resp = requests.post(send_message_url, json={
-                        "chat_id": product.user_id,
-                        "text": message,
-                        "reply_markup": keyboard,
-                        "parse_mode": "Markdown"
-                    }, timeout=10)
-                    print(f"DEBUG: Update notification sent: status={resp.status_code}")
-                except Exception as e:
-                    print(f"ERROR: Exception sending update notification: {e}")
-            
-            return active_reservation
+    print(f"DEBUG: Active user reservation check: {active_user_reservation is not None}")
+    
+    if active_user_reservation:
+        # Пользователь уже имеет активную резервацию этого товара
+        time_left = (active_user_reservation.reserved_until - datetime.utcnow()).total_seconds() / 3600
+        hours_left = int(time_left)
+        minutes_left = int((time_left - hours_left) * 60)
+        if hours_left > 0:
+            time_text = f"{hours_left} ч. {minutes_left} мин."
         else:
-            # Другой пользователь уже зарезервировал
-            time_left = (active_reservation.reserved_until - datetime.utcnow()).total_seconds() / 3600
-            hours_left = int(time_left)
-            minutes_left = int((time_left - hours_left) * 60)
-            if hours_left > 0:
-                time_text = f"{hours_left} ч. {minutes_left} мин."
-            else:
-                time_text = f"{minutes_left} мин."
+            time_text = f"{minutes_left} мин."
+        
+        print(f"ERROR: User {reserved_by_user_id} already has active reservation for product {product_id}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Вы уже зарезервировали этот товар. Резервация истекает через {time_text}. Повторная резервация доступна через 3 часа после создания предыдущей."
+        )
+    
+    # Проверяем, не создавал ли этот пользователь резервацию этого товара в последние 3 часа
+    recent_reservation = db.query(models.Reservation).filter(
+        and_(
+            models.Reservation.product_id == product_id,
+            models.Reservation.reserved_by_user_id == reserved_by_user_id,
+            models.Reservation.created_at >= three_hours_ago
+        )
+    ).order_by(models.Reservation.created_at.desc()).first()
+    
+    print(f"DEBUG: Recent reservation check (3h): {recent_reservation is not None}")
+    if recent_reservation:
+        print(f"DEBUG: Recent reservation found - created_at: {recent_reservation.created_at}, is_active: {recent_reservation.is_active}, reserved_until: {recent_reservation.reserved_until}")
+    
+    if recent_reservation:
+        # Резервация была создана менее 3 часов назад
+        time_since_creation = (datetime.utcnow() - recent_reservation.created_at).total_seconds() / 3600
+        hours_remaining = 3 - time_since_creation
+        if hours_remaining > 0:
+            hours_text = f"{int(hours_remaining)} ч."
+            minutes_remaining = int((hours_remaining - int(hours_remaining)) * 60)
+            if minutes_remaining > 0:
+                hours_text = f"{int(hours_remaining)} ч. {minutes_remaining} мин."
             
-            print(f"ERROR: Product {product_id} is already reserved by user {active_reservation.reserved_by_user_id} until {active_reservation.reserved_until}")
+            print(f"ERROR: User {reserved_by_user_id} reserved product {product_id} less than 3 hours ago (created at {recent_reservation.created_at})")
             raise HTTPException(
-                status_code=400, 
-                detail=f"Товар уже зарезервирован другим пользователем. Резервация истекает через {time_text}"
+                status_code=400,
+                detail=f"Вы не можете зарезервировать этот товар повторно. Подождите еще {hours_text}."
             )
     
-    # Создаем резервацию
+    # Подсчитываем количество активных резерваций для этого товара (от всех пользователей)
+    print(f"DEBUG: Checking active reservations for product {product_id} (all users)")
+    active_reservations = db.query(models.Reservation).filter(
+        and_(
+            models.Reservation.product_id == product_id,
+            models.Reservation.is_active == True,
+            models.Reservation.reserved_until > datetime.utcnow()
+        )
+    ).all()
     
+    active_reservations_count = len(active_reservations)
+    
+    # Логируем информацию о резервациях
+    print(f"DEBUG: Active reservations count: {active_reservations_count}, Product quantity: {product.quantity}")
+    if active_reservations:
+        reserved_by_users = [r.reserved_by_user_id for r in active_reservations]
+        print(f"DEBUG: Active reservations by users: {reserved_by_users}")
+        print(f"DEBUG: Current user {reserved_by_user_id} trying to reserve - will be allowed if count < quantity")
+    else:
+        print(f"DEBUG: No active reservations found, allowing reservation")
+    
+    # Проверяем, не превышает ли количество активных резерваций quantity товара
+    # Если quantity = 0, то резервация недоступна (товар закончился)
+    if product.quantity <= 0:
+        print(f"ERROR: Product {product_id} has quantity 0 or less")
+        raise HTTPException(
+            status_code=400,
+            detail="Товар закончился. Резервация недоступна."
+        )
+    
+    if active_reservations_count >= product.quantity:
+        print(f"ERROR: Product {product_id} is fully reserved. Active: {active_reservations_count}, Quantity: {product.quantity}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Все товары ({product.quantity} шт.) уже зарезервированы. Резервация недоступна."
+        )
+    
+    # Все проверки пройдены, создаем резервацию
+    print(f"DEBUG: All checks passed! Creating reservation for user {reserved_by_user_id}, product {product_id}")
     print(f"DEBUG: Creating reservation - reserved_until={reserved_until}")
     
     reservation = models.Reservation(
