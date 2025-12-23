@@ -1121,10 +1121,27 @@ main {
     appearance: none;
 }
 
-.edit-product-field input:focus {
+.edit-product-field input:focus,
+.edit-product-field textarea:focus {
     outline: none;
     border-color: var(--tg-theme-button-color, #5ac8fa);
     box-shadow: 0 0 0 2px rgba(90, 200, 250, 0.2);
+}
+
+.edit-product-field textarea {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 80px;
 }
 
 .edit-product-actions {

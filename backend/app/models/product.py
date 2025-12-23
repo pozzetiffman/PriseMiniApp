@@ -29,5 +29,9 @@ class PriceDiscountUpdate(BaseModel):
     price: float
     discount: float
 
+class NameDescriptionUpdate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
 
 

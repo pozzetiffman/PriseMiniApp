@@ -460,6 +460,34 @@ def update_price_discount(
         "message": "Товар обновлен, уведомления отправлены"
     }
 
+@router.patch("/{product_id}/update-name-description")
+def update_name_description(
+    product_id: int,
+    name_description_update: schemas.NameDescriptionUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление названия и описания товара (без уведомлений)"""
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Обновляем значения
+    db_product.name = name_description_update.name
+    db_product.description = name_description_update.description
+    db.commit()
+    db.refresh(db_product)
+    
+    return {
+        "id": db_product.id,
+        "name": db_product.name,
+        "description": db_product.description,
+        "message": "Название и описание товара обновлены"
+    }
+
 @router.delete("/{product_id}")
 def delete_product(
     product_id: int,

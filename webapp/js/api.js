@@ -335,3 +335,34 @@ export async function updateProductAPI(productId, shopOwnerId, price, discount) 
     
     return JSON.parse(responseText);
 }
+
+// Обновление названия и описания товара (без уведомлений)
+export async function updateProductNameDescriptionAPI(productId, shopOwnerId, name, description) {
+    const url = `${API_BASE}/api/products/${productId}/update-name-description?user_id=${shopOwnerId}`;
+    console.log(`Updating product name/description: productId=${productId}, name=${name}, description=${description}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            name: name,
+            description: description || null
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update product name/description response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить название и описание товара';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
