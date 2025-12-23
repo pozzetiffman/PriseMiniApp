@@ -24,3 +24,31 @@ def create_category(
     db.commit()
     db.refresh(db_category)
     return db_category
+
+@router.delete("/{category_id}")
+def delete_category(
+    category_id: int,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Удаление категории. При удалении категории также удаляются все товары в этой категории."""
+    db_category = db.query(models.Category).filter(
+        models.Category.id == category_id,
+        models.Category.user_id == user_id
+    ).first()
+    
+    if not db_category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Проверяем, есть ли товары в категории
+    products_count = db.query(models.Product).filter(
+        models.Product.category_id == category_id
+    ).count()
+    
+    # Удаляем категорию (товары удалятся автоматически из-за cascade)
+    db.delete(db_category)
+    db.commit()
+    
+    return {
+        "message": f"Category deleted. {products_count} products were also deleted." if products_count > 0 else "Category deleted."
+    }

@@ -4,6 +4,7 @@ from typing import Optional
 
 class ShopSettingsBase(BaseModel):
     reservations_enabled: bool = True
+    shop_name: Optional[str] = None  # Название магазина
 
 class ShopSettingsCreate(ShopSettingsBase):
     pass

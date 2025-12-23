@@ -41,6 +41,19 @@ async def get_bot_deeplink(user_id: int):
     username = await get_bot_username()
     return f"https://t.me/{username}?start=store_{user_id}"
 
+async def get_shop_name(user_id: int) -> str:
+    """Получить название магазина для пользователя"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
+                if resp.status == 200:
+                    settings = await resp.json()
+                    return settings.get('shop_name', 'магазин')
+                else:
+                    return 'магазин'
+    except:
+        return 'магазин'
+
 # Состояния для категорий и товаров
 class AddCategory(StatesGroup):
     name = State()
@@ -56,6 +69,9 @@ class AddProduct(StatesGroup):
 class AddChannel(StatesGroup):
     waiting_for_channel = State()
 
+class SetShopName(StatesGroup):
+    name = State()
+
 @dp.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject):
     # Проверяем, есть ли параметр в команде (например, /start store_123456)
@@ -67,13 +83,18 @@ async def cmd_start(message: Message, command: CommandObject):
             store_owner_id = int(param.replace("store_", ""))
             share_url = f"{WEBAPP_URL}?user_id={store_owner_id}"
             
+            # Получаем название магазина
+            shop_name = await get_shop_name(store_owner_id)
+            shop_name_display = shop_name if shop_name != 'магазин' else 'Магазин'
+            button_text = f"Открыть {shop_name_display}" if shop_name != 'магазин' else "🛍️ Открыть магазин"
+            
             builder = InlineKeyboardBuilder()
             builder.row(types.InlineKeyboardButton(
-                text="🛍️ Открыть магазин", 
+                text=button_text, 
                 web_app=WebAppInfo(url=share_url)
             ))
             
-            msg = "🛍️ **Добро пожаловать в магазин!**\n\n"
+            msg = f"**{shop_name_display}**\n\n"
             msg += "Нажмите кнопку ниже, чтобы открыть витрину с товарами."
             
             await message.answer(msg, reply_markup=builder.as_markup(), parse_mode="Markdown")
@@ -153,7 +174,12 @@ async def cmd_post(message: Message):
     user_id = message.from_user.id
     share_url = f"{WEBAPP_URL}?user_id={user_id}"
     
-    msg = "🛍️ **Магазин**\n\n"
+    # Получаем название магазина
+    shop_name = await get_shop_name(user_id)
+    shop_name_display = shop_name if shop_name != 'магазин' else 'Магазин'
+    button_text = f"Открыть {shop_name_display}" if shop_name != 'магазин' else "🛍️ Открыть магазин"
+    
+    msg = f"**{shop_name_display}**\n\n"
     msg += "Нажмите кнопку ниже, чтобы открыть витрину с товарами!"
     
     # Удаляем команду пользователя (если есть права)
@@ -167,7 +193,7 @@ async def cmd_post(message: Message):
         bot_link = await get_bot_deeplink(user_id)
         builder = InlineKeyboardBuilder()
         builder.row(types.InlineKeyboardButton(
-            text="🛍️ Открыть магазин", 
+            text=button_text, 
             url=bot_link
         ))
         if chat_type == "channel":
@@ -223,7 +249,7 @@ async def cmd_post(message: Message):
         bot_link = await get_bot_deeplink(user_id)
         builder = InlineKeyboardBuilder()
         builder.row(types.InlineKeyboardButton(
-            text="🛍️ Открыть магазин", 
+            text=button_text, 
             url=bot_link
         ))
         
@@ -243,7 +269,7 @@ async def cmd_post(message: Message):
     # Fallback: используем URL кнопку
     builder_url = InlineKeyboardBuilder()
     builder_url.row(types.InlineKeyboardButton(
-        text="🛍️ Открыть магазин", 
+        text=button_text, 
         url=share_url
     ))
     
@@ -262,6 +288,7 @@ async def cmd_manage(message: Message):
         [KeyboardButton(text="🗑️ Удалить товар")],
         [KeyboardButton(text="📁 Добавить категорию")],
         [KeyboardButton(text="📋 Список категорий")],
+        [KeyboardButton(text="🏷️ Название магазина")],
         [KeyboardButton(text="📢 Управление каналами")],
         [KeyboardButton(text="📤 Поделиться витриной")]
     ]
@@ -295,17 +322,143 @@ async def process_category_name(message: Message, state: FSMContext):
 
 @dp.message(F.text == "📋 Список категорий")
 async def list_categories(message: Message):
+    user_id = message.from_user.id
+    
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{API_URL}/categories/", params={"user_id": message.from_user.id}) as resp:
+        async with session.get(f"{API_URL}/categories/", params={"user_id": user_id}) as resp:
+            if resp.status != 200:
+                return await message.answer("❌ Ошибка при получении списка категорий")
             categories = await resp.json()
     
     if not categories:
         return await message.answer("Список категорий пуст. Создайте первую категорию!")
     
+    # Получаем количество товаров в каждой категории для предупреждения
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/products/", params={"user_id": user_id}) as resp:
+            products = await resp.json() if resp.status == 200 else []
+    
+    # Подсчитываем товары по категориям
+    from collections import defaultdict
+    products_by_category = defaultdict(int)
+    for prod in products:
+        products_by_category[prod.get('category_id')] += 1
+    
     text = "📁 Ваши категории:\n\n"
+    builder = InlineKeyboardBuilder()
+    
     for cat in categories:
-        text += f"• {cat['name']} (ID: {cat['id']})\n"
-    await message.answer(text)
+        products_count = products_by_category.get(cat['id'], 0)
+        text += f"• {cat['name']}"
+        if products_count > 0:
+            text += f" ({products_count} товар{'ов' if products_count > 1 else ''})"
+        text += "\n"
+        
+        # Кнопка для удаления
+        builder.button(
+            text=f"❌ Удалить: {cat['name']}",
+            callback_data=f"del_category_{cat['id']}"
+        )
+    
+    text += "\n⚠️ **Внимание:** При удалении категории все товары в ней также будут удалены!"
+    text += "\n\nДля удаления используйте кнопки ниже:"
+    
+    builder.adjust(1)
+    await message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+
+@dp.callback_query(F.data.startswith("del_category_"))
+async def delete_category_confirm(callback: types.CallbackQuery):
+    category_id = int(callback.data.split("_")[2])
+    user_id = callback.from_user.id
+    
+    # Удаляем категорию через API
+    async with aiohttp.ClientSession() as session:
+        async with session.delete(
+            f"{API_URL}/categories/{category_id}",
+            params={"user_id": user_id}
+        ) as resp:
+            if resp.status == 200:
+                result = await resp.json()
+                await callback.answer("✅ Категория удалена!", show_alert=True)
+                await callback.message.delete()
+                await cmd_manage(callback.message)
+            elif resp.status == 404:
+                await callback.answer("❌ Категория не найдена", show_alert=True)
+            else:
+                error_text = await resp.text()
+                await callback.answer(f"❌ Ошибка: {error_text}", show_alert=True)
+
+# Управление названием магазина
+@dp.message(F.text == "🏷️ Название магазина")
+async def manage_shop_name(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    # Получаем текущее название магазина
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
+            if resp.status != 200:
+                return await message.answer("❌ Ошибка при получении настроек магазина")
+            settings = await resp.json()
+    
+    current_name = settings.get('shop_name', None)
+    
+    if current_name:
+        text = f"🏷️ **Текущее название магазина:** {current_name}\n\n"
+        text += "Отправьте новое название магазина, чтобы изменить его.\n"
+        text += "Или отправьте /clear чтобы удалить название (будет использоваться 'Магазин')."
+    else:
+        text = "🏷️ **Название магазина не установлено**\n\n"
+        text += "Отправьте название магазина, чтобы установить его.\n"
+        text += "Или отправьте /cancel чтобы отменить."
+    
+    await message.answer(text, parse_mode="Markdown")
+    # Устанавливаем состояние для получения нового названия
+    await state.set_state(SetShopName.name)
+
+@dp.message(SetShopName.name)
+async def process_shop_name(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if message.text == "/clear":
+        shop_name = None
+    elif message.text == "/cancel":
+        await state.clear()
+        return await cmd_manage(message)
+    else:
+        shop_name = message.text.strip()
+        if len(shop_name) > 100:
+            return await message.answer("❌ Название магазина слишком длинное (максимум 100 символов). Попробуйте снова:")
+    
+    # Обновляем название магазина через API
+    async with aiohttp.ClientSession() as session:
+        # Сначала получаем текущие настройки
+        async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
+            if resp.status != 200:
+                return await message.answer("❌ Ошибка при получении настроек магазина")
+            current_settings = await resp.json()
+        
+        # Обновляем настройки с новым названием
+        update_data = {
+            "reservations_enabled": current_settings.get("reservations_enabled", True),
+            "shop_name": shop_name
+        }
+        
+        async with session.put(
+            f"{API_URL}/shop-settings/",
+            json=update_data,
+            params={"user_id": user_id}
+        ) as resp:
+            if resp.status == 200:
+                if shop_name:
+                    await message.answer(f"✅ Название магазина установлено: **{shop_name}**", parse_mode="Markdown")
+                else:
+                    await message.answer("✅ Название магазина удалено. Будет использоваться 'Магазин'.")
+            else:
+                error_text = await resp.text()
+                await message.answer(f"❌ Ошибка: {error_text}")
+    
+    await state.clear()
+    await cmd_manage(message)
 
 # Управление каналами
 @dp.message(F.text == "📢 Управление каналами")
@@ -515,7 +668,12 @@ async def send_store_to_channel(callback: types.CallbackQuery):
     
     share_url = f"{WEBAPP_URL}?user_id={user_id}"
     
-    msg = "🛍️ **Магазин**\n\n"
+    # Получаем название магазина
+    shop_name = await get_shop_name(user_id)
+    shop_name_display = shop_name if shop_name != 'магазин' else 'Магазин'
+    button_text = f"Открыть {shop_name_display}" if shop_name != 'магазин' else "🛍️ Открыть магазин"
+    
+    msg = f"**{shop_name_display}**\n\n"
     msg += "Нажмите кнопку ниже, чтобы открыть витрину с товарами!"
     
     chat_type = channel.get('chat_type', '').lower()
@@ -535,7 +693,7 @@ async def send_store_to_channel(callback: types.CallbackQuery):
             bot_link = await get_bot_deeplink(user_id)
             builder = InlineKeyboardBuilder()
             builder.row(types.InlineKeyboardButton(
-                text="🛍️ Открыть магазин", 
+                text=button_text, 
                 url=bot_link
             ))
             
@@ -572,7 +730,7 @@ async def send_store_to_channel(callback: types.CallbackQuery):
             bot_link = await get_bot_deeplink(user_id)
             builder = InlineKeyboardBuilder()
             builder.row(types.InlineKeyboardButton(
-                text="🛍️ Открыть магазин", 
+                text=button_text, 
                 url=bot_link
             ))
             
@@ -605,7 +763,7 @@ async def send_store_to_channel(callback: types.CallbackQuery):
     bot_link = await get_bot_deeplink(user_id)
     builder_url = InlineKeyboardBuilder()
     builder_url.row(types.InlineKeyboardButton(
-        text="🛍️ Открыть магазин", 
+        text=button_text, 
         url=bot_link
     ))
     

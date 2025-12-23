@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, toggleHotOffer } from './api.js';
+import { API_BASE, cancelReservationAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, getShopSettings, toggleHotOffer } from './api.js';
 import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -109,15 +109,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    // 5. Устанавливаем приветствие
+    // 5. Устанавливаем приветствие (будет обновлено после загрузки настроек)
     const tg = getTelegramInstance();
     if (appContext.role === 'client') {
-        userNameElement.innerText = "🛍️ Магазин";
+        userNameElement.innerText = "Магазин"; // Временно, обновится после загрузки настроек
     } else if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         userNameElement.innerText = "Привет, " + tg.initDataUnsafe.user.first_name + "!";
     } else {
         userNameElement.innerText = "Прайс";
     }
+
+// Обновление заголовка с названием магазина
+window.updateShopNameInHeader = async function updateShopNameInHeader() {
+    if (appContext && appContext.role === 'client') {
+        // ВАЖНО: Всегда загружаем настройки заново для текущего магазина,
+        // чтобы избежать проблем с кэшированием настроек разных магазинов
+        const currentShopOwnerId = appContext.shop_owner_id;
+        console.log(`🏷️ Updating shop name header for shop_owner_id: ${currentShopOwnerId}`);
+        
+        try {
+            // Загружаем настройки заново для текущего магазина
+            const shopSettings = await getShopSettings(currentShopOwnerId);
+            console.log(`🏷️ Shop settings loaded for shop_owner_id ${currentShopOwnerId}:`, shopSettings);
+            
+            const shopName = shopSettings && shopSettings.shop_name ? shopSettings.shop_name : 'Магазин';
+            userNameElement.innerText = shopName; // Убираем эмодзи, показываем только название
+            
+            // Обновляем глобальную переменную для других частей приложения
+            await loadShopSettings(currentShopOwnerId);
+            console.log(`✅ Shop name header updated to: "${shopName}"`);
+        } catch (error) {
+            console.error(`❌ Error loading shop settings for header (shop_owner_id: ${currentShopOwnerId}):`, error);
+            // В случае ошибки используем кэшированные настройки или дефолт
+            const shopSettings = getCurrentShopSettings();
+            const shopName = shopSettings && shopSettings.shop_name ? shopSettings.shop_name : 'Магазин';
+            userNameElement.innerText = shopName;
+        }
+    }
+}
     
     // 6. Настраиваем обработчики модальных окон
     setupModals();
@@ -136,6 +165,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Для клиентов загружаем настройки владельца магазина
         await loadShopSettings(appContext.shop_owner_id);
     }
+    
+    // Обновляем заголовок с названием магазина (async функция)
+    await updateShopNameInHeader();
     
     // 9. Загружаем данные
     await loadData();
@@ -278,26 +310,33 @@ function renderProducts(products) {
         const card = document.createElement('div');
         card.className = 'product-card';
         
-        // Бейдж резервации
+        // Бейдж резервации будет добавлен в нижнюю часть фото
+        let reservedBadge = null;
         if (prod.reservation) {
             card.style.opacity = '0.7';
-            card.style.position = 'relative';
-            const reservedBadge = document.createElement('div');
+            reservedBadge = document.createElement('div');
             reservedBadge.style.cssText = `
                 position: absolute;
-                top: 8px;
-                right: 8px;
-                background: rgba(255, 193, 7, 0.9);
+                bottom: 8px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(255, 193, 7, 0.95);
                 backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
                 color: #1a1a1a;
-                padding: 4px 10px;
+                padding: 5px 10px;
                 border-radius: 8px;
-                font-size: 11px;
+                font-size: 10px;
                 font-weight: 700;
-                z-index: 10;
+                z-index: 12;
+                box-shadow: 0 2px 8px rgba(255, 193, 7, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                white-space: nowrap;
+                max-width: calc(100% - 16px);
+                overflow: hidden;
+                text-overflow: ellipsis;
             `;
-            reservedBadge.textContent = '🔒 ЗАРЕЗЕРВИРОВАН';
-            card.appendChild(reservedBadge);
+            reservedBadge.textContent = '🔒 Резерв';
         }
         
         // Изображение
@@ -368,21 +407,19 @@ function renderProducts(products) {
                 imageDiv.appendChild(discountBadge);
             }
             
-            // Добавляем badge горящего предложения
-            // Размещаем справа, если есть discount-badge, иначе слева
+            // Добавляем badge горящего предложения (всегда справа)
             if (hotOfferBadge) {
                 hotOfferBadge.style.zIndex = '11';
                 hotOfferBadge.style.position = 'absolute';
                 hotOfferBadge.style.top = '8px';
-                // Если есть discount-badge, размещаем справа
-                if (discountBadge) {
-                    hotOfferBadge.style.right = '8px';
-                    hotOfferBadge.style.left = 'auto';
-                } else {
-                    hotOfferBadge.style.left = '8px';
-                    hotOfferBadge.style.right = 'auto';
-                }
+                hotOfferBadge.style.right = '8px';
+                hotOfferBadge.style.left = 'auto';
                 imageDiv.appendChild(hotOfferBadge);
+            }
+            
+            // Добавляем badge резервации в нижней части фото
+            if (reservedBadge) {
+                imageDiv.appendChild(reservedBadge);
             }
             
             // Функция для показа ошибки
@@ -401,6 +438,9 @@ function renderProducts(products) {
                 }
                 if (hotOfferBadge) {
                     imageDiv.appendChild(hotOfferBadge);
+                }
+                if (reservedBadge) {
+                    imageDiv.appendChild(reservedBadge);
                 }
             };
             
@@ -458,6 +498,9 @@ function renderProducts(products) {
                 if (hotOfferBadge) {
                     imageDiv.appendChild(hotOfferBadge);
                 }
+                if (reservedBadge) {
+                    imageDiv.appendChild(reservedBadge);
+                }
                 
                 // Устанавливаем blob URL
                 img.src = blobUrl;
@@ -488,21 +531,19 @@ function renderProducts(products) {
                 imageDiv.appendChild(discountBadge);
             }
             
-            // Добавляем badge горящего предложения даже если нет изображения
-            // Размещаем справа, если есть discount-badge, иначе слева
+            // Добавляем badge горящего предложения даже если нет изображения (всегда справа)
             if (hotOfferBadge) {
                 hotOfferBadge.style.zIndex = '11';
                 hotOfferBadge.style.position = 'absolute';
                 hotOfferBadge.style.top = '8px';
-                // Если есть discount-badge, размещаем справа
-                if (discountBadge) {
-                    hotOfferBadge.style.right = '8px';
-                    hotOfferBadge.style.left = 'auto';
-                } else {
-                    hotOfferBadge.style.left = '8px';
-                    hotOfferBadge.style.right = 'auto';
-                }
+                hotOfferBadge.style.right = '8px';
+                hotOfferBadge.style.left = 'auto';
                 imageDiv.appendChild(hotOfferBadge);
+            }
+            
+            // Добавляем badge резервации в нижней части фото даже если нет изображения
+            if (reservedBadge) {
+                imageDiv.appendChild(reservedBadge);
             }
         }
         
@@ -539,31 +580,7 @@ function showProductModal(prod, finalPrice, fullImages) {
     currentImages = fullImages;
     currentImageIndex = 0;
     
-    document.getElementById('modal-name').textContent = prod.name;
-    
-    const modalDescription = document.getElementById('modal-description');
-    if (prod.description) {
-        modalDescription.textContent = prod.description;
-        modalDescription.style.display = 'block';
-    } else {
-        modalDescription.style.display = 'none';
-    }
-    
-    const modalPriceContainer = document.getElementById('modal-price-container');
-    modalPriceContainer.innerHTML = '';
-    const priceSpan = document.createElement('span');
-    priceSpan.className = 'product-price';
-    priceSpan.textContent = `${finalPrice} ₽`;
-    modalPriceContainer.appendChild(priceSpan);
-    
-    if (prod.discount > 0) {
-        const oldPriceSpan = document.createElement('span');
-        oldPriceSpan.className = 'old-price';
-        oldPriceSpan.textContent = `${prod.price} ₽`;
-        modalPriceContainer.appendChild(oldPriceSpan);
-    }
-    
-    // Управление горящим предложением (только для владельца)
+    // Управление горящим предложением (только для владельца) - сразу после фото
     const modalHotOfferControl = document.getElementById('modal-hot-offer-control');
     if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
         modalHotOfferControl.style.display = 'block';
@@ -610,6 +627,30 @@ function showProductModal(prod, finalPrice, fullImages) {
         modalHotOfferControl.appendChild(hotOfferContainer);
     } else {
         modalHotOfferControl.style.display = 'none';
+    }
+    
+    document.getElementById('modal-name').textContent = prod.name;
+    
+    const modalDescription = document.getElementById('modal-description');
+    if (prod.description) {
+        modalDescription.textContent = prod.description;
+        modalDescription.style.display = 'block';
+    } else {
+        modalDescription.style.display = 'none';
+    }
+    
+    const modalPriceContainer = document.getElementById('modal-price-container');
+    modalPriceContainer.innerHTML = '';
+    const priceSpan = document.createElement('span');
+    priceSpan.className = 'product-price';
+    priceSpan.textContent = `${finalPrice} ₽`;
+    modalPriceContainer.appendChild(priceSpan);
+    
+    if (prod.discount > 0) {
+        const oldPriceSpan = document.createElement('span');
+        oldPriceSpan.className = 'old-price';
+        oldPriceSpan.textContent = `${prod.price} ₽`;
+        modalPriceContainer.appendChild(oldPriceSpan);
     }
     
     // Резервация

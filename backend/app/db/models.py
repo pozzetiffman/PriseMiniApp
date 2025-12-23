@@ -57,6 +57,7 @@ class ShopSettings(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, unique=True, index=True)  # ID владельца магазина (уникальный)
     reservations_enabled = Column(Boolean, default=True)  # Включена ли резервация товаров
+    shop_name = Column(String, nullable=True)  # Название магазина
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

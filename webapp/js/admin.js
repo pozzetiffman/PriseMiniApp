@@ -115,6 +115,11 @@ async function handleReservationsToggle(enabled) {
         const statusText = enabled ? 'включена' : 'отключена';
         showNotification(`Резервация товаров ${statusText}`);
         
+        // Обновляем заголовок с названием магазина (если оно изменилось)
+        if (typeof window.updateShopNameInHeader === 'function') {
+            await window.updateShopNameInHeader();
+        }
+        
         // Обновляем UI товаров (скрываем/показываем кнопки резервации)
         updateProductsUI(enabled);
     } catch (error) {
