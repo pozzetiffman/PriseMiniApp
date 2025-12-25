@@ -1,9 +1,10 @@
 // Модуль админки магазина
-import { getShopSettings, updateShopSettings, getSoldProductsAPI, getShopOrdersAPI, completeOrderAPI, cancelOrderAPI, deleteOrderAPI, deleteOrdersAPI, getVisitStatsAPI, getVisitsListAPI, getProductViewStatsAPI, deleteSoldProductAPI, deleteSoldProductsAPI } from './api.js';
+import { getShopSettings, updateShopSettings, getSoldProductsAPI, getShopOrdersAPI, completeOrderAPI, cancelOrderAPI, deleteOrderAPI, deleteOrdersAPI, getVisitStatsAPI, getVisitsListAPI, getProductViewStatsAPI, deleteSoldProductAPI, deleteSoldProductsAPI, bulkUpdateAllProductsMadeToOrderAPI, fetchProducts } from './api.js';
 
 let adminModal = null;
 let reservationsToggle = null;
 let quantityEnabledToggle = null;
+let allProductsMadeToOrderToggle = null;
 let shopSettings = null;
 
 // Инициализация админки
@@ -18,6 +19,7 @@ export function initAdmin() {
     adminModal = document.getElementById('admin-modal');
     reservationsToggle = document.getElementById('reservations-toggle');
     quantityEnabledToggle = document.getElementById('quantity-enabled-toggle');
+    allProductsMadeToOrderToggle = document.getElementById('all-products-made-to-order-toggle');
     
     // Настройка закрытия модального окна
     const adminClose = document.querySelector('.admin-close');
@@ -47,6 +49,14 @@ export function initAdmin() {
         reservationsToggle.onchange = async (e) => {
             const enabled = e.target.checked;
             await handleReservationsToggle(enabled);
+        };
+    }
+    
+    // Обработчик переключателя "Все товары под заказ"
+    if (allProductsMadeToOrderToggle) {
+        allProductsMadeToOrderToggle.onchange = async (e) => {
+            const enabled = e.target.checked;
+            await handleAllProductsMadeToOrderToggle(enabled);
         };
     }
     
@@ -112,6 +122,16 @@ function createAdminModal() {
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+                    <div class="admin-setting">
+                        <div class="admin-setting-label">
+                            <label for="all-products-made-to-order-toggle">Все товары под заказ</label>
+                            <p class="admin-setting-description">При включении все активные товары устанавливаются как "под заказ". При выключении статус "под заказ" снимается со всех активных товаров. Вы можете индивидуально изменять статус товаров в карточке товара - это не влияет на тумблер.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="all-products-made-to-order-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
                     <div class="admin-info">
                         <p>💡 <strong>Как это работает:</strong><br>
                         • <strong>Показ количества включен:</strong> отображается точное количество товара (например, "В наличии: 5"). При резервации товара с количеством больше 1 можно выбрать, сколько единиц зарезервировать.<br>
@@ -146,6 +166,11 @@ export async function openAdmin() {
     
     if (!adminModal) {
         initAdmin();
+    } else {
+        // Переинициализируем ссылки на тумблеры на случай, если модальное окно уже существует
+        reservationsToggle = document.getElementById('reservations-toggle');
+        quantityEnabledToggle = document.getElementById('quantity-enabled-toggle');
+        allProductsMadeToOrderToggle = document.getElementById('all-products-made-to-order-toggle');
     }
     
     try {
@@ -162,6 +187,18 @@ export async function openAdmin() {
             // Резервация может работать независимо от quantity_enabled
             // Если quantity_enabled = false, резервация работает, но без показа количества
             reservationsToggle.disabled = false;
+        }
+        
+        // Проверяем состояние товаров и устанавливаем тумблер "Все товары под заказ"
+        if (allProductsMadeToOrderToggle) {
+            try {
+                const allMadeToOrder = await checkAllProductsMadeToOrder();
+                allProductsMadeToOrderToggle.checked = allMadeToOrder;
+                console.log(`✅ All products made-to-order toggle set to: ${allMadeToOrder}`);
+            } catch (error) {
+                console.error('❌ Error checking products state:', error);
+                allProductsMadeToOrderToggle.checked = false;
+            }
         }
         
         // Показываем модальное окно
@@ -256,6 +293,82 @@ async function handleReservationsToggle(enabled) {
         }
         
         alert('Не удалось обновить настройки: ' + error.message);
+    }
+}
+
+// Проверка состояния товаров (все ли они под заказ)
+async function checkAllProductsMadeToOrder() {
+    try {
+        // Получаем контекст для определения shop_owner_id и bot_id
+        let shopOwnerId = null;
+        let botId = null;
+        
+        if (typeof window.getAppContext === 'function') {
+            const context = window.getAppContext();
+            if (context && context.shop_owner_id) {
+                shopOwnerId = context.shop_owner_id;
+                botId = context.bot_id || null;
+            }
+        }
+        
+        if (!shopOwnerId) {
+            console.warn('⚠️ Cannot check products state: shop_owner_id not found');
+            return false;
+        }
+        
+        // Загружаем товары
+        const products = await fetchProducts(shopOwnerId, null, botId);
+        
+        if (!products || products.length === 0) {
+            return false;
+        }
+        
+        // Проверяем, все ли активные товары под заказ
+        const activeProducts = products.filter(p => !p.is_sold);
+        if (activeProducts.length === 0) {
+            return false;
+        }
+        
+        const allMadeToOrder = activeProducts.every(p => p.is_made_to_order === true);
+        console.log(`📊 Products state check: ${activeProducts.length} active products, all made-to-order: ${allMadeToOrder}`);
+        
+        return allMadeToOrder;
+    } catch (error) {
+        console.error('❌ Error checking products state:', error);
+        return false;
+    }
+}
+
+// Обработка изменения переключателя "Все товары под заказ"
+async function handleAllProductsMadeToOrderToggle(enabled) {
+    console.log(`🔧 Toggling all products made-to-order: ${enabled}`);
+    
+    try {
+        const result = await bulkUpdateAllProductsMadeToOrderAPI(enabled);
+        console.log('✅ All products made-to-order updated:', result);
+        
+        // Показываем уведомление об успешном обновлении
+        const statusText = enabled ? 'установлены как "под заказ"' : 'сняты со статуса "под заказ"';
+        showNotification(`✅ ${result.updated_count} товаров ${statusText}`);
+        
+        // Тумблер остается в том состоянии, в которое его переключили
+        // Не выключаем его автоматически
+        
+        // Перезагружаем данные для обновления UI
+        if (typeof window.loadData === 'function') {
+            setTimeout(() => {
+                window.loadData();
+            }, 300);
+        }
+    } catch (error) {
+        console.error('❌ Error updating all products made-to-order:', error);
+        
+        // Возвращаем переключатель в исходное состояние при ошибке
+        if (allProductsMadeToOrderToggle) {
+            allProductsMadeToOrderToggle.checked = !enabled;
+        }
+        
+        alert('Не удалось обновить товары: ' + error.message);
     }
 }
 

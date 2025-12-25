@@ -41,5 +41,8 @@ class QuantityUpdate(BaseModel):
 class MadeToOrderUpdate(BaseModel):
     is_made_to_order: bool
 
+class BulkMadeToOrderUpdate(BaseModel):
+    is_made_to_order: bool
+
 
 

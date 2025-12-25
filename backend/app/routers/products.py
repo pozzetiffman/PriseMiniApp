@@ -2101,6 +2101,86 @@ def update_made_to_order(
         "message": "Статус 'под заказ' обновлен"
     }
 
+@router.patch("/bulk-update-made-to-order")
+async def bulk_update_made_to_order(
+    bulk_update: schemas.BulkMadeToOrderUpdate,
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Массовое обновление статуса 'под заказ' для всех товаров пользователя.
+    Требует авторизации через Telegram initData.
+    """
+    # Валидация пользователя через initData
+    if not x_telegram_init_data:
+        raise HTTPException(
+            status_code=401,
+            detail="Telegram initData is required. Open the app through Telegram bot."
+        )
+    
+    # Получаем bot_token из окружения (как в других эндпоинтах)
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    print(f"🔄 Bulk update made-to-order - initData present: {bool(x_telegram_init_data)}, bot_token present: {bool(bot_token)}")
+    
+    try:
+        # Используем функцию для валидации с любым ботом
+        authenticated_user_id, bot_token_validated, bot_id = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=bot_token if bot_token else None
+        )
+        print(f"✅ Validated initData - user_id={authenticated_user_id}, bot_id={bot_id}")
+    except HTTPException as e:
+        print(f"❌ HTTPException during validation: {e.status_code} - {e.detail}")
+        raise
+    except Exception as e:
+        print(f"❌ Exception during validation: {type(e).__name__} - {str(e)}")
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Получаем только активные товары из основного бота (bot_id=None)
+    # Синхронизация обновит их во все подключенные боты
+    # Это исключает дубликаты - один товар может быть в основном боте и в подключенных ботах
+    all_products = db.query(models.Product).filter(
+        models.Product.user_id == authenticated_user_id,
+        models.Product.bot_id == None,  # Только товары из основного бота
+        models.Product.is_sold == False  # Только активные товары (не проданные)
+    ).all()
+    
+    print(f"📦 Found {len(all_products)} active products in main bot for user {authenticated_user_id}")
+    
+    if not all_products:
+        return {
+            "updated_count": 0,
+            "message": "У вас нет активных товаров для обновления"
+        }
+    
+    # Обновляем все товары из основного бота
+    # sync_product_to_all_bots обновит их во все подключенные боты
+    updated_count = 0
+    try:
+        for product in all_products:
+            product.is_made_to_order = bool(bulk_update.is_made_to_order)
+            # Синхронизируем обновление товара во все боты
+            try:
+                sync_product_to_all_bots(product, db, action="update")
+            except Exception as e:
+                print(f"⚠️ Error syncing product {product.id} to bots: {str(e)}")
+                # Продолжаем обновление других товаров даже если синхронизация не удалась
+            updated_count += 1
+        
+        db.commit()
+        print(f"✅ Bulk update made-to-order - user_id={authenticated_user_id}, is_made_to_order={bulk_update.is_made_to_order}, updated_count={updated_count}")
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error during bulk update: {type(e).__name__} - {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка при обновлении товаров: {str(e)}")
+    
+    return {
+        "updated_count": updated_count,
+        "is_made_to_order": bulk_update.is_made_to_order,
+        "message": f"Обновлено {updated_count} товаров"
+    }
+
 @router.delete("/{product_id}")
 async def delete_product(
     product_id: int,

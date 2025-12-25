@@ -431,6 +431,42 @@ export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMade
     return JSON.parse(responseText);
 }
 
+// Массовое обновление статуса 'под заказ' для всех товаров
+export async function bulkUpdateAllProductsMadeToOrderAPI(isMadeToOrder) {
+    const url = `${API_BASE}/api/products/bulk-update-made-to-order`;
+    console.log(`Bulk updating all products made-to-order: isMadeToOrder=${isMadeToOrder}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            is_made_to_order: isMadeToOrder
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Bulk update made-to-order response: status=${response.status}, body=${responseText}`);
+    
+    if (response.ok) {
+        const result = JSON.parse(responseText);
+        console.log(`✅ Bulk update made-to-order successful: updated_count=${result.updated_count}, is_made_to_order=${result.is_made_to_order}`);
+        return result;
+    }
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить статус "под заказ" для всех товаров';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
 // Удаление товара
 export async function deleteProductAPI(productId, shopOwnerId) {
     const url = `${API_BASE}/api/products/${productId}?user_id=${shopOwnerId}`;
