@@ -5,15 +5,46 @@ import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from sqlalchemy import and_, or_
+from typing import List, Optional, Any
 from ..db import models, database
 from ..models import product as schemas
-from ..utils.telegram_auth import get_user_id_from_init_data
+from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
 # Получаем публичный URL из переменной окружения или используем ngrok по умолчанию
 API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "https://unmaneuvered-chronogrammatically-otelia.ngrok-free.dev")
+
+# Telegram Bot Token для отправки уведомлений (основной бот)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
+def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
+    """
+    Получает токен бота для отправки уведомлений.
+    Если у владельца магазина есть подключенный бот, использует его токен.
+    Иначе использует токен основного бота.
+    
+    Args:
+        shop_owner_id: ID владельца магазина
+        db: Сессия базы данных
+        
+    Returns:
+        Токен бота для отправки уведомлений
+    """
+    # Ищем подключенного бота для этого владельца магазина
+    connected_bot = db.query(models.Bot).filter(
+        models.Bot.owner_user_id == shop_owner_id,
+        models.Bot.is_active == True
+    ).first()
+    
+    if connected_bot and connected_bot.bot_token:
+        print(f"✅ Using connected bot token for user {shop_owner_id} (bot_id={connected_bot.id})")
+        return connected_bot.bot_token
+    
+    # Если подключенного бота нет, используем основной токен
+    print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
+    return TELEGRAM_BOT_TOKEN
 
 def make_full_url(path: str) -> str:
     """
@@ -28,33 +59,1352 @@ def make_full_url(path: str) -> str:
         # Если это полный URL с /static/uploads/, заменяем на /api/images/
         if '/static/uploads/' in path:
             filename = path.split('/static/uploads/')[-1]
-            # Убираем query параметры если есть
-            filename = filename.split('?')[0]
-            return API_PUBLIC_URL + f'/api/images/{filename}'
+            return f"{API_PUBLIC_URL}/api/images/{filename}"
         return path
     
-    if path.startswith('/'):
-        # Если это путь к изображению в static/uploads, используем API endpoint
-        if path.startswith('/static/uploads/'):
-            filename = path.replace('/static/uploads/', '')
-            # Убираем query параметры если есть
-            filename = filename.split('?')[0]
-            return API_PUBLIC_URL + f'/api/images/{filename}'
-        return API_PUBLIC_URL + path
+    # Если относительный путь начинается с /static/uploads/, заменяем на /api/images/
+    if path.startswith('/static/uploads/'):
+        filename = path.replace('/static/uploads/', '')
+        return f"{API_PUBLIC_URL}/api/images/{filename}"
     
-    return API_PUBLIC_URL + '/' + path
+    # Если путь не начинается с /, добавляем его
+    if not path.startswith('/'):
+        return API_PUBLIC_URL + '/' + path
+    
+    return API_PUBLIC_URL + path
+
+def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session, old_name: str, old_price: float):
+    """
+    Синхронизирует товар во все боты пользователя при переименовании.
+    Использует sync_product_id для надежной связи товаров.
+    
+    Args:
+        db_product: Товар с новым именем
+        db: Сессия базы данных
+        old_name: Старое имя товара (для fallback поиска)
+        old_price: Старая цена товара (для fallback поиска)
+    """
+    user_id = db_product.user_id
+    
+    # Находим все подключенные боты пользователя
+    connected_bots = db.query(models.Bot).filter(
+        models.Bot.owner_user_id == user_id,
+        models.Bot.is_active == True
+    ).all()
+    
+    # Используем sync_product_id для надежной синхронизации
+    sync_id = db_product.sync_product_id or db_product.id
+    
+    if db_product.bot_id is None:
+        # Товар в основном боте - синхронизируем во все подключенные боты
+        for bot in connected_bots:
+            # Ищем товар по sync_product_id (надежный способ)
+            matching = None
+            if sync_id:
+                matching = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.sync_product_id == sync_id
+                ).first()
+            
+            # Fallback: если не нашли по sync_product_id, ищем по старому имени и цене
+            if not matching:
+                matching = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.name == old_name,
+                    models.Product.price == old_price
+                ).first()
+            
+            if matching:
+                # Находим соответствующую категорию в этом боте по имени
+                category_id_for_bot = None
+                if db_product.category_id:
+                    original_category = db.query(models.Category).filter(
+                        models.Category.id == db_product.category_id
+                    ).first()
+                    if original_category:
+                        matching_category = db.query(models.Category).filter(
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == bot.id,
+                            models.Category.name == original_category.name
+                        ).first()
+                        if matching_category:
+                            category_id_for_bot = matching_category.id
+                
+                # Обновляем товар, включая новое имя
+                matching.name = db_product.name
+                matching.description = db_product.description
+                matching.price = db_product.price
+                matching.image_url = db_product.image_url
+                matching.images_urls = db_product.images_urls
+                matching.discount = db_product.discount
+                matching.is_hot_offer = db_product.is_hot_offer
+                matching.quantity = db_product.quantity
+                matching.is_sold = db_product.is_sold
+                matching.is_made_to_order = db_product.is_made_to_order
+                matching.category_id = category_id_for_bot
+                # Обновляем sync_product_id если он не был установлен
+                if not matching.sync_product_id:
+                    matching.sync_product_id = sync_id
+                print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+            else:
+                # Товар не найден - проверяем, не существует ли уже товар с новым именем и sync_product_id
+                existing = None
+                if sync_id:
+                    existing = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.sync_product_id == sync_id
+                    ).first()
+                
+                # Fallback: ищем по новому имени
+                if not existing:
+                    existing = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.name == db_product.name
+                    ).first()
+                
+                if not existing:
+                    # Находим соответствующую категорию в этом боте по имени
+                    category_id_for_bot = None
+                    if db_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == db_product.category_id
+                        ).first()
+                        if original_category:
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_bot = matching_category.id
+                    
+                    # Создаем новый товар
+                    new_product = models.Product(
+                        name=db_product.name,
+                        description=db_product.description,
+                        price=db_product.price,
+                        image_url=db_product.image_url,
+                        images_urls=db_product.images_urls,
+                        discount=db_product.discount,
+                        user_id=user_id,
+                        bot_id=bot.id,
+                        sync_product_id=sync_id,  # Связываем с оригинальным товаром
+                        is_hot_offer=db_product.is_hot_offer,
+                        quantity=db_product.quantity,
+                        is_sold=db_product.is_sold,
+                        is_made_to_order=db_product.is_made_to_order,
+                        category_id=category_id_for_bot
+                    )
+                    db.add(new_product)
+                    print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+    
+    else:
+        # Товар в подключенном боте - синхронизируем в основной бот И во все другие подключенные боты
+        # Используем sync_product_id для надежной синхронизации
+        if not sync_id:
+            sync_id = db_product.sync_product_id
+        
+        # 1. Обновляем товар в основном боте (ищем по sync_product_id)
+        matching_main = None
+        if sync_id:
+            matching_main = db.query(models.Product).filter(
+                models.Product.user_id == user_id,
+                models.Product.bot_id == None,
+                models.Product.sync_product_id == sync_id
+            ).first()
+        
+        # Fallback: если не нашли по sync_product_id, ищем по старому имени и цене
+        if not matching_main:
+            matching_main = db.query(models.Product).filter(
+                models.Product.user_id == user_id,
+                models.Product.bot_id == None,
+                models.Product.name == old_name,
+                models.Product.price == old_price
+            ).first()
+        
+        if matching_main:
+            # Находим соответствующую категорию в основном боте по имени
+            category_id_for_main = None
+            if db_product.category_id:
+                original_category = db.query(models.Category).filter(
+                    models.Category.id == db_product.category_id
+                ).first()
+                if original_category:
+                    matching_category = db.query(models.Category).filter(
+                        models.Category.user_id == user_id,
+                        models.Category.bot_id == None,
+                        models.Category.name == original_category.name
+                    ).first()
+                    if matching_category:
+                        category_id_for_main = matching_category.id
+            
+            # Обновляем товар, включая новое имя
+            matching_main.name = db_product.name
+            matching_main.description = db_product.description
+            matching_main.price = db_product.price
+            matching_main.image_url = db_product.image_url
+            matching_main.images_urls = db_product.images_urls
+            matching_main.discount = db_product.discount
+            matching_main.is_hot_offer = db_product.is_hot_offer
+            matching_main.quantity = db_product.quantity
+            matching_main.is_sold = db_product.is_sold
+            matching_main.is_made_to_order = db_product.is_made_to_order
+            matching_main.category_id = category_id_for_main
+            # Устанавливаем sync_product_id если он не был установлен
+            if not matching_main.sync_product_id:
+                matching_main.sync_product_id = matching_main.id
+            if not db_product.sync_product_id:
+                db_product.sync_product_id = matching_main.sync_product_id
+            sync_id = matching_main.sync_product_id
+            print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
+        
+        # 2. Обновляем товар во всех других подключенных ботах (кроме текущего)
+        for bot in connected_bots:
+            if bot.id == db_product.bot_id:
+                continue  # Пропускаем текущий бот
+            
+            # Ищем товар по sync_product_id (надежный способ)
+            matching = None
+            if sync_id:
+                matching = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.sync_product_id == sync_id
+                ).first()
+            
+            # Fallback: если не нашли по sync_product_id, ищем по старому имени и цене
+            if not matching:
+                matching = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.name == old_name,
+                    models.Product.price == old_price
+                ).first()
+            
+            if matching:
+                # Находим соответствующую категорию в этом боте по имени
+                category_id_for_bot = None
+                if db_product.category_id:
+                    original_category = db.query(models.Category).filter(
+                        models.Category.id == db_product.category_id
+                    ).first()
+                    if original_category:
+                        matching_category = db.query(models.Category).filter(
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == bot.id,
+                            models.Category.name == original_category.name
+                        ).first()
+                        if matching_category:
+                            category_id_for_bot = matching_category.id
+                
+                # Обновляем товар, включая новое имя
+                matching.name = db_product.name
+                matching.description = db_product.description
+                matching.price = db_product.price
+                matching.image_url = db_product.image_url
+                matching.images_urls = db_product.images_urls
+                matching.discount = db_product.discount
+                matching.is_hot_offer = db_product.is_hot_offer
+                matching.quantity = db_product.quantity
+                matching.is_sold = db_product.is_sold
+                matching.is_made_to_order = db_product.is_made_to_order
+                matching.category_id = category_id_for_bot
+                # Обновляем sync_product_id если он не был установлен
+                if sync_id and not matching.sync_product_id:
+                    matching.sync_product_id = sync_id
+                print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+
+
+def sync_product_to_all_bots(db_product: models.Product, db: Session, action: str = "create"):
+    """
+    Синхронизирует товар во все боты пользователя (двусторонняя синхронизация).
+    Использует sync_product_id для надежной связи товаров между магазинами.
+    
+    action: "create", "update", "delete"
+    """
+    user_id = db_product.user_id
+    
+    # Находим все подключенные боты пользователя
+    connected_bots = db.query(models.Bot).filter(
+        models.Bot.owner_user_id == user_id,
+        models.Bot.is_active == True
+    ).all()
+    
+    if db_product.bot_id is None:
+        # Товар в основном боте - синхронизируем во все подключенные боты
+        # sync_product_id уже установлен на id товара (сам на себя)
+        sync_id = db_product.sync_product_id or db_product.id
+        
+        for bot in connected_bots:
+            if action == "create":
+                # Ищем существующий синхронизированный товар по sync_product_id
+                existing = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.sync_product_id == sync_id
+                ).first()
+                
+                # Fallback: если sync_product_id не установлен, ищем по имени и цене (для обратной совместимости)
+                if not existing:
+                    existing = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.name == db_product.name,
+                        models.Product.price == db_product.price
+                    ).first()
+                
+                if not existing:
+                    # Находим соответствующую категорию в этом боте по имени
+                    category_id_for_bot = None
+                    if db_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == db_product.category_id
+                        ).first()
+                        if original_category:
+                            # Ищем категорию с таким же именем в этом боте
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_bot = matching_category.id
+                    
+                    # Создаем копию товара для этого бота
+                    new_product = models.Product(
+                        name=db_product.name,
+                        description=db_product.description,
+                        price=db_product.price,
+                        image_url=db_product.image_url,
+                        images_urls=db_product.images_urls,
+                        discount=db_product.discount,
+                        user_id=user_id,
+                        bot_id=bot.id,
+                        sync_product_id=sync_id,  # Связываем с оригинальным товаром
+                        is_hot_offer=db_product.is_hot_offer,
+                        quantity=db_product.quantity,
+                        is_sold=db_product.is_sold,
+                        is_made_to_order=db_product.is_made_to_order,
+                        category_id=category_id_for_bot
+                    )
+                    db.add(new_product)
+                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+            
+            elif action == "update":
+                # Ищем синхронизированный товар по sync_product_id (надежный способ)
+                matching = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.sync_product_id == sync_id
+                ).first()
+                
+                # Fallback: если sync_product_id не установлен, ищем по имени и цене (для обратной совместимости)
+                if not matching:
+                    matching = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.name == db_product.name,
+                        models.Product.price == db_product.price
+                    ).first()
+                
+                if matching:
+                    # Находим соответствующую категорию в этом боте по имени
+                    category_id_for_bot = None
+                    if db_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == db_product.category_id
+                        ).first()
+                        if original_category:
+                            # Ищем категорию с таким же именем в этом боте
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_bot = matching_category.id
+                    
+                    matching.description = db_product.description
+                    matching.price = db_product.price  # Обновляем цену при синхронизации
+                    matching.image_url = db_product.image_url
+                    matching.images_urls = db_product.images_urls
+                    matching.discount = db_product.discount
+                    matching.is_hot_offer = db_product.is_hot_offer
+                    matching.quantity = db_product.quantity
+                    matching.is_sold = db_product.is_sold
+                    matching.is_made_to_order = db_product.is_made_to_order
+                    matching.category_id = category_id_for_bot
+                    # Обновляем sync_product_id если он не был установлен
+                    if not matching.sync_product_id:
+                        matching.sync_product_id = sync_id
+                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+    
+    else:
+        # Товар в подключенном боте - синхронизируем в основной бот И во все другие подключенные боты
+        # Определяем sync_product_id: если товар уже связан, используем его, иначе ищем оригинальный товар
+        sync_id = db_product.sync_product_id
+        
+        if action == "create":
+            # Если sync_product_id не установлен, ищем оригинальный товар по имени и цене
+            if not sync_id:
+                existing_main = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.name == db_product.name,
+                    models.Product.price == db_product.price
+                ).first()
+                if existing_main:
+                    sync_id = existing_main.sync_product_id or existing_main.id
+                    db_product.sync_product_id = sync_id
+            
+            # 1. Синхронизируем в основной бот (ищем по sync_product_id)
+            if sync_id:
+                existing_main = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.sync_product_id == sync_id
+                ).first()
+                
+                # Fallback: если не нашли по sync_product_id, ищем по имени и цене
+                if not existing_main:
+                    existing_main = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == None,
+                        models.Product.name == db_product.name,
+                        models.Product.price == db_product.price
+                    ).first()
+            else:
+                # Если sync_product_id не установлен, ищем по имени и цене
+                existing_main = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.name == db_product.name,
+                    models.Product.price == db_product.price
+                ).first()
+            
+            if existing_main:
+                # Если товар с таким именем уже есть - обновляем его
+                category_id_for_main = None
+                if db_product.category_id:
+                    original_category = db.query(models.Category).filter(
+                        models.Category.id == db_product.category_id
+                    ).first()
+                    if original_category:
+                        matching_category = db.query(models.Category).filter(
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == None,
+                            models.Category.name == original_category.name
+                        ).first()
+                        if matching_category:
+                            category_id_for_main = matching_category.id
+                
+                existing_main.description = db_product.description
+                existing_main.price = db_product.price
+                existing_main.image_url = db_product.image_url
+                existing_main.images_urls = db_product.images_urls
+                existing_main.discount = db_product.discount
+                existing_main.is_hot_offer = db_product.is_hot_offer
+                existing_main.quantity = db_product.quantity
+                existing_main.is_sold = db_product.is_sold
+                existing_main.is_made_to_order = db_product.is_made_to_order
+                existing_main.category_id = category_id_for_main
+                # Устанавливаем sync_product_id если он не был установлен
+                if not existing_main.sync_product_id:
+                    existing_main.sync_product_id = existing_main.id
+                # Обновляем sync_product_id у товара в боте
+                if not db_product.sync_product_id:
+                    db_product.sync_product_id = existing_main.sync_product_id
+                print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={existing_main.sync_product_id}) to main bot (UPDATE existing)")
+            elif not existing_main:
+                # Находим соответствующую категорию в основном боте по имени
+                category_id_for_main = None
+                if db_product.category_id:
+                    original_category = db.query(models.Category).filter(
+                        models.Category.id == db_product.category_id
+                    ).first()
+                    if original_category:
+                        # Ищем категорию с таким же именем в основном боте
+                        matching_category = db.query(models.Category).filter(
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == None,
+                            models.Category.name == original_category.name
+                        ).first()
+                        if matching_category:
+                            category_id_for_main = matching_category.id
+                
+                # Создаем копию товара в основном боте
+                new_product = models.Product(
+                    name=db_product.name,
+                    description=db_product.description,
+                    price=db_product.price,
+                    image_url=db_product.image_url,
+                    images_urls=db_product.images_urls,
+                    discount=db_product.discount,
+                    user_id=user_id,
+                    bot_id=None,
+                    sync_product_id=None,  # Будет установлен после получения ID
+                    is_hot_offer=db_product.is_hot_offer,
+                    quantity=db_product.quantity,
+                    is_sold=db_product.is_sold,
+                    is_made_to_order=db_product.is_made_to_order,
+                    category_id=category_id_for_main
+                )
+                db.add(new_product)
+                db.flush()  # Получаем ID нового товара
+                # Устанавливаем sync_product_id = id (сам на себя)
+                new_product.sync_product_id = new_product.id
+                # Обновляем sync_product_id у товара в боте
+                if not db_product.sync_product_id:
+                    db_product.sync_product_id = new_product.id
+                sync_id = new_product.id
+                print(f"🔄 Synced product '{db_product.name}' (id={new_product.id}, sync_id={sync_id}) to main bot (CREATE)")
+            
+            # 2. Синхронизируем во все другие подключенные боты (кроме текущего)
+            # Используем sync_id для надежной синхронизации
+            if not sync_id:
+                sync_id = db_product.sync_product_id
+            
+            for bot in connected_bots:
+                if bot.id == db_product.bot_id:
+                    continue  # Пропускаем текущий бот
+                
+                # Ищем синхронизированный товар по sync_product_id (надежный способ)
+                existing = None
+                if sync_id:
+                    existing = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.sync_product_id == sync_id
+                    ).first()
+                
+                # Fallback: если не нашли по sync_product_id, ищем по имени и цене
+                if not existing:
+                    existing = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.name == db_product.name,
+                        models.Product.price == db_product.price
+                    ).first()
+                
+                if existing:
+                    # Обновляем существующий товар
+                    category_id_for_bot = None
+                    if db_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == db_product.category_id
+                        ).first()
+                        if original_category:
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_bot = matching_category.id
+                    
+                    existing.description = db_product.description
+                    existing.price = db_product.price  # Обновляем цену при синхронизации
+                    existing.image_url = db_product.image_url
+                    existing.images_urls = db_product.images_urls
+                    existing.discount = db_product.discount
+                    existing.is_hot_offer = db_product.is_hot_offer
+                    existing.quantity = db_product.quantity
+                    existing.is_sold = db_product.is_sold
+                    existing.is_made_to_order = db_product.is_made_to_order
+                    existing.category_id = category_id_for_bot
+                    # Обновляем sync_product_id если он не был установлен
+                    if sync_id and not existing.sync_product_id:
+                        existing.sync_product_id = sync_id
+                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE existing)")
+                elif not existing:
+                    # Находим соответствующую категорию в этом боте по имени
+                    category_id_for_bot = None
+                    if db_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == db_product.category_id
+                        ).first()
+                        if original_category:
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_bot = matching_category.id
+                    
+                    new_product = models.Product(
+                        name=db_product.name,
+                        description=db_product.description,
+                        price=db_product.price,
+                        image_url=db_product.image_url,
+                        images_urls=db_product.images_urls,
+                        discount=db_product.discount,
+                        user_id=user_id,
+                        bot_id=bot.id,
+                        sync_product_id=sync_id if sync_id else None,  # Связываем с оригинальным товаром
+                        is_hot_offer=db_product.is_hot_offer,
+                        quantity=db_product.quantity,
+                        is_sold=db_product.is_sold,
+                        is_made_to_order=db_product.is_made_to_order,
+                        category_id=category_id_for_bot
+                    )
+                    db.add(new_product)
+                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+        
+        elif action == "update":
+            # Используем sync_product_id для надежной синхронизации
+            sync_id = db_product.sync_product_id
+            
+            # 1. Обновляем товар в основном боте (ищем по sync_product_id)
+            matching_main = None
+            if sync_id:
+                matching_main = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.sync_product_id == sync_id
+                ).first()
+            
+            # Fallback: если не нашли по sync_product_id, ищем по имени и цене
+            if not matching_main:
+                matching_main = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.name == db_product.name,
+                    models.Product.price == db_product.price
+                ).first()
+                # Если нашли по имени и цене, устанавливаем sync_product_id
+                if matching_main:
+                    if not matching_main.sync_product_id:
+                        matching_main.sync_product_id = matching_main.id
+                    if not db_product.sync_product_id:
+                        db_product.sync_product_id = matching_main.sync_product_id
+                    sync_id = matching_main.sync_product_id
+            
+            if matching_main:
+                # Находим соответствующую категорию в основном боте по имени
+                category_id_for_main = None
+                if db_product.category_id:
+                    original_category = db.query(models.Category).filter(
+                        models.Category.id == db_product.category_id
+                    ).first()
+                    if original_category:
+                        # Ищем категорию с таким же именем в основном боте
+                        matching_category = db.query(models.Category).filter(
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == None,
+                            models.Category.name == original_category.name
+                        ).first()
+                        if matching_category:
+                            category_id_for_main = matching_category.id
+                
+                matching_main.description = db_product.description
+                matching_main.price = db_product.price  # Обновляем цену при синхронизации
+                matching_main.image_url = db_product.image_url
+                matching_main.images_urls = db_product.images_urls
+                matching_main.discount = db_product.discount
+                matching_main.is_hot_offer = db_product.is_hot_offer
+                matching_main.quantity = db_product.quantity
+                matching_main.is_sold = db_product.is_sold
+                matching_main.is_made_to_order = db_product.is_made_to_order
+                matching_main.category_id = category_id_for_main
+                print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
+            
+            # 2. Обновляем товар во всех других подключенных ботах (кроме текущего)
+            # Используем sync_id для надежной синхронизации
+            if not sync_id:
+                sync_id = db_product.sync_product_id
+            
+            for bot in connected_bots:
+                if bot.id == db_product.bot_id:
+                    continue  # Пропускаем текущий бот
+                
+                # Ищем синхронизированный товар по sync_product_id (надежный способ)
+                matching = None
+                if sync_id:
+                    matching = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.sync_product_id == sync_id
+                    ).first()
+                
+                # Fallback: если не нашли по sync_product_id, ищем по имени и цене
+                if not matching:
+                    matching = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.name == db_product.name,
+                        models.Product.price == db_product.price
+                    ).first()
+                
+                if matching:
+                    # Находим соответствующую категорию в этом боте по имени
+                    category_id_for_bot = None
+                    if db_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == db_product.category_id
+                        ).first()
+                        if original_category:
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_bot = matching_category.id
+                    
+                    matching.description = db_product.description
+                    matching.price = db_product.price  # Обновляем цену при синхронизации
+                    matching.image_url = db_product.image_url
+                    matching.images_urls = db_product.images_urls
+                    matching.discount = db_product.discount
+                    matching.is_hot_offer = db_product.is_hot_offer
+                    matching.quantity = db_product.quantity
+                    matching.is_sold = db_product.is_sold
+                    matching.is_made_to_order = db_product.is_made_to_order
+                    matching.category_id = category_id_for_bot
+                    # Обновляем sync_product_id если он не был установлен
+                    if sync_id and not matching.sync_product_id:
+                        matching.sync_product_id = sync_id
+                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+        
+        elif action == "delete":
+            # Используем sync_product_id для надежного удаления всех связанных товаров
+            sync_id = db_product.sync_product_id
+            
+            # 1. Удаляем товар в основном боте по sync_product_id
+            if sync_id:
+                matching_main_products = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.sync_product_id == sync_id
+                ).all()
+            else:
+                # Fallback: если sync_product_id не установлен, удаляем по имени
+                matching_main_products = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.name == db_product.name
+                ).all()
+            
+            for matching_main in matching_main_products:
+                db.delete(matching_main)
+                print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching_main.id}, sync_id={sync_id}) to main bot (DELETE)")
+            
+            # 2. Удаляем все связанные товары из всех других подключенных ботов (кроме текущего)
+            for bot in connected_bots:
+                if bot.id == db_product.bot_id:
+                    continue  # Пропускаем текущий бот
+                
+                if sync_id:
+                    # Удаляем по sync_product_id (надежный способ)
+                    matching_products = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.sync_product_id == sync_id
+                    ).all()
+                else:
+                    # Fallback: удаляем по имени
+                    matching_products = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.name == db_product.name
+                    ).all()
+                
+                for matching in matching_products:
+                    db.delete(matching)
+                    print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) to bot {bot.id} (DELETE)")
+    
+    # Также обрабатываем удаление из основного бота во все подключенные боты
+    if db_product.bot_id is None and action == "delete":
+        sync_id = db_product.sync_product_id or db_product.id
+        
+        for bot in connected_bots:
+            # Удаляем все товары с таким же sync_product_id (надежный способ)
+            if sync_id:
+                matching_products = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.sync_product_id == sync_id
+                ).all()
+            else:
+                # Fallback: удаляем по имени
+                matching_products = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.name == db_product.name
+                ).all()
+            
+            for matching in matching_products:
+                db.delete(matching)
+                print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) from main bot to bot {bot.id} (DELETE)")
+
+@router.post("/sync-all")
+async def sync_all_products(
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Синхронизирует все существующие товары между основным ботом и подключенными ботами.
+    Используется для синхронизации товаров, которые были созданы до добавления автоматической синхронизации.
+    """
+    # Проверяем авторизацию
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    import os
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    
+    try:
+        authenticated_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=bot_token if bot_token else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Проверяем, что пользователь является владельцем
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to sync products")
+    
+    # Находим все подключенные боты пользователя
+    connected_bots = db.query(models.Bot).filter(
+        models.Bot.owner_user_id == user_id,
+        models.Bot.is_active == True
+    ).all()
+    
+    synced_count = 0
+    
+    # 1. Синхронизируем товары из основного бота во все подключенные боты
+    main_products = db.query(models.Product).filter(
+        models.Product.user_id == user_id,
+        models.Product.bot_id == None,
+        models.Product.is_sold == False
+    ).all()
+    
+    for main_product in main_products:
+        # Устанавливаем sync_product_id для товаров в основном магазине
+        if not main_product.sync_product_id:
+            main_product.sync_product_id = main_product.id
+            db.flush()
+        
+        sync_id = main_product.sync_product_id
+        
+        for bot in connected_bots:
+            # Ищем синхронизированный товар по sync_product_id (надежный способ)
+            existing = None
+            if sync_id:
+                existing = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.sync_product_id == sync_id
+                ).first()
+            
+            # Fallback: если не нашли по sync_product_id, ищем по имени и цене
+            if not existing:
+                existing = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == bot.id,
+                    models.Product.name == main_product.name,
+                    models.Product.price == main_product.price
+                ).first()
+            
+            if not existing:
+                # Находим соответствующую категорию в этом боте по имени
+                category_id_for_bot = None
+                if main_product.category_id:
+                    original_category = db.query(models.Category).filter(
+                        models.Category.id == main_product.category_id
+                    ).first()
+                    if original_category:
+                        matching_category = db.query(models.Category).filter(
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == bot.id,
+                            models.Category.name == original_category.name
+                        ).first()
+                        if matching_category:
+                            category_id_for_bot = matching_category.id
+                
+                new_product = models.Product(
+                    name=main_product.name,
+                    description=main_product.description,
+                    price=main_product.price,
+                    image_url=main_product.image_url,
+                    images_urls=main_product.images_urls,
+                    discount=main_product.discount,
+                    user_id=user_id,
+                    bot_id=bot.id,
+                    sync_product_id=sync_id,  # Связываем с оригинальным товаром
+                    is_hot_offer=main_product.is_hot_offer,
+                    quantity=main_product.quantity,
+                    is_sold=main_product.is_sold,
+                    is_made_to_order=main_product.is_made_to_order,
+                    category_id=category_id_for_bot
+                )
+                db.add(new_product)
+                synced_count += 1
+                print(f"🔄 Synced product '{main_product.name}' (id={main_product.id}, sync_id={sync_id}) to bot {bot.id}")
+    
+    # 2. Синхронизируем товары из подключенных ботов в основной бот
+    for bot in connected_bots:
+        bot_products = db.query(models.Product).filter(
+            models.Product.user_id == user_id,
+            models.Product.bot_id == bot.id,
+            models.Product.is_sold == False
+        ).all()
+        
+        for bot_product in bot_products:
+            # Используем sync_product_id для поиска оригинального товара
+            sync_id = bot_product.sync_product_id
+            
+            # Ищем оригинальный товар в основном боте по sync_product_id
+            existing = None
+            if sync_id:
+                existing = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.sync_product_id == sync_id
+                ).first()
+            
+            # Fallback: если не нашли по sync_product_id, ищем по имени и цене
+            if not existing:
+                existing = db.query(models.Product).filter(
+                    models.Product.user_id == user_id,
+                    models.Product.bot_id == None,
+                    models.Product.name == bot_product.name,
+                    models.Product.price == bot_product.price
+                ).first()
+            
+            if not existing:
+                # Находим соответствующую категорию в основном боте по имени
+                category_id_for_main = None
+                if bot_product.category_id:
+                    original_category = db.query(models.Category).filter(
+                        models.Category.id == bot_product.category_id
+                    ).first()
+                    if original_category:
+                        matching_category = db.query(models.Category).filter(
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == None,
+                            models.Category.name == original_category.name
+                        ).first()
+                        if matching_category:
+                            category_id_for_main = matching_category.id
+                
+                new_product = models.Product(
+                    name=bot_product.name,
+                    description=bot_product.description,
+                    price=bot_product.price,
+                    image_url=bot_product.image_url,
+                    images_urls=bot_product.images_urls,
+                    discount=bot_product.discount,
+                    user_id=user_id,
+                    bot_id=None,
+                    sync_product_id=None,  # Будет установлен после получения ID
+                    is_hot_offer=bot_product.is_hot_offer,
+                    quantity=bot_product.quantity,
+                    is_sold=bot_product.is_sold,
+                    is_made_to_order=bot_product.is_made_to_order,
+                    category_id=category_id_for_main
+                )
+                db.add(new_product)
+                db.flush()  # Получаем ID нового товара
+                # Устанавливаем sync_product_id = id (сам на себя)
+                new_product.sync_product_id = new_product.id
+                # Обновляем sync_product_id у товара в боте
+                if not bot_product.sync_product_id:
+                    bot_product.sync_product_id = new_product.id
+                synced_count += 1
+                print(f"🔄 Synced product '{bot_product.name}' (id={new_product.id}, sync_id={new_product.id}) to main bot")
+    
+    # 3. Очистка дубликатов: удаляем товары в ботах, которых нет в основном магазине
+    deleted_count = 0
+    for bot in connected_bots:
+        bot_products = db.query(models.Product).filter(
+            models.Product.user_id == user_id,
+            models.Product.bot_id == bot.id,
+            models.Product.is_sold == False
+        ).all()
+        
+        # Получаем все sync_product_id из основного магазина
+        main_sync_ids = set()
+        for main_product in main_products:
+            if main_product.sync_product_id:
+                main_sync_ids.add(main_product.sync_product_id)
+            else:
+                main_sync_ids.add(main_product.id)
+        
+        for bot_product in bot_products:
+            # Если у товара в боте есть sync_product_id, проверяем, существует ли соответствующий товар в основном магазине
+            if bot_product.sync_product_id:
+                if bot_product.sync_product_id not in main_sync_ids:
+                    # Товар в боте ссылается на несуществующий товар в основном магазине - удаляем
+                    print(f"🗑️ Deleting orphaned product '{bot_product.name}' (id={bot_product.id}, sync_id={bot_product.sync_product_id}) from bot {bot.id}")
+                    db.delete(bot_product)
+                    deleted_count += 1
+            else:
+                # Если у товара в боте нет sync_product_id, проверяем, есть ли он в основном магазине по имени и цене
+                found_in_main = False
+                for main_product in main_products:
+                    if main_product.name == bot_product.name and main_product.price == bot_product.price:
+                        # Нашли соответствующий товар - устанавливаем sync_product_id
+                        sync_id = main_product.sync_product_id or main_product.id
+                        bot_product.sync_product_id = sync_id
+                        found_in_main = True
+                        print(f"🔗 Linked product '{bot_product.name}' (id={bot_product.id}) to main product (sync_id={sync_id})")
+                        break
+                
+                if not found_in_main:
+                    # Товар в боте не найден в основном магазине - удаляем (или создаем в основном магазине)
+                    # Создаем товар в основном магазине, если его там нет
+                    print(f"🔄 Creating missing product '{bot_product.name}' in main shop from bot {bot.id}")
+                    # Находим соответствующую категорию в основном боте по имени
+                    category_id_for_main = None
+                    if bot_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == bot_product.category_id
+                        ).first()
+                        if original_category:
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == None,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_main = matching_category.id
+                    
+                    new_main_product = models.Product(
+                        name=bot_product.name,
+                        description=bot_product.description,
+                        price=bot_product.price,
+                        image_url=bot_product.image_url,
+                        images_urls=bot_product.images_urls,
+                        discount=bot_product.discount,
+                        user_id=user_id,
+                        bot_id=None,
+                        sync_product_id=None,  # Будет установлен после получения ID
+                        is_hot_offer=bot_product.is_hot_offer,
+                        quantity=bot_product.quantity,
+                        is_sold=bot_product.is_sold,
+                        is_made_to_order=bot_product.is_made_to_order,
+                        category_id=category_id_for_main
+                    )
+                    db.add(new_main_product)
+                    db.flush()
+                    new_main_product.sync_product_id = new_main_product.id
+                    bot_product.sync_product_id = new_main_product.id
+                    synced_count += 1
+                    print(f"🔄 Created product '{bot_product.name}' (id={new_main_product.id}, sync_id={new_main_product.id}) in main shop")
+    
+    db.commit()
+    
+    return {
+        "message": f"Синхронизировано {synced_count} товаров, удалено {deleted_count} дубликатов",
+        "synced_count": synced_count,
+        "deleted_count": deleted_count
+    }
+
+@router.get("/sold")
+async def get_sold_products(
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Получает список проданных товаров (история продаж)"""
+    # Проверяем авторизацию через initData
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    import os
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    
+    try:
+        authenticated_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=bot_token if bot_token else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Проверяем, что авторизованный пользователь запрашивает свои продажи
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to view these sold products")
+    
+    # Получаем проданные товары, отсортированные по дате продажи (новые сначала)
+    sold_products = db.query(models.SoldProduct).filter(
+        models.SoldProduct.user_id == user_id
+    ).order_by(models.SoldProduct.sold_at.desc()).all()
+    
+    result = []
+    for sold in sold_products:
+        # Преобразуем images_urls из JSON строки в список
+        images_list = []
+        if sold.images_urls:
+            try:
+                images_list = json.loads(sold.images_urls)
+            except:
+                images_list = []
+        
+        # Для обратной совместимости: если есть image_url, но нет images_urls, добавляем его
+        if not images_list and sold.image_url:
+            images_list = [sold.image_url]
+        
+        # Преобразуем относительные пути в полные HTTPS URL
+        images_list = [make_full_url(img_url) for img_url in images_list if img_url]
+        image_url_full = make_full_url(sold.image_url) if sold.image_url else None
+        
+        result.append({
+            "id": sold.id,
+            "product_id": sold.product_id,
+            "name": sold.name,
+            "description": sold.description,
+            "price": sold.price,
+            "discount": sold.discount,
+            "image_url": image_url_full,
+            "images_urls": images_list,
+            "category_id": sold.category_id,
+            "sold_at": sold.sold_at.isoformat() if sold.sold_at else None
+        })
+    
+    return result
+
+@router.get("/{product_id}", response_model=schemas.Product)
+def get_product_by_id(
+    product_id: int,
+    db: Session = Depends(database.get_db)
+):
+    """Получить товар по его ID (из любого магазина)"""
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Преобразуем images_urls из JSON строки в список
+    images_list = []
+    if product.images_urls:
+        try:
+            images_list = json.loads(product.images_urls)
+        except:
+            images_list = []
+    
+    # Для обратной совместимости: если есть image_url, но нет images_urls, добавляем его
+    if not images_list and product.image_url:
+        images_list = [product.image_url]
+    
+    # Преобразуем относительные пути в полные HTTPS URL для Telegram Mini App
+    images_list = [make_full_url(img_url) for img_url in images_list if img_url]
+    image_url_full = make_full_url(product.image_url) if product.image_url else None
+    
+    # Проверяем активную резервацию (используем sync_product_id для надежного поиска)
+    sync_id = product.sync_product_id or product.id
+    active_reservation = db.query(models.Reservation).filter(
+        and_(
+            models.Reservation.product_id.in_(
+                db.query(models.Product.id).filter(
+                    models.Product.user_id == product.user_id,
+                    models.Product.sync_product_id == sync_id
+                )
+            ),
+            models.Reservation.is_active == True,
+            models.Reservation.reserved_until > datetime.utcnow()
+        )
+    ).first()
+    
+    return {
+        "id": product.id,
+        "name": product.name,
+        "description": product.description,
+        "price": product.price,
+        "image_url": image_url_full,
+        "images_urls": images_list,
+        "discount": product.discount,
+        "category_id": product.category_id,
+        "user_id": product.user_id,
+        "bot_id": product.bot_id,
+        "is_hot_offer": product.is_hot_offer,
+        "quantity": product.quantity,
+        "is_sold": product.is_sold,
+        "is_made_to_order": product.is_made_to_order,
+        "has_active_reservation": active_reservation is not None
+    }
 
 @router.get("/", response_model=List[schemas.Product])
 def get_products(
     user_id: int,
     category_id: Optional[int] = None,
+    bot_id: Optional[int] = Query(None, description="ID бота для независимых магазинов"),
     db: Session = Depends(database.get_db)
 ):
-    print(f"DEBUG: get_products called with user_id={user_id}, category_id={category_id}")
+    print(f"DEBUG: get_products called with user_id={user_id}, category_id={category_id}, bot_id={bot_id}")
+    
+    # Автоматическая синхронизация: проверяем расхождения между основным магазином и ботами
+    # Находим все подключенные боты пользователя
+    connected_bots = db.query(models.Bot).filter(
+        models.Bot.owner_user_id == user_id,
+        models.Bot.is_active == True
+    ).all()
+    
+    if connected_bots:
+        # Получаем товары из основного магазина
+        main_products = db.query(models.Product).filter(
+            models.Product.user_id == user_id,
+            models.Product.bot_id == None,
+            models.Product.is_sold == False
+        ).all()
+        
+        # Получаем товары из всех ботов
+        for bot in connected_bots:
+            bot_products = db.query(models.Product).filter(
+                models.Product.user_id == user_id,
+                models.Product.bot_id == bot.id,
+                models.Product.is_sold == False
+            ).all()
+            
+            # Проверяем товары в боте, которых нет в основном магазине
+            for bot_product in bot_products:
+                sync_id = bot_product.sync_product_id
+                
+                # Ищем соответствующий товар в основном магазине
+                found_in_main = False
+                if sync_id:
+                    found_in_main = any(
+                        p.sync_product_id == sync_id or p.id == sync_id 
+                        for p in main_products
+                    )
+                
+                # Если не нашли по sync_id, ищем по имени и цене
+                if not found_in_main:
+                    found_in_main = any(
+                        p.name == bot_product.name and p.price == bot_product.price
+                        for p in main_products
+                    )
+                
+                # Если товар в боте не найден в основном магазине - синхронизируем
+                if not found_in_main:
+                    print(f"🔄 Auto-syncing product '{bot_product.name}' from bot {bot.id} to main shop")
+                    # Находим соответствующую категорию в основном боте по имени
+                    category_id_for_main = None
+                    if bot_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == bot_product.category_id
+                        ).first()
+                        if original_category:
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == None,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_main = matching_category.id
+                    
+                    new_main_product = models.Product(
+                        name=bot_product.name,
+                        description=bot_product.description,
+                        price=bot_product.price,
+                        image_url=bot_product.image_url,
+                        images_urls=bot_product.images_urls,
+                        discount=bot_product.discount,
+                        user_id=user_id,
+                        bot_id=None,
+                        sync_product_id=None,  # Будет установлен после получения ID
+                        is_hot_offer=bot_product.is_hot_offer,
+                        quantity=bot_product.quantity,
+                        is_sold=bot_product.is_sold,
+                        is_made_to_order=bot_product.is_made_to_order,
+                        category_id=category_id_for_main
+                    )
+                    db.add(new_main_product)
+                    db.flush()
+                    new_main_product.sync_product_id = new_main_product.id
+                    if not bot_product.sync_product_id:
+                        bot_product.sync_product_id = new_main_product.id
+                    db.commit()
+                    print(f"✅ Auto-synced product '{bot_product.name}' (id={new_main_product.id}) to main shop")
+        
+        # Также синхронизируем товары из основного магазина в боты
+        for main_product in main_products:
+            if not main_product.sync_product_id:
+                main_product.sync_product_id = main_product.id
+                db.flush()
+            
+            sync_id = main_product.sync_product_id
+            for bot in connected_bots:
+                # Ищем товар в боте по sync_product_id
+                existing = None
+                if sync_id:
+                    existing = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.sync_product_id == sync_id
+                    ).first()
+                
+                # Если не нашли, ищем по имени и цене
+                if not existing:
+                    existing = db.query(models.Product).filter(
+                        models.Product.user_id == user_id,
+                        models.Product.bot_id == bot.id,
+                        models.Product.name == main_product.name,
+                        models.Product.price == main_product.price
+                    ).first()
+                
+                # Если товар в основном магазине не найден в боте - синхронизируем
+                if not existing:
+                    print(f"🔄 Auto-syncing product '{main_product.name}' from main shop to bot {bot.id}")
+                    # Находим соответствующую категорию в боте по имени
+                    category_id_for_bot = None
+                    if main_product.category_id:
+                        original_category = db.query(models.Category).filter(
+                            models.Category.id == main_product.category_id
+                        ).first()
+                        if original_category:
+                            matching_category = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == original_category.name
+                            ).first()
+                            if matching_category:
+                                category_id_for_bot = matching_category.id
+                    
+                    new_bot_product = models.Product(
+                        name=main_product.name,
+                        description=main_product.description,
+                        price=main_product.price,
+                        image_url=main_product.image_url,
+                        images_urls=main_product.images_urls,
+                        discount=main_product.discount,
+                        user_id=user_id,
+                        bot_id=bot.id,
+                        sync_product_id=sync_id,
+                        is_hot_offer=main_product.is_hot_offer,
+                        quantity=main_product.quantity,
+                        is_sold=main_product.is_sold,
+                        is_made_to_order=main_product.is_made_to_order,
+                        category_id=category_id_for_bot
+                    )
+                    db.add(new_bot_product)
+                    db.commit()
+                    print(f"✅ Auto-synced product '{main_product.name}' (id={new_bot_product.id}) to bot {bot.id}")
+    
     query = db.query(models.Product).filter(
         models.Product.user_id == user_id,
         models.Product.is_sold == False  # Не показываем проданные товары на витрине
     )
+    # Если bot_id указан - фильтруем по bot_id (независимый магазин бота)
+    # Если bot_id не указан - фильтруем по bot_id = None (основной бот)
+    if bot_id is not None:
+        query = query.filter(models.Product.bot_id == bot_id)
+    else:
+        query = query.filter(models.Product.bot_id == None)
+    
     if category_id is not None:
         query = query.filter(models.Product.category_id == category_id)
     products = query.all()
@@ -79,85 +1429,85 @@ def get_products(
         image_url_full = make_full_url(prod.image_url) if prod.image_url else None
         
         # Проверяем активную резервацию
-        from datetime import datetime
-        from sqlalchemy import and_
+        # Используем sync_product_id для надежного поиска всех синхронизированных копий
+        sync_id = prod.sync_product_id or prod.id
         
-        # Сначала деактивируем истекшие резервации
-        expired = db.query(models.Reservation).filter(
-            and_(
-                models.Reservation.product_id == prod.id,
-                models.Reservation.is_active == True,
-                models.Reservation.reserved_until <= datetime.utcnow()
-            )
+        # Находим все синхронизированные копии товара по sync_product_id
+        synced_products = db.query(models.Product).filter(
+            models.Product.user_id == prod.user_id,
+            models.Product.sync_product_id == sync_id
         ).all()
-        for exp in expired:
-            exp.is_active = False
         
-        if expired:
-            db.commit()
+        # Fallback: если sync_product_id не установлен, ищем по имени и цене (для обратной совместимости)
+        if not synced_products:
+            synced_products = db.query(models.Product).filter(
+                models.Product.user_id == prod.user_id,
+                models.Product.name == prod.name,
+                models.Product.price == prod.price
+            ).all()
         
-        # Получаем все активные резервации для подсчета
-        active_reservations = db.query(models.Reservation).filter(
+        # Проверяем активные резервации для всех синхронизированных копий
+        active_reservation = db.query(models.Reservation).filter(
             and_(
-                models.Reservation.product_id == prod.id,
+                models.Reservation.product_id.in_([p.id for p in synced_products]),
                 models.Reservation.is_active == True,
                 models.Reservation.reserved_until > datetime.utcnow()
             )
-        ).all()
+        ).first()
         
-        active_reservations_count = len(active_reservations)
+        has_reservation = active_reservation is not None
         
-        # Получаем первую резервацию для отображения информации (если есть)
-        reservation = active_reservations[0] if active_reservations else None
+        # Подсчитываем количество активных резерваций для всех синхронизированных копий товара
+        active_reservations_count = 0
+        if has_reservation:
+            active_reservations_count = db.query(models.Reservation).filter(
+                and_(
+                    models.Reservation.product_id.in_([p.id for p in synced_products]),
+                    models.Reservation.is_active == True,
+                    models.Reservation.reserved_until > datetime.utcnow()
+                )
+            ).count()
         
-        reservation_info = None
-        if reservation:
-            # Возвращаем время в UTC с указанием часового пояса (Z)
-            reserved_until_str = reservation.reserved_until.isoformat()
-            if not reserved_until_str.endswith('Z') and '+' not in reserved_until_str:
-                reserved_until_str += 'Z'
-            reservation_info = {
-                "reserved_until": reserved_until_str,
-                "reserved_by_user_id": reservation.reserved_by_user_id,
-                "id": reservation.id,
-                "active_count": active_reservations_count  # Количество активных резерваций
+        # Формируем объект резервации для фронтенда
+        reservation_data = None
+        if active_reservation:
+            reservation_data = {
+                "id": active_reservation.id,
+                "reserved_until": active_reservation.reserved_until.isoformat() if active_reservation.reserved_until else None,
+                "reserved_by_user_id": active_reservation.reserved_by_user_id,
+                "active_count": active_reservations_count
             }
-            print(f"DEBUG: Product {prod.id} '{prod.name}' has {active_reservations_count} active reservation(s), first until {reservation.reserved_until}, reserved_by={reservation.reserved_by_user_id}")
-        else:
-            print(f"DEBUG: Product {prod.id} '{prod.name}' has no active reservation")
         
-        # Создаем объект продукта с images_urls как список (теперь с полными HTTPS URL)
-        prod_dict = {
+        # Преобразуем is_made_to_order в bool
+        is_made_to_order = bool(getattr(prod, 'is_made_to_order', False))
+        
+        print(f"DEBUG: Product {prod.id} '{prod.name}' has {'active' if has_reservation else 'no active'} reservation")
+        print(f"DEBUG: Product {prod.id} '{prod.name}' - is_made_to_order raw={getattr(prod, 'is_made_to_order', False)} (type: {type(getattr(prod, 'is_made_to_order', False))}), converted={is_made_to_order}")
+        print(f"DEBUG: Product {prod.id} '{prod.name}' - images_urls: {len(images_list)} images")
+        if images_list:
+            first_image = images_list[0]
+            print(f"DEBUG: Product {prod.id} first image URL: {first_image}")
+            if '/api/images/' in first_image:
+                print(f"OK: Product {prod.id} image URL correctly uses /api/images/")
+            elif '/static/uploads/' in first_image:
+                print(f"WARNING: Product {prod.id} image URL still contains /static/uploads/ - should use /api/images/")
+        
+        result.append({
             "id": prod.id,
             "name": prod.name,
             "description": prod.description,
             "price": prod.price,
-            "image_url": image_url_full,  # Полный HTTPS URL для обратной совместимости
-            "images_urls": images_list,  # Массив полных HTTPS URL
+            "image_url": image_url_full,
+            "images_urls": images_list,
             "discount": prod.discount,
             "category_id": prod.category_id,
             "user_id": prod.user_id,
-            "is_hot_offer": bool(getattr(prod, 'is_hot_offer', False)),  # Горящее предложение
-            "quantity": getattr(prod, 'quantity', 0),  # Количество товара на складе
-            "is_made_to_order": bool(getattr(prod, 'is_made_to_order', False)),  # Товар под заказ (явное преобразование в bool)
-            "reservation": reservation_info
-        }
-        
-        # Отладочный вывод для проверки is_made_to_order
-        is_made_to_order_raw = getattr(prod, 'is_made_to_order', False)
-        is_made_to_order_value = bool(is_made_to_order_raw)
-        print(f"DEBUG: Product {prod.id} '{prod.name}' - is_made_to_order raw={is_made_to_order_raw} (type: {type(is_made_to_order_raw)}), converted={is_made_to_order_value}")
-        
-        result.append(prod_dict)
-        
-        print(f"DEBUG: Product {prod.id} '{prod.name}' - images_urls: {len(images_list)} images")
-        if images_list:
-            print(f"DEBUG: Product {prod.id} first image URL: {images_list[0]}")
-            # Проверяем, что URL использует /api/images/ вместо /static/uploads/
-            if '/static/uploads/' in images_list[0]:
-                print(f"WARNING: Product {prod.id} image URL still contains /static/uploads/ - should use /api/images/")
-            elif '/api/images/' in images_list[0]:
-                print(f"OK: Product {prod.id} image URL correctly uses /api/images/")
+            "is_hot_offer": getattr(prod, 'is_hot_offer', False),
+            "quantity": getattr(prod, 'quantity', 0),
+            "is_reserved": has_reservation,
+            "is_made_to_order": is_made_to_order,
+            "reservation": reservation_data
+        })
     
     return result
 
@@ -171,6 +1521,8 @@ async def create_product(
     discount: float = Form(0.0),
     is_hot_offer: bool = Form(False),
     quantity: int = Form(0),
+    bot_id: Optional[int] = Form(None, description="ID бота для независимых магазинов"),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     images: List[UploadFile] = File(None),
     db: Session = Depends(database.get_db)
 ):
@@ -228,19 +1580,64 @@ async def create_product(
     # Сохраняем массив URL в JSON строку
     images_urls_json = json.dumps(images_urls) if images_urls else None
 
+    # Если bot_id не указан, определяем его:
+    # 1. Из initData (если запрос от WebApp)
+    # 2. По user_id (если запрос от бота - находим подключенный бот пользователя)
+    final_bot_id = bot_id
+    if final_bot_id is None:
+        if x_telegram_init_data:
+            # Запрос от WebApp - определяем bot_id из initData
+            try:
+                from ..routers.context import get_validated_user_and_bot
+                _, final_bot_id = await get_validated_user_and_bot(x_telegram_init_data, db)
+                print(f"✅ Determined bot_id={final_bot_id} from initData for product creation")
+            except:
+                final_bot_id = None
+        else:
+            # Запрос от бота (localhost) - определяем bot_id по user_id
+            # Если у пользователя есть подключенный бот, используем его bot_id
+            user_bot = db.query(models.Bot).filter(
+                models.Bot.owner_user_id == user_id,
+                models.Bot.is_active == True
+            ).first()
+            if user_bot:
+                final_bot_id = user_bot.id
+                print(f"✅ Determined bot_id={final_bot_id} from user's connected bot for product creation")
+            else:
+                final_bot_id = None  # Основной бот
+                print(f"ℹ️ No connected bot found for user {user_id}, using main bot (bot_id=None)")
+
     db_product = models.Product(
         name=name,
         price=price,
         category_id=category_id,
         user_id=user_id,
+        bot_id=final_bot_id,  # Если bot_id указан - создаем для независимого магазина бота
         description=description,
         discount=discount,
         is_hot_offer=is_hot_offer,
         quantity=quantity,
         image_url=image_url,
-        images_urls=images_urls_json
+        images_urls=images_urls_json,
+        sync_product_id=None  # Будет установлен после получения ID
     )
     db.add(db_product)
+    db.flush()  # Получаем ID товара, но не коммитим
+    
+    # Устанавливаем sync_product_id:
+    # - Для товара в основном магазине (bot_id=None) - sync_product_id = id (сам на себя)
+    # - Для товара в магазине бота - sync_product_id будет установлен при синхронизации
+    if final_bot_id is None:
+        db_product.sync_product_id = db_product.id
+        db.flush()  # Сохраняем sync_product_id перед синхронизацией
+    else:
+        # Для товара в магазине бота - sync_product_id будет установлен при синхронизации
+        # если будет найден оригинальный товар в основном магазине
+        pass
+    
+    # Синхронизируем товар во все боты
+    sync_product_to_all_bots(db_product, db, action="create")
+    
     db.commit()
     db.refresh(db_product)
     
@@ -282,6 +1679,11 @@ def update_product(
     for key, value in product.model_dump().items():
         setattr(db_product, key, value)
     
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
     db.commit()
     db.refresh(db_product)
     return db_product
@@ -302,6 +1704,11 @@ def toggle_hot_offer(
         raise HTTPException(status_code=404, detail="Product not found")
     
     db_product.is_hot_offer = hot_offer_update.is_hot_offer
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
     db.commit()
     db.refresh(db_product)
     
@@ -333,6 +1740,11 @@ def update_price_discount(
     # Обновляем значения
     db_product.price = price_discount_update.price
     db_product.discount = price_discount_update.discount
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
     db.commit()
     db.refresh(db_product)
     
@@ -402,12 +1814,12 @@ def update_price_discount(
                 }
             
             # Отправляем уведомления через HTTP запрос к боту
+            # Используем токен подключенного бота админа, если он есть
             import requests
-            import os
             
-            bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+            bot_token = get_bot_token_for_notifications(user_id, db)
             if not bot_token:
-                print("❌ Notification: TELEGRAM_BOT_TOKEN not set")
+                print("❌ Notification: Bot token not available")
                 return {
                     "id": db_product.id,
                     "price": db_product.price,
@@ -496,9 +1908,20 @@ def update_name_description(
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
+    # КРИТИЧНО: Сохраняем старое имя для синхронизации
+    # Синхронизация ищет товар по имени, поэтому нужно использовать старое имя для поиска
+    old_name = db_product.name
+    old_price = db_product.price  # Также сохраняем цену для более точного поиска
+    
     # Обновляем значения
     db_product.name = name_description_update.name
     db_product.description = name_description_update.description
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    # Используем специальную функцию для синхронизации с переименованием
+    sync_product_to_all_bots_with_rename(db_product, db, old_name=old_name, old_price=old_price)
+    
     db.commit()
     db.refresh(db_product)
     
@@ -526,6 +1949,11 @@ def update_quantity(
     
     # Обновляем количество
     db_product.quantity = quantity_update.quantity
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
     db.commit()
     db.refresh(db_product)
     
@@ -552,6 +1980,11 @@ def update_made_to_order(
     
     # Обновляем статус 'под заказ'
     db_product.is_made_to_order = bool(made_to_order_update.is_made_to_order)
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
     db.commit()
     db.refresh(db_product)
     
@@ -565,29 +1998,13 @@ def update_made_to_order(
     }
 
 @router.delete("/{product_id}")
-def delete_product(
+async def delete_product(
     product_id: int,
     user_id: int = Query(...),
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
-    # Проверяем авторизацию через initData
-    if not x_telegram_init_data:
-        raise HTTPException(status_code=401, detail="Telegram initData is required")
-    
-    import os
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    if not bot_token:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
-    
-    try:
-        authenticated_user_id = get_user_id_from_init_data(x_telegram_init_data, bot_token)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
-    
-    # Проверяем, что пользователь является владельцем товара
+    # Проверяем, что товар существует и принадлежит пользователю
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -595,41 +2012,79 @@ def delete_product(
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Проверяем, что авторизованный пользователь является владельцем
-    if authenticated_user_id != user_id:
-        raise HTTPException(status_code=403, detail="You don't have permission to delete this product")
+    # Если есть initData - проверяем авторизацию через него (запрос от WebApp)
+    if x_telegram_init_data:
+        import os
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        
+        try:
+            # Используем функцию для валидации с любым ботом
+            authenticated_user_id, _, _ = await validate_init_data_multi_bot(
+                x_telegram_init_data,
+                db,
+                default_bot_token=bot_token if bot_token else None
+            )
+            
+            # Проверяем, что авторизованный пользователь является владельцем
+            if authenticated_user_id != user_id:
+                raise HTTPException(status_code=403, detail="You don't have permission to delete this product")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    # Если нет initData - это запрос от бота (localhost), проверяем только что user_id совпадает с владельцем товара
+    # (товар уже проверен выше, что он принадлежит user_id)
     
-    # Удаляем файлы изображений с диска
-    images_to_delete = []
+    # Сначала синхронизируем удаление товара во все боты (двусторонняя синхронизация)
+    # Это удалит все синхронизированные копии товара из БД
+    sync_product_to_all_bots(db_product, db, action="delete")
+    
+    # Теперь проверяем, используются ли файлы изображений другими товарами
+    # Собираем все пути к изображениям, которые нужно проверить
+    images_to_check = []
     
     # Получаем список изображений из images_urls
     if db_product.images_urls:
         try:
-            images_to_delete = json.loads(db_product.images_urls)
+            images_to_check = json.loads(db_product.images_urls)
         except:
             pass
     
     # Добавляем image_url если он есть и его нет в списке
-    if db_product.image_url and db_product.image_url not in images_to_delete:
-        images_to_delete.append(db_product.image_url)
+    if db_product.image_url and db_product.image_url not in images_to_check:
+        images_to_check.append(db_product.image_url)
     
-    # Удаляем файлы
-    for img_url in images_to_delete:
-        if img_url and img_url.startswith('/static/'):
-            file_path = img_url[1:]  # Убираем первый /
-            if os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                    print(f"DEBUG: Deleted image file: {file_path}")
-                except Exception as e:
-                    print(f"ERROR: Failed to delete image file {file_path}: {e}")
-    
+    # Удаляем товар из БД
     db.delete(db_product)
     db.commit()
+    
+    # НЕ удаляем файлы изображений автоматически!
+    # Файлы могут использоваться другими товарами (включая синхронизированные копии)
+    # или могут быть восстановлены позже
+    # Удаление файлов должно быть явным действием администратора
+    print(f"DEBUG: Product deleted, but image files are preserved (may be used by other products or synced copies)")
+    for img_url in images_to_check:
+        if img_url and img_url.startswith('/static/'):
+            file_path = img_url[1:]  # Убираем первый /
+            
+            # Проверяем, используется ли этот файл другими товарами
+            # Ищем товары с таким же image_url или в images_urls
+            other_products_with_image = db.query(models.Product).filter(
+                or_(
+                    models.Product.image_url == img_url,
+                    models.Product.images_urls.like(f'%{img_url}%')
+                )
+            ).count()
+            
+            if other_products_with_image > 0:
+                print(f"DEBUG: Image file {file_path} is still used by {other_products_with_image} other product(s), preserved")
+            else:
+                print(f"DEBUG: Image file {file_path} is not used by any other product, but preserved for safety (can be manually deleted later)")
+    
     return {"message": "Product deleted"}
     
 @router.post("/{product_id}/mark-sold")
-def mark_product_sold(
+async def mark_product_sold(
     product_id: int,
     user_id: int = Query(...),
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
@@ -642,11 +2097,14 @@ def mark_product_sold(
     
     import os
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    if not bot_token:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
     
     try:
-        authenticated_user_id = get_user_id_from_init_data(x_telegram_init_data, bot_token)
+        # Используем функцию для валидации с любым ботом
+        authenticated_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=bot_token if bot_token else None
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -664,12 +2122,14 @@ def mark_product_sold(
     if authenticated_user_id != user_id:
         raise HTTPException(status_code=403, detail="You don't have permission to mark this product as sold")
     
-    # Проверяем, что товар еще не продан
-    if db_product.is_sold:
-        raise HTTPException(status_code=400, detail="Product is already marked as sold")
-    
     # Помечаем товар как проданный
     db_product.is_sold = True
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
+    db.commit()
     
     # Создаем запись в истории продаж
     sold_product = models.SoldProduct(
@@ -686,75 +2146,9 @@ def mark_product_sold(
     )
     db.add(sold_product)
     db.commit()
-    db.refresh(sold_product)
     
     return {
-        "message": "Product marked as sold",
-        "product_id": product_id,
-        "sold_product_id": sold_product.id
+        "id": db_product.id,
+        "is_sold": True,
+        "message": "Товар помечен как проданный"
     }
-
-@router.get("/sold", response_model=List[dict])
-def get_sold_products(
-    user_id: int = Query(...),
-    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
-    db: Session = Depends(database.get_db)
-):
-    """Получает список проданных товаров (история продаж)"""
-    # Проверяем авторизацию через initData
-    if not x_telegram_init_data:
-        raise HTTPException(status_code=401, detail="Telegram initData is required")
-    
-    import os
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    if not bot_token:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
-    
-    try:
-        authenticated_user_id = get_user_id_from_init_data(x_telegram_init_data, bot_token)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
-    
-    # Проверяем, что авторизованный пользователь запрашивает свои продажи
-    if authenticated_user_id != user_id:
-        raise HTTPException(status_code=403, detail="You don't have permission to view these sold products")
-    
-    # Получаем проданные товары, отсортированные по дате продажи (новые сначала)
-    sold_products = db.query(models.SoldProduct).filter(
-        models.SoldProduct.user_id == user_id
-    ).order_by(models.SoldProduct.sold_at.desc()).all()
-    
-    result = []
-    for sold in sold_products:
-        # Преобразуем images_urls из JSON строки в список
-        images_list = []
-        if sold.images_urls:
-            try:
-                images_list = json.loads(sold.images_urls)
-            except:
-                images_list = []
-        
-        # Для обратной совместимости: если есть image_url, но нет images_urls, добавляем его
-        if not images_list and sold.image_url:
-            images_list = [sold.image_url]
-        
-        # Преобразуем относительные пути в полные HTTPS URL
-        images_list = [make_full_url(img_url) for img_url in images_list if img_url]
-        image_url_full = make_full_url(sold.image_url) if sold.image_url else None
-        
-        result.append({
-            "id": sold.id,
-            "product_id": sold.product_id,
-            "name": sold.name,
-            "description": sold.description,
-            "price": sold.price,
-            "discount": sold.discount,
-            "image_url": image_url_full,
-            "images_urls": images_list,
-            "category_id": sold.category_id,
-            "sold_at": sold.sold_at.isoformat() if sold.sold_at else None
-        })
-    
-    return result

@@ -83,9 +83,12 @@ export async function getContext(shopOwnerId = null) {
 }
 
 // Загрузка категорий (не требует авторизации - только просмотр)
-export async function fetchCategories(shopOwnerId) {
-    const url = `${API_BASE}/api/categories/?user_id=${shopOwnerId}`;
-    console.log("📂 Fetching categories from:", url);
+export async function fetchCategories(shopOwnerId, botId = null) {
+    let url = `${API_BASE}/api/categories/?user_id=${shopOwnerId}`;
+    if (botId !== null && botId !== undefined) {
+        url += `&bot_id=${botId}`;
+    }
+    console.log("📂 Fetching categories from:", url, "botId:", botId);
     const response = await fetch(url, {
         headers: getBaseHeadersNoAuth()
     });
@@ -100,12 +103,15 @@ export async function fetchCategories(shopOwnerId) {
 }
 
 // Загрузка товаров (не требует авторизации - только просмотр)
-export async function fetchProducts(shopOwnerId, categoryId = null) {
+export async function fetchProducts(shopOwnerId, categoryId = null, botId = null) {
     let url = `${API_BASE}/api/products/?user_id=${shopOwnerId}`;
     if (categoryId !== null) {
         url += `&category_id=${categoryId}`;
     }
-    console.log("📦 Fetching products from:", url);
+    if (botId !== null && botId !== undefined) {
+        url += `&bot_id=${botId}`;
+    }
+    console.log("📦 Fetching products from:", url, "botId:", botId);
     const response = await fetch(url, {
         headers: getBaseHeadersNoAuth()
     });
@@ -598,6 +604,63 @@ export async function completeOrderAPI(orderId) {
 }
 
 // Отменить заказ (владелец магазина или заказчик)
+// Получить статистику посещений
+export async function getVisitStatsAPI() {
+    const url = `${API_BASE}/api/shop-visits/stats`;
+    console.log(`Fetching visit stats from: ${url}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Visit stats error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Visit stats fetched:`, data);
+    return data;
+}
+
+// Получить список посещений
+export async function getVisitsListAPI(limit = 50, offset = 0) {
+    const url = `${API_BASE}/api/shop-visits/list?limit=${limit}&offset=${offset}`;
+    console.log(`Fetching visits list from: ${url}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Visits list error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Visits list fetched: ${data.length}`);
+    return data;
+}
+
+// Получить статистику просмотров товаров
+export async function getProductViewStatsAPI(limit = 20) {
+    const url = `${API_BASE}/api/shop-visits/product-stats?limit=${limit}`;
+    console.log(`Fetching product view stats from: ${url}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Product view stats error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Product view stats fetched: ${data.length}`);
+    return data;
+}
+
 export async function cancelOrderAPI(orderId) {
     const url = `${API_BASE}/api/orders/${orderId}`;
     console.log(`Cancel order URL: ${url}`);

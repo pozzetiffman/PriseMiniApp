@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 from .db import database, models
-from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders
+from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots
 
 # Создаем таблицы базы данных
 models.Base.metadata.create_all(bind=database.engine)
@@ -83,6 +83,7 @@ app.include_router(reservations.router)
 app.include_router(shop_settings.router)
 app.include_router(shop_visits.router)
 app.include_router(orders.router)
+app.include_router(bots.router)
 
 @app.get("/")
 async def root():
@@ -110,10 +111,27 @@ async def proxy_image(filename: str):
     if '/' in filename or '..' in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     
-    file_path = f"static/uploads/{filename}"
+    # Используем абсолютный путь относительно корня проекта
+    backend_dir = Path(__file__).parent.parent
+    file_path = backend_dir / "static" / "uploads" / filename
     
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Image not found")
+    if not file_path.exists():
+        # Пробуем альтернативный путь (если файл в корне backend)
+        alt_path = Path("static/uploads") / filename
+        if alt_path.exists():
+            file_path = alt_path
+        else:
+            # Логируем для отладки
+            print(f"❌ Image not found: {filename}")
+            print(f"   Tried path 1: {file_path}")
+            print(f"   Tried path 2: {alt_path}")
+            print(f"   Backend dir: {backend_dir}")
+            print(f"   Static dir exists: {(backend_dir / 'static' / 'uploads').exists()}")
+            if (backend_dir / "static" / "uploads").exists():
+                # Показываем список файлов в директории
+                files = list((backend_dir / "static" / "uploads").glob("*"))
+                print(f"   Files in directory: {[f.name for f in files[:10]]}")
+            raise HTTPException(status_code=404, detail=f"Image not found: {filename}")
     
     # Определяем MIME type по расширению
     ext = filename.lower().split('.')[-1] if '.' in filename else ''
@@ -127,7 +145,7 @@ async def proxy_image(filename: str):
     media_type = media_types.get(ext, 'image/jpeg')
     
     return FileResponse(
-        file_path,
+        str(file_path),
         media_type=media_type,
         headers={
             "Cache-Control": "public, max-age=31536000",

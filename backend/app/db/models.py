@@ -9,6 +9,7 @@ class Category(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     user_id = Column(BigInteger, index=True)  # ID пользователя Telegram
+    bot_id = Column(Integer, ForeignKey("bots.id"), nullable=True, index=True)  # ID бота (для независимых магазинов)
     
     products = relationship("Product", back_populates="category", cascade="all, delete-orphan")
 
@@ -23,6 +24,8 @@ class Product(Base):
     images_urls = Column(Text, nullable=True)  # JSON массив URL изображений (до 5 фото)
     discount = Column(Float, default=0.0)  # Скидка в процентах
     user_id = Column(BigInteger, index=True)  # ID пользователя Telegram
+    bot_id = Column(Integer, ForeignKey("bots.id"), nullable=True, index=True)  # ID бота (для независимых магазинов)
+    sync_product_id = Column(Integer, ForeignKey("products.id"), nullable=True, index=True)  # ID оригинального товара в основном магазине (для синхронизации)
     is_hot_offer = Column(Boolean, default=False)  # Горящее предложение
     quantity = Column(Integer, default=0)  # Количество товара на складе
     is_sold = Column(Boolean, default=False)  # Продан ли товар (скрыт с витрины)
@@ -58,12 +61,13 @@ class ShopSettings(Base):
     __tablename__ = "shop_settings"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(BigInteger, unique=True, index=True)  # ID владельца магазина (уникальный)
+    user_id = Column(BigInteger, index=True)  # ID владельца магазина (общий для всех ботов пользователя)
+    bot_id = Column(Integer, ForeignKey("bots.id"), nullable=True, index=True)  # ID бота (для индивидуальных настроек)
     reservations_enabled = Column(Boolean, default=True)  # Включена ли резервация товаров
     quantity_enabled = Column(Boolean, default=True)  # Включен ли показ количества товаров и учет резервации
-    shop_name = Column(String, nullable=True)  # Название магазина
-    welcome_image_url = Column(String, nullable=True)  # Приветственное изображение/логотип магазина
-    welcome_description = Column(Text, nullable=True)  # Приветственное описание/примечание магазина
+    shop_name = Column(String, nullable=True)  # Название магазина (индивидуальное для каждого бота)
+    welcome_image_url = Column(String, nullable=True)  # Приветственное изображение/логотип магазина (индивидуальное)
+    welcome_description = Column(Text, nullable=True)  # Приветственное описание/примечание магазина (индивидуальное)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -109,6 +113,28 @@ class Order(Base):
     is_cancelled = Column(Boolean, default=False)  # Отменен ли заказ
     
     product = relationship("Product", backref="orders")
+
+class WebAppContext(Base):
+    __tablename__ = "webapp_contexts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    viewer_id = Column(BigInteger, unique=True, index=True)  # ID того, кто нажал кнопку (уникальный)
+    shop_owner_id = Column(BigInteger, index=True)  # ID владельца магазина
+    chat_id = Column(BigInteger, nullable=True)  # ID группы (опционально, для аналитики)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время создания контекста
+    # TTL: контекст живет 1 час (3600 секунд)
+
+class Bot(Base):
+    __tablename__ = "bots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bot_token = Column(String, unique=True, index=True)  # Токен бота пользователя
+    bot_username = Column(String, unique=True, index=True)  # @username бота (без @)
+    owner_user_id = Column(BigInteger, index=True)  # ID владельца (Telegram user_id)
+    is_active = Column(Boolean, default=True)  # Активен ли бот
+    direct_link_name = Column(String, nullable=True)  # Название Direct Link (например, "shop", "TGshowcase_bot")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время регистрации
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # Время обновления
 
 
 

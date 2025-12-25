@@ -9,7 +9,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from ..db import models, database
 from ..models import order as schemas
-from ..utils.telegram_auth import get_user_id_from_init_data
+from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -23,8 +23,35 @@ print(f"DEBUG: Order router initialized - TELEGRAM_BOT_TOKEN={'SET' if TELEGRAM_
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
+def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
+    """
+    Получает токен бота для отправки уведомлений.
+    Если у владельца магазина есть подключенный бот, использует его токен.
+    Иначе использует токен основного бота.
+    
+    Args:
+        shop_owner_id: ID владельца магазина
+        db: Сессия базы данных
+        
+    Returns:
+        Токен бота для отправки уведомлений
+    """
+    # Ищем подключенного бота для этого владельца магазина
+    connected_bot = db.query(models.Bot).filter(
+        models.Bot.owner_user_id == shop_owner_id,
+        models.Bot.is_active == True
+    ).first()
+    
+    if connected_bot and connected_bot.bot_token:
+        print(f"✅ Using connected bot token for user {shop_owner_id} (bot_id={connected_bot.id})")
+        return connected_bot.bot_token
+    
+    # Если подключенного бота нет, используем основной токен
+    print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
+    return TELEGRAM_BOT_TOKEN
+
 @router.post("/", response_model=schemas.Order)
-def create_order(
+async def create_order(
     product_id: int = Query(...),
     quantity: int = Query(..., ge=1),  # Минимум 1
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
@@ -34,11 +61,12 @@ def create_order(
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
-    if not TELEGRAM_BOT_TOKEN:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
-    
     try:
-        ordered_by_user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        ordered_by_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -96,12 +124,16 @@ def create_order(
     print(f"DEBUG: Order created successfully - id={order.id}, product_id={order.product_id}")
     
     # Отправляем уведомление владельцу магазина через Telegram Bot API
-    if TELEGRAM_BOT_TOKEN and WEBAPP_URL and TELEGRAM_API_URL:
+    # Используем токен подключенного бота админа, если он есть
+    bot_token_for_notifications = get_bot_token_for_notifications(product.user_id, db)
+    bot_api_url = f"https://api.telegram.org/bot{bot_token_for_notifications}"
+    
+    if bot_token_for_notifications and WEBAPP_URL:
         try:
             print(f"DEBUG: Getting user info for ordered_by_user_id={ordered_by_user_id}, product owner={product.user_id}")
             
             # Получаем информацию о пользователе, который заказал
-            user_info_url = f"{TELEGRAM_API_URL}/getChat"
+            user_info_url = f"{bot_api_url}/getChat"
             ordered_by_name = "Пользователь"
             
             try:
@@ -164,7 +196,7 @@ def create_order(
             }
             
             # Отправляем уведомление
-            send_message_url = f"{TELEGRAM_API_URL}/sendMessage"
+            send_message_url = f"{bot_api_url}/sendMessage"
             print(f"DEBUG: Sending notification to user {product.user_id}, URL: {send_message_url}")
             print(f"DEBUG: Message: {message[:100]}...")
             print(f"DEBUG: Keyboard: {keyboard}")
@@ -198,12 +230,12 @@ def create_order(
             import traceback
             traceback.print_exc()
     else:
-        print(f"WARNING: Cannot send notification - TELEGRAM_BOT_TOKEN={bool(TELEGRAM_BOT_TOKEN)}, WEBAPP_URL={bool(WEBAPP_URL)}, TELEGRAM_API_URL={bool(TELEGRAM_API_URL)}")
+        print(f"WARNING: Cannot send notification - bot_token={bool(bot_token_for_notifications)}, WEBAPP_URL={bool(WEBAPP_URL)}")
     
     return order
 
 @router.get("/shop", response_model=List[schemas.Order])
-def get_shop_orders(
+async def get_shop_orders(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
@@ -211,11 +243,12 @@ def get_shop_orders(
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
-    if not TELEGRAM_BOT_TOKEN:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
-    
     try:
-        user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -232,18 +265,25 @@ def get_shop_orders(
     ).order_by(models.Order.created_at.desc()).all()
     
     # Преобразуем images_urls из JSON строки в список для каждого заказа
+    # И обрабатываем случай, когда товар был удален (product=None)
     for order in orders:
-        if order.product and order.product.images_urls:
-            if isinstance(order.product.images_urls, str):
-                try:
-                    order.product.images_urls = json.loads(order.product.images_urls)
-                except (json.JSONDecodeError, TypeError):
-                    order.product.images_urls = []
+        if order.product:
+            if order.product.images_urls:
+                if isinstance(order.product.images_urls, str):
+                    try:
+                        order.product.images_urls = json.loads(order.product.images_urls)
+                    except (json.JSONDecodeError, TypeError):
+                        order.product.images_urls = []
+        else:
+            # Если товар был удален, устанавливаем product_id в None для корректной сериализации
+            if order.product_id is not None:
+                # Товар был удален, но product_id еще есть - оставляем как есть
+                pass
     
     return orders
 
 @router.get("/my", response_model=List[schemas.Order])
-def get_my_orders(
+async def get_my_orders(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
@@ -251,23 +291,26 @@ def get_my_orders(
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
-    if not TELEGRAM_BOT_TOKEN:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
-    
     try:
-        user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
-    # Получаем заказы, где пользователь - заказчик, и заказ не отменен
+    # Получаем заказы, где пользователь - заказчик, заказ не отменен и не завершен
+    # В корзине показываем только активные заказы (не завершенные и не отмененные)
     orders = db.query(models.Order).options(
         joinedload(models.Order.product)
     ).filter(
         and_(
             models.Order.ordered_by_user_id == user_id,
-            models.Order.is_cancelled == False
+            models.Order.is_cancelled == False,
+            models.Order.is_completed == False  # Не показываем завершенные заказы в корзине
         )
     ).order_by(models.Order.created_at.desc()).all()
     
@@ -283,7 +326,7 @@ def get_my_orders(
     return orders
 
 @router.patch("/{order_id}/complete")
-def complete_order(
+async def complete_order(
     order_id: int,
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
@@ -292,11 +335,12 @@ def complete_order(
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
-    if not TELEGRAM_BOT_TOKEN:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
-    
     try:
-        user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -333,7 +377,7 @@ def complete_order(
     return {"message": "Order completed", "order": order}
 
 @router.delete("/{order_id}")
-def cancel_order(
+async def cancel_order(
     order_id: int,
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
@@ -342,11 +386,12 @@ def cancel_order(
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
-    if not TELEGRAM_BOT_TOKEN:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
-    
     try:
-        user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:

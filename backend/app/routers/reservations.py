@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from ..db import models, database
 from ..models import reservation as schemas
-from ..utils.telegram_auth import get_user_id_from_init_data
+from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -22,8 +22,35 @@ print(f"DEBUG: Reservation router initialized - TELEGRAM_BOT_TOKEN={'SET' if TEL
 
 router = APIRouter(prefix="/api/reservations", tags=["reservations"])
 
+def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
+    """
+    Получает токен бота для отправки уведомлений.
+    Если у владельца магазина есть подключенный бот, использует его токен.
+    Иначе использует токен основного бота.
+    
+    Args:
+        shop_owner_id: ID владельца магазина
+        db: Сессия базы данных
+        
+    Returns:
+        Токен бота для отправки уведомлений
+    """
+    # Ищем подключенного бота для этого владельца магазина
+    connected_bot = db.query(models.Bot).filter(
+        models.Bot.owner_user_id == shop_owner_id,
+        models.Bot.is_active == True
+    ).first()
+    
+    if connected_bot and connected_bot.bot_token:
+        print(f"✅ Using connected bot token for user {shop_owner_id} (bot_id={connected_bot.id})")
+        return connected_bot.bot_token
+    
+    # Если подключенного бота нет, используем основной токен
+    print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
+    return TELEGRAM_BOT_TOKEN
+
 @router.post("/", response_model=schemas.Reservation)
-def create_reservation(
+async def create_reservation(
     product_id: int = Query(...),
     hours: int = Query(..., ge=1, le=3),  # От 1 до 3 часов
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
@@ -33,11 +60,13 @@ def create_reservation(
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
-    if not TELEGRAM_BOT_TOKEN:
-        raise HTTPException(status_code=500, detail="Bot token is not configured")
-    
     try:
-        reserved_by_user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        # Используем функцию для валидации с любым ботом
+        reserved_by_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -215,29 +244,65 @@ def create_reservation(
     print(f"DEBUG: All checks passed! Creating reservation for user {reserved_by_user_id}, product {product_id}")
     print(f"DEBUG: Creating reservation - reserved_until={reserved_until}")
     
-    reservation = models.Reservation(
-        product_id=product_id,
-        user_id=product.user_id,  # Владелец магазина
-        reserved_by_user_id=reserved_by_user_id,
-        reserved_until=reserved_until,
-        is_active=True
-    )
+    # Находим все синхронизированные копии товара по sync_product_id (надежный способ)
+    # чтобы создать резервации для всех копий
+    sync_id = product.sync_product_id or product.id
+    synced_products = db.query(models.Product).filter(
+        models.Product.user_id == product.user_id,
+        models.Product.sync_product_id == sync_id
+    ).all()
     
-    db.add(reservation)
+    # Fallback: если не нашли по sync_product_id, ищем по имени и цене (для обратной совместимости)
+    if not synced_products:
+        synced_products = db.query(models.Product).filter(
+            models.Product.user_id == product.user_id,
+            models.Product.name == product.name,
+            models.Product.price == product.price
+        ).all()
+        # Если нашли по имени и цене, устанавливаем sync_product_id для всех найденных товаров
+        if synced_products:
+            for p in synced_products:
+                if not p.sync_product_id:
+                    p.sync_product_id = sync_id
+            db.commit()
+    
+    print(f"DEBUG: Found {len(synced_products)} synced products for reservation (name='{product.name}', price={product.price}, sync_id={sync_id})")
+    
+    created_reservations = []
+    for synced_product in synced_products:
+        reservation = models.Reservation(
+            product_id=synced_product.id,
+            user_id=synced_product.user_id,  # Владелец магазина
+            reserved_by_user_id=reserved_by_user_id,
+            reserved_until=reserved_until,
+            is_active=True
+        )
+        db.add(reservation)
+        created_reservations.append(reservation)
+        print(f"DEBUG: Created reservation for product_id={synced_product.id} (bot_id={synced_product.bot_id})")
+    
     db.commit()
-    db.refresh(reservation)
+    for res in created_reservations:
+        db.refresh(res)
     
-    print(f"DEBUG: Reservation created successfully - id={reservation.id}, product_id={reservation.product_id}, reserved_until={reservation.reserved_until}")
-    print(f"DEBUG: Notification check - TELEGRAM_BOT_TOKEN={'SET' if TELEGRAM_BOT_TOKEN else 'NOT SET'}, WEBAPP_URL={WEBAPP_URL}, TELEGRAM_API_URL={'SET' if TELEGRAM_API_URL else 'NOT SET'}")
+    # Используем первую резервацию для возврата (оригинальный товар)
+    reservation = created_reservations[0] if created_reservations else None
+    
+    print(f"DEBUG: Reservation created successfully - {len(created_reservations)} reservations for {len(synced_products)} products, main reservation_id={reservation.id if reservation else None}, product_id={reservation.product_id if reservation else None}, reserved_until={reserved_until}")
+    print(f"DEBUG: Notification check - TELEGRAM_BOT_TOKEN={'SET' if TELEGRAM_BOT_TOKEN else 'NOT SET'}, WEBAPP_URL={WEBAPP_URL}")
     
     # Отправляем уведомление владельцу магазина через Telegram Bot API (в фоне)
-    if TELEGRAM_BOT_TOKEN and WEBAPP_URL and TELEGRAM_API_URL:
+    # Используем токен подключенного бота админа, если он есть
+    bot_token_for_notifications = get_bot_token_for_notifications(product.user_id, db)
+    bot_api_url = f"https://api.telegram.org/bot{bot_token_for_notifications}"
+    
+    if bot_token_for_notifications and WEBAPP_URL:
         try:
             print(f"DEBUG: Getting user info for reserved_by_user_id={reserved_by_user_id}, product owner={product.user_id}")
             
             # Получаем информацию о пользователе, который зарезервировал
             # Используем getUserProfilePhotos или просто формируем имя из ID
-            user_info_url = f"{TELEGRAM_API_URL}/getChat"
+            user_info_url = f"{bot_api_url}/getChat"
             reserved_by_name = "Пользователь"
             
             try:
@@ -310,7 +375,7 @@ def create_reservation(
             }
             
             # Отправляем уведомление
-            send_message_url = f"{TELEGRAM_API_URL}/sendMessage"
+            send_message_url = f"{bot_api_url}/sendMessage"
             print(f"DEBUG: Sending notification to user {product.user_id}, URL: {send_message_url}")
             print(f"DEBUG: Message: {message[:100]}...")
             print(f"DEBUG: Keyboard: {keyboard}")
@@ -344,7 +409,7 @@ def create_reservation(
             import traceback
             traceback.print_exc()
     else:
-        print(f"WARNING: Cannot send notification - TELEGRAM_BOT_TOKEN={bool(TELEGRAM_BOT_TOKEN)}, WEBAPP_URL={bool(WEBAPP_URL)}, TELEGRAM_API_URL={bool(TELEGRAM_API_URL)}")
+        print(f"WARNING: Cannot send notification - bot_token={bool(bot_token_for_notifications)}, WEBAPP_URL={bool(WEBAPP_URL)}")
     
     # Возвращаем резервацию (Pydantic автоматически сериализует)
     return reservation
@@ -354,10 +419,20 @@ def get_product_reservation(
     product_id: int,
     db: Session = Depends(database.get_db)
 ):
-    """Получить активную резервацию товара"""
-    reservation = db.query(models.Reservation).filter(
+    """Получить активную резервацию товара (проверяет все синхронизированные копии)"""
+    # Получаем товар
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        return None
+    
+    # Проверяем резервацию для этого товара И для всех синхронизированных копий (по имени и цене)
+    reservation = db.query(models.Reservation).join(
+        models.Product, models.Reservation.product_id == models.Product.id
+    ).filter(
         and_(
-            models.Reservation.product_id == product_id,
+            models.Product.user_id == product.user_id,
+            models.Product.name == product.name,
+            models.Product.price == product.price,
             models.Reservation.is_active == True,
             models.Reservation.reserved_until > datetime.utcnow()
         )
@@ -366,7 +441,7 @@ def get_product_reservation(
     return reservation
 
 @router.delete("/{reservation_id}")
-def cancel_reservation(
+async def cancel_reservation(
     reservation_id: int,
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
@@ -379,7 +454,11 @@ def cancel_reservation(
         raise HTTPException(status_code=500, detail="Bot token is not configured")
     
     try:
-        user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -425,15 +504,43 @@ def cancel_reservation(
     
     print(f"DEBUG: Canceling reservation {reservation_id} by user {user_id} (owner={reservation.user_id}, reserved_by={reservation.reserved_by_user_id})")
     
-    reservation.is_active = False
+    # Отменяем резервацию для всех синхронизированных копий товара
+    # Находим товар, для которого создана резервация
+    original_product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
+    if original_product:
+        # Находим все синхронизированные копии товара (по имени и цене)
+        synced_products = db.query(models.Product).filter(
+            models.Product.user_id == original_product.user_id,
+            models.Product.name == original_product.name,
+            models.Product.price == original_product.price
+        ).all()
+        
+        # Отменяем все резервации для всех синхронизированных копий товара
+        # с тем же reserved_by_user_id и reserved_until
+        canceled_count = db.query(models.Reservation).filter(
+            and_(
+                models.Reservation.product_id.in_([p.id for p in synced_products]),
+                models.Reservation.reserved_by_user_id == reservation.reserved_by_user_id,
+                models.Reservation.reserved_until == reservation.reserved_until,
+                models.Reservation.is_active == True
+            )
+        ).update({"is_active": False}, synchronize_session=False)
+        
+        print(f"DEBUG: Canceled {canceled_count} reservations for synced products (name='{original_product.name}', price={original_product.price})")
+    else:
+        # Если товар не найден, отменяем только эту резервацию
+        reservation.is_active = False
+        canceled_count = 1
+        print(f"DEBUG: Original product not found, canceling only reservation {reservation_id}")
+    
     db.commit()
     
-    print(f"DEBUG: Reservation {reservation_id} cancelled successfully")
+    print(f"DEBUG: Reservation {reservation_id} canceled successfully (total: {canceled_count} reservations)")
     
     return {"message": "Reservation cancelled"}
 
 @router.get("/user/me", response_model=List[schemas.Reservation])
-def get_user_reservations(
+async def get_user_reservations(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
@@ -450,7 +557,11 @@ def get_user_reservations(
         raise HTTPException(status_code=500, detail="Bot token is not configured")
     
     try:
-        user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -473,13 +584,25 @@ def get_user_reservations(
         )
     ).order_by(models.Reservation.created_at.desc()).all()
     
-    print(f"🛒 Found {len(reservations)} total active reservations")
+    # Фильтруем резервации, у которых товар существует (товар мог быть удален)
+    valid_reservations = []
+    for reservation in reservations:
+        product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
+        if product:
+            valid_reservations.append(reservation)
+        else:
+            # Товар был удален, деактивируем резервацию
+            reservation.is_active = False
+            db.commit()
+            print(f"⚠️ Deactivated reservation {reservation.id} - product {reservation.product_id} not found")
+    
+    print(f"🛒 Found {len(valid_reservations)} valid active reservations (filtered {len(reservations) - len(valid_reservations)} with deleted products)")
     print(f"🛒 ========== get_user_reservations END ==========")
     
-    return reservations
+    return valid_reservations
 
 @router.get("/cart", response_model=List[schemas.Reservation])
-def get_cart_reservations(
+async def get_cart_reservations(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
@@ -491,7 +614,11 @@ def get_cart_reservations(
         raise HTTPException(status_code=500, detail="Bot token is not configured")
     
     try:
-        user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -507,11 +634,38 @@ def get_cart_reservations(
         )
     ).order_by(models.Reservation.created_at.desc()).all()
     
-    return reservations
+    # Фильтруем резервации, у которых товар существует (товар мог быть удален)
+    # И группируем по sync_product_id, чтобы не показывать дубликаты синхронизированных товаров
+    valid_reservations = []
+    seen_sync_ids = set()  # Для отслеживания уже добавленных товаров по sync_product_id
+    
+    for reservation in reservations:
+        product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
+        if product:
+            # Используем sync_product_id для группировки (если есть) или product_id
+            sync_id = product.sync_product_id or product.id
+            
+            # Если это первый раз, когда мы видим этот sync_product_id, добавляем резервацию
+            if sync_id not in seen_sync_ids:
+                valid_reservations.append(reservation)
+                seen_sync_ids.add(sync_id)
+                print(f"✅ Added reservation {reservation.id} for product {product.id} (sync_id={sync_id}) to cart")
+            else:
+                # Это дубликат синхронизированного товара - пропускаем
+                print(f"⏭️ Skipped duplicate reservation {reservation.id} for product {product.id} (sync_id={sync_id} already in cart)")
+        else:
+            # Товар был удален, деактивируем резервацию
+            reservation.is_active = False
+            db.commit()
+            print(f"⚠️ Deactivated reservation {reservation.id} - product {reservation.product_id} not found")
+    
+    print(f"📦 Cart: {len(valid_reservations)} unique products (from {len(reservations)} total reservations)")
+    
+    return valid_reservations
 
 # Временная поддержка старого endpoint для обратной совместимости
 @router.get("/user/{user_id}", response_model=List[schemas.Reservation])
-def get_user_reservations_legacy(
+async def get_user_reservations_legacy(
     user_id: int,
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
@@ -522,7 +676,11 @@ def get_user_reservations_legacy(
     # Если есть initData, используем его для валидации
     if x_telegram_init_data and TELEGRAM_BOT_TOKEN:
         try:
-            validated_user_id = get_user_id_from_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
+            validated_user_id, _, _ = await validate_init_data_multi_bot(
+                x_telegram_init_data,
+                db,
+                default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+            )
             # Проверяем, что запрашиваемый user_id совпадает с валидированным
             if validated_user_id != user_id:
                 raise HTTPException(
@@ -547,5 +705,17 @@ def get_user_reservations_legacy(
         )
     ).order_by(models.Reservation.created_at.desc()).all()
     
-    return reservations
+    # Фильтруем резервации, у которых товар существует (товар мог быть удален)
+    valid_reservations = []
+    for reservation in reservations:
+        product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
+        if product:
+            valid_reservations.append(reservation)
+        else:
+            # Товар был удален, деактивируем резервацию
+            reservation.is_active = False
+            db.commit()
+            print(f"⚠️ Deactivated reservation {reservation.id} - product {reservation.product_id} not found")
+    
+    return valid_reservations
 

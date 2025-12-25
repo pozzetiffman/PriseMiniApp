@@ -1121,6 +1121,77 @@ main {
     display: block;
 }
 
+/* Статистика */
+.stats-content {
+    padding: 0;
+}
+
+.stats-section {
+    margin-bottom: 24px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.stat-card {
+    background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--tg-theme-link-color, #5ac8fa);
+    margin-bottom: 8px;
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color);
+    line-height: 1.3;
+}
+
+.top-products-list {
+    padding: 0;
+}
+
+.top-product-item {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.top-product-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.recent-visits-list {
+    padding: 0;
+}
+
+.visit-item {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.visit-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
 /* Список проданных товаров */
 .sold-products-list {
     padding: 0;

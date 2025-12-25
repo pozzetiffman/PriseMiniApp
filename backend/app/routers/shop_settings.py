@@ -10,7 +10,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from ..db import database, models
 from ..models import shop_settings as schemas
-from ..utils.telegram_auth import validate_telegram_init_data
+from ..utils.telegram_auth import validate_telegram_init_data, validate_init_data_multi_bot
 
 load_dotenv()
 
@@ -20,26 +20,144 @@ API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "https://unmaneuvered-chronogrammat
 router = APIRouter(prefix="/api/shop-settings", tags=["shop-settings"])
 
 
+def sync_shop_settings_to_all_bots(db_settings: models.ShopSettings, db: Session, action: str = "update"):
+    """
+    Синхронизирует настройки магазина во все боты пользователя (двусторонняя синхронизация).
+    
+    action: "update"
+    """
+    user_id = db_settings.user_id
+    
+    # Находим все подключенные боты пользователя
+    connected_bots = db.query(models.Bot).filter(
+        models.Bot.owner_user_id == user_id,
+        models.Bot.is_active == True
+    ).all()
+    
+    if db_settings.bot_id is None:
+        # Настройки в основном боте - синхронизируем во все подключенные боты
+        for bot in connected_bots:
+            # Находим или создаем настройки для этого бота
+            bot_settings = db.query(models.ShopSettings).filter(
+                models.ShopSettings.user_id == user_id,
+                models.ShopSettings.bot_id == bot.id
+            ).first()
+            
+            if not bot_settings:
+                # Создаем настройки для этого бота
+                bot_settings = models.ShopSettings(
+                    user_id=user_id,
+                    bot_id=bot.id,
+                    reservations_enabled=db_settings.reservations_enabled,
+                    quantity_enabled=db_settings.quantity_enabled,
+                    shop_name=db_settings.shop_name,
+                    welcome_image_url=db_settings.welcome_image_url,
+                    welcome_description=db_settings.welcome_description,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(bot_settings)
+                print(f"🔄 Synced shop settings to bot {bot.id} (CREATE)")
+            else:
+                # Обновляем существующие настройки
+                bot_settings.reservations_enabled = db_settings.reservations_enabled
+                bot_settings.quantity_enabled = db_settings.quantity_enabled
+                bot_settings.shop_name = db_settings.shop_name
+                bot_settings.welcome_image_url = db_settings.welcome_image_url
+                bot_settings.welcome_description = db_settings.welcome_description
+                bot_settings.updated_at = datetime.utcnow()
+                print(f"🔄 Synced shop settings to bot {bot.id} (UPDATE)")
+    
+    else:
+        # Настройки в подключенном боте - синхронизируем в основной бот И во все другие подключенные боты
+        # 1. Синхронизируем в основной бот
+        main_settings = db.query(models.ShopSettings).filter(
+            models.ShopSettings.user_id == user_id,
+            models.ShopSettings.bot_id == None
+        ).first()
+        
+        if not main_settings:
+            # Создаем настройки в основном боте
+            main_settings = models.ShopSettings(
+                user_id=user_id,
+                bot_id=None,
+                reservations_enabled=db_settings.reservations_enabled,
+                quantity_enabled=db_settings.quantity_enabled,
+                shop_name=db_settings.shop_name,
+                welcome_image_url=db_settings.welcome_image_url,
+                welcome_description=db_settings.welcome_description,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(main_settings)
+            print(f"🔄 Synced shop settings to main bot (CREATE)")
+        else:
+            # Обновляем настройки в основном боте
+            main_settings.reservations_enabled = db_settings.reservations_enabled
+            main_settings.quantity_enabled = db_settings.quantity_enabled
+            main_settings.shop_name = db_settings.shop_name
+            main_settings.welcome_image_url = db_settings.welcome_image_url
+            main_settings.welcome_description = db_settings.welcome_description
+            main_settings.updated_at = datetime.utcnow()
+            print(f"🔄 Synced shop settings to main bot (UPDATE)")
+        
+        # 2. Синхронизируем во все другие подключенные боты (кроме текущего)
+        for bot in connected_bots:
+            if bot.id == db_settings.bot_id:
+                continue  # Пропускаем текущий бот
+            
+            bot_settings = db.query(models.ShopSettings).filter(
+                models.ShopSettings.user_id == user_id,
+                models.ShopSettings.bot_id == bot.id
+            ).first()
+            
+            if not bot_settings:
+                # Создаем настройки для этого бота
+                bot_settings = models.ShopSettings(
+                    user_id=user_id,
+                    bot_id=bot.id,
+                    reservations_enabled=db_settings.reservations_enabled,
+                    quantity_enabled=db_settings.quantity_enabled,
+                    shop_name=db_settings.shop_name,
+                    welcome_image_url=db_settings.welcome_image_url,
+                    welcome_description=db_settings.welcome_description,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(bot_settings)
+                print(f"🔄 Synced shop settings to bot {bot.id} (CREATE)")
+            else:
+                # Обновляем существующие настройки
+                bot_settings.reservations_enabled = db_settings.reservations_enabled
+                bot_settings.quantity_enabled = db_settings.quantity_enabled
+                bot_settings.shop_name = db_settings.shop_name
+                bot_settings.welcome_image_url = db_settings.welcome_image_url
+                bot_settings.welcome_description = db_settings.welcome_description
+                bot_settings.updated_at = datetime.utcnow()
+                print(f"🔄 Synced shop settings to bot {bot.id} (UPDATE)")
+
+
 async def get_validated_user(
     request: Request,
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
-    user_id: Optional[int] = Query(None, description="User ID для внутренних запросов от бота (только localhost)")
+    user_id: Optional[int] = Query(None, description="User ID для внутренних запросов от бота (только localhost)"),
+    db: Session = Depends(database.get_db)
 ):
     """
     Dependency для валидации Telegram initData и извлечения user_id.
     Также поддерживает авторизацию через user_id в query для внутренних запросов от бота (localhost).
+    Поддерживает множественные боты через validate_init_data_multi_bot.
     """
     # Если есть initData - используем его (основной способ для WebApp)
     if x_telegram_init_data:
-        if not TELEGRAM_BOT_TOKEN:
-            raise HTTPException(
-                status_code=500,
-                detail="Bot token is not configured"
-            )
-        
         try:
-            validated_data = validate_telegram_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
-            return validated_data["user"]["id"]
+            # Используем функцию для валидации с любым ботом
+            validated_user_id, _, _ = await validate_init_data_multi_bot(
+                x_telegram_init_data,
+                db,
+                default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+            )
+            return validated_user_id
         except HTTPException:
             raise
         except Exception as e:
@@ -64,21 +182,25 @@ async def get_validated_user(
     )
 
 async def get_optional_validated_user(
-    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data")
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
 ) -> Optional[int]:
     """
     Dependency для опциональной валидации Telegram initData и извлечения user_id
     Возвращает None, если initData не предоставлен
+    Поддерживает множественные боты через validate_init_data_multi_bot.
     """
     if not x_telegram_init_data:
         return None
     
-    if not TELEGRAM_BOT_TOKEN:
-        return None
-    
     try:
-        validated_data = validate_telegram_init_data(x_telegram_init_data, TELEGRAM_BOT_TOKEN)
-        return validated_data["user"]["id"]
+        # Используем функцию для валидации с любым ботом
+        validated_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+        return validated_user_id
     except:
         # Игнорируем ошибки валидации, возвращаем None
         return None
@@ -88,23 +210,48 @@ async def get_optional_validated_user(
 async def get_shop_settings(
     shop_owner_id: Optional[int] = Query(None, description="ID владельца магазина (для клиентов, просмотр чужих настроек)"),
     user_id: Optional[int] = Depends(get_optional_validated_user),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
     """
     Получить настройки магазина.
     Если shop_owner_id указан - возвращает настройки владельца магазина (публичные данные для клиентов).
     Если shop_owner_id не указан, но пользователь авторизован - возвращает настройки текущего пользователя (свои настройки).
-    Если настройки не существуют, создаются с дефолтными значениями.
+    Использует индивидуальные настройки бота (bot_id), если они есть, иначе общие настройки (bot_id = None).
     """
+    from ..routers.context import get_validated_user_and_bot
+    
+    # Получаем bot_id из initData для индивидуальных настроек
+    bot_id_from_init = None
+    if x_telegram_init_data:
+        try:
+            _, bot_id_from_init = await get_validated_user_and_bot(x_telegram_init_data, db)
+        except:
+            bot_id_from_init = None
+    
     # Определяем, чьи настройки нужно получить
     # ВАЖНО: Приоритет shop_owner_id - если он указан, всегда используем его (клиент смотрит чужой магазин)
     # Иначе используем user_id если пользователь авторизован (свой магазин)
     if shop_owner_id is not None:
         # shop_owner_id указан - клиент смотрит чужой магазин, используем shop_owner_id
         target_user_id = shop_owner_id
-    elif user_id is not None:
+        # Если открыт через нового бота - используем индивидуальные настройки этого бота
+        # Иначе используем общие настройки
+        if bot_id_from_init:
+            # Проверяем, что этот бот принадлежит владельцу магазина
+            bot = db.query(models.Bot).filter(models.Bot.id == bot_id_from_init).first()
+            if bot and bot.owner_user_id == shop_owner_id:
+                target_bot_id = bot_id_from_init
+                print(f"📋 Using bot {bot_id_from_init} settings for shop owner {shop_owner_id}")
+            else:
+                target_bot_id = None
+        else:
+            target_bot_id = None
+    elif user_id is not None and x_telegram_init_data:
         # shop_owner_id не указан, но пользователь авторизован - используем его настройки (свой магазин)
         target_user_id = user_id
+        # Используем bot_id из initData для индивидуальных настроек владельца бота
+        target_bot_id = bot_id_from_init
     else:
         # Нет ни shop_owner_id, ни авторизации
         raise HTTPException(
@@ -112,18 +259,29 @@ async def get_shop_settings(
             detail="Authentication required or shop_owner_id must be provided"
         )
     
-    print(f"📋 GET /api/shop-settings - user_id={user_id}, shop_owner_id={shop_owner_id}, target_user_id={target_user_id}")
+    print(f"📋 GET /api/shop-settings - user_id={user_id}, shop_owner_id={shop_owner_id}, target_user_id={target_user_id}, target_bot_id={target_bot_id}")
     
-    # Ищем существующие настройки
-    settings = db.query(models.ShopSettings).filter(
-        models.ShopSettings.user_id == target_user_id
-    ).first()
+    # Ищем индивидуальные настройки бота (если bot_id указан)
+    settings = None
+    if target_bot_id is not None:
+        settings = db.query(models.ShopSettings).filter(
+            models.ShopSettings.user_id == target_user_id,
+            models.ShopSettings.bot_id == target_bot_id
+        ).first()
+    
+    # Если индивидуальных настроек нет, используем общие настройки (bot_id = None)
+    if not settings:
+        settings = db.query(models.ShopSettings).filter(
+            models.ShopSettings.user_id == target_user_id,
+            models.ShopSettings.bot_id == None
+        ).first()
     
     # Если настройки не существуют, создаем с дефолтными значениями
     if not settings:
-        print(f"📋 Creating default settings for user {target_user_id}")
+        print(f"📋 Creating default settings for user {target_user_id}, bot_id={target_bot_id}")
         settings = models.ShopSettings(
             user_id=target_user_id,
+            bot_id=target_bot_id,  # Сохраняем bot_id для индивидуальных настроек
             reservations_enabled=True,
             quantity_enabled=True,
             shop_name=None,
@@ -164,26 +322,49 @@ async def get_shop_settings(
 async def update_shop_settings(
     settings_update: schemas.ShopSettingsUpdate,
     user_id: int = Depends(get_validated_user),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
     """
     Обновить настройки магазина текущего пользователя.
+    Использует индивидуальные настройки бота (bot_id), если они есть.
     """
+    from ..routers.context import get_validated_user_and_bot
+    
+    # Получаем bot_id из initData для индивидуальных настроек
+    bot_id = None
+    if x_telegram_init_data:
+        try:
+            _, bot_id = await get_validated_user_and_bot(x_telegram_init_data, db)
+        except:
+            bot_id = None
+    
     # Используем model_dump(exclude_unset=True) чтобы получить только переданные поля
     update_data = settings_update.model_dump(exclude_unset=True)
-    print(f"📋 PUT /api/shop-settings - user_id={user_id}, update_data={update_data}")
+    print(f"📋 PUT /api/shop-settings - user_id={user_id}, bot_id={bot_id}, update_data={update_data}")
     
-    # Ищем существующие настройки
-    settings = db.query(models.ShopSettings).filter(
-        models.ShopSettings.user_id == user_id
-    ).first()
+    # Ищем индивидуальные настройки бота (если bot_id указан)
+    settings = None
+    if bot_id is not None:
+        settings = db.query(models.ShopSettings).filter(
+            models.ShopSettings.user_id == user_id,
+            models.ShopSettings.bot_id == bot_id
+        ).first()
+    
+    # Если индивидуальных настроек нет, используем общие настройки (bot_id = None)
+    if not settings:
+        settings = db.query(models.ShopSettings).filter(
+            models.ShopSettings.user_id == user_id,
+            models.ShopSettings.bot_id == None
+        ).first()
     
     # Если настройки не существуют, создаем
     if not settings:
-        print(f"📋 Creating settings for user {user_id}")
+        print(f"📋 Creating settings for user {user_id}, bot_id={bot_id}")
         # Используем значения из update_data или значения по умолчанию
         settings = models.ShopSettings(
             user_id=user_id,
+            bot_id=bot_id,  # Сохраняем bot_id для индивидуальных настроек
             reservations_enabled=update_data.get('reservations_enabled', True),
             quantity_enabled=update_data.get('quantity_enabled', True),
             shop_name=update_data.get('shop_name', None),
@@ -215,6 +396,9 @@ async def update_shop_settings(
             settings.welcome_description = update_data['welcome_description']
         settings.updated_at = datetime.utcnow()
     
+    # Синхронизируем настройки во все боты
+    sync_shop_settings_to_all_bots(settings, db, action="update")
+    
     db.commit()
     db.refresh(settings)
     
@@ -245,6 +429,7 @@ async def update_shop_settings(
 async def upload_welcome_image(
     image: UploadFile = File(...),
     user_id: int = Depends(get_validated_user),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
     """
@@ -277,14 +462,34 @@ async def upload_welcome_image(
     # Формируем путь к изображению
     image_url_path = f"/static/uploads/{unique_filename}"
     
-    # Получаем или создаем настройки
-    settings = db.query(models.ShopSettings).filter(
-        models.ShopSettings.user_id == user_id
-    ).first()
+    # Получаем bot_id из initData для индивидуальных настроек
+    bot_id = None
+    if x_telegram_init_data:
+        try:
+            from ..routers.context import get_validated_user_and_bot
+            _, bot_id = await get_validated_user_and_bot(x_telegram_init_data, db)
+        except:
+            bot_id = None
+    
+    # Ищем индивидуальные настройки бота (если bot_id указан)
+    settings = None
+    if bot_id is not None:
+        settings = db.query(models.ShopSettings).filter(
+            models.ShopSettings.user_id == user_id,
+            models.ShopSettings.bot_id == bot_id
+        ).first()
+    
+    # Если индивидуальных настроек нет, используем общие настройки (bot_id = None)
+    if not settings:
+        settings = db.query(models.ShopSettings).filter(
+            models.ShopSettings.user_id == user_id,
+            models.ShopSettings.bot_id == None
+        ).first()
     
     if not settings:
         settings = models.ShopSettings(
             user_id=user_id,
+            bot_id=bot_id,  # Сохраняем bot_id для индивидуальных настроек
             reservations_enabled=True,
             quantity_enabled=True,
             shop_name=None,
@@ -307,6 +512,9 @@ async def upload_welcome_image(
         
         settings.welcome_image_url = image_url_path
         settings.updated_at = datetime.utcnow()
+    
+    # Синхронизируем настройки во все боты
+    sync_shop_settings_to_all_bots(settings, db, action="update")
     
     db.commit()
     db.refresh(settings)
@@ -359,6 +567,10 @@ async def delete_welcome_image(
         
         settings.welcome_image_url = None
         settings.updated_at = datetime.utcnow()
+        
+        # Синхронизируем настройки во все боты
+        sync_shop_settings_to_all_bots(settings, db, action="update")
+        
         db.commit()
         db.refresh(settings)
     

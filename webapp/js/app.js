@@ -59,10 +59,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // 5. Получаем контекст магазина из backend
     try {
-        // Проверяем, есть ли shop_owner_id в URL (для просмотра чужого магазина)
+        // Проверяем параметры URL:
+        // 1. user_id (прямой параметр)
+        // 2. start (из Mini App ссылки: t.me/botusername/shop?start=store_user_id)
         const urlParams = new URLSearchParams(window.location.search);
+        let shopOwnerId = null;
+        
+        // Вариант 1: Прямой параметр user_id
         const shopOwnerIdParam = urlParams.get('user_id');
-        const shopOwnerId = shopOwnerIdParam ? parseInt(shopOwnerIdParam, 10) : null;
+        if (shopOwnerIdParam) {
+            shopOwnerId = parseInt(shopOwnerIdParam, 10);
+        }
+        
+        // Вариант 2: Параметр start из Mini App ссылки
+        if (!shopOwnerId) {
+            const startParam = urlParams.get('start');
+            if (startParam && startParam.startsWith('store_')) {
+                const userIdStr = startParam.replace('store_', '');
+                shopOwnerId = parseInt(userIdStr, 10);
+                console.log('📡 Found start parameter, extracted user_id:', shopOwnerId);
+            }
+        }
         
         console.log('📡 Loading context, shopOwnerId:', shopOwnerId);
         console.log('📡 Telegram instance:', getTelegramInstance());
@@ -71,6 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         appContext = await getContext(shopOwnerId);
         console.log('✅ Context loaded:', appContext);
+        console.log('✅ Context bot_id:', appContext.bot_id, 'type:', typeof appContext.bot_id);
     } catch (e) {
         console.error('❌ Failed to load context:', e);
         console.error('❌ Error details:', {
@@ -205,18 +223,27 @@ window.loadData = async function loadData() {
         console.log('📦 API_BASE:', API_BASE);
         
         // Загружаем категории для магазина (shop_owner_id)
+        // Используем bot_id из контекста для независимых магазинов
+        // bot_id может быть числом (например, 2) или null/undefined
+        let botId = null;
+        if (appContext.bot_id !== undefined && appContext.bot_id !== null) {
+            botId = appContext.bot_id;
+        }
         console.log('📂 Step 1: Fetching categories...');
-        const categoriesUrl = `${API_BASE}/api/categories/?user_id=${appContext.shop_owner_id}`;
+        console.log('📂 appContext.bot_id:', appContext.bot_id, 'type:', typeof appContext.bot_id);
+        console.log('📂 Final botId:', botId, 'type:', typeof botId);
+        const categoriesUrl = `${API_BASE}/api/categories/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}`;
         console.log('📂 Categories URL:', categoriesUrl);
-        const categories = await fetchCategories(appContext.shop_owner_id);
+        const categories = await fetchCategories(appContext.shop_owner_id, botId);
         console.log('✅ Step 1 complete: Categories loaded:', categories.length);
         renderCategories(categories);
         
         // Загружаем товары для магазина (shop_owner_id)
         console.log('📦 Step 2: Fetching products...');
-        const productsUrl = `${API_BASE}/api/products/?user_id=${appContext.shop_owner_id}`;
+        const productsUrl = `${API_BASE}/api/products/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}${currentCategoryId ? `&category_id=${currentCategoryId}` : ''}`;
         console.log('📦 Products URL:', productsUrl);
-        const products = await fetchProducts(appContext.shop_owner_id, currentCategoryId);
+        console.log('📦 Using botId:', botId, 'for products');
+        const products = await fetchProducts(appContext.shop_owner_id, currentCategoryId, botId);
         console.log('✅ Step 2 complete: Products loaded:', products.length);
         renderProducts(products);
         

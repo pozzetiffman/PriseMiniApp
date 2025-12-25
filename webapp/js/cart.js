@@ -184,33 +184,21 @@ export async function loadCart() {
             }
             
             try {
-                // Используем API без авторизации для просмотра товаров
-                const productUrl = `${API_BASE}/api/products/?user_id=${reservation.user_id}`;
-                console.log('🛒 loadCart: Fetching products from:', productUrl);
+                // Получаем товар напрямую по его ID (из любого магазина)
+                const productUrl = `${API_BASE}/api/products/${reservation.product_id}`;
+                console.log('🛒 loadCart: Fetching product by ID:', productUrl);
                 const productResponse = await fetch(productUrl, {
                     headers: getBaseHeadersNoAuth()
                 });
                 
                 if (!productResponse.ok) {
                     const errorText = await productResponse.text();
-                    console.error(`❌ loadCart: Failed to fetch products for user ${reservation.user_id}:`, productResponse.status, errorText);
+                    console.error(`❌ loadCart: Failed to fetch product ${reservation.product_id}:`, productResponse.status, errorText);
                     continue;
                 }
                 
-                const products = await productResponse.json();
-                console.log('🛒 loadCart: Got products for user', reservation.user_id, ':', products.length);
-                
-                if (!Array.isArray(products)) {
-                    console.error('❌ loadCart: Products response is not an array:', products);
-                    continue;
-                }
-                
-                const product = products.find(p => p.id === reservation.product_id);
-                if (!product) {
-                    console.warn('🛒 loadCart: Product not found:', reservation.product_id, 'in products list:', products.map(p => ({ id: p.id, name: p.name })));
-                    continue;
-                }
-                console.log('🛒 loadCart: Found product:', product.name);
+                const product = await productResponse.json();
+                console.log('🛒 loadCart: Found product:', product.name, 'id:', product.id);
                 
                 // Backend возвращает время в UTC через isoformat()
                 // Парсим время правильно (если нет Z в конце, добавляем его для UTC)
@@ -529,21 +517,23 @@ async function loadOrders() {
         ordersItems.innerHTML = '';
         for (const order of orders) {
             try {
-                // Получаем информацию о товаре
-                const productUrl = `${API_BASE}/api/products/?user_id=${order.user_id}`;
+                // Получаем товар напрямую по его ID (из любого магазина)
+                if (!order.product_id) {
+                    console.warn('🛒 loadOrders: Order missing product_id:', order.id);
+                    continue;
+                }
+                
+                const productUrl = `${API_BASE}/api/products/${order.product_id}`;
                 const productResponse = await fetch(productUrl, {
                     headers: getBaseHeadersNoAuth()
                 });
                 
                 if (!productResponse.ok) {
+                    console.warn(`🛒 loadOrders: Failed to fetch product ${order.product_id}:`, productResponse.status);
                     continue;
                 }
                 
-                const products = await productResponse.json();
-                const product = products.find(p => p.id === order.product_id);
-                if (!product) {
-                    continue;
-                }
+                const product = await productResponse.json();
                 
                 // Определяем URL изображения
                 let imageUrl = null;

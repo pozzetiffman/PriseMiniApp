@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.filters.command import CommandObject
-from aiogram.types import Message, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -134,8 +134,120 @@ class SetWelcomeImage(StatesGroup):
 class SetWelcomeDescription(StatesGroup):
     description = State()
 
+class ConnectBot(StatesGroup):
+    token = State()
+    web_app_name = State()  # Название Web App (создается через /newapp в BotFather)
+
+def is_command(text: str) -> bool:
+    """Проверяет, является ли текст командой"""
+    if not text:
+        return False
+    return text.startswith('/') or text in ['/cancel', '/start', '/manage', '/post', '/mylink', '/getlink', '/connect']
+
+def is_menu_button(text: str) -> bool:
+    """Проверяет, является ли текст кнопкой меню"""
+    if not text:
+        return False
+    menu_buttons = [
+        "➕ Добавить товар",
+        "🗑️ Удалить товар",
+        "📁 Добавить категорию",
+        "📋 Список категорий",
+        "🏷️ Название магазина",
+        "🖼️ Логотип магазина",
+        "📝 Описание магазина",
+        "📢 Управление каналами",
+        "📤 Поделиться витриной",
+        "🤖 Подключить бота",
+        "🔗 Мои ссылки"
+    ]
+    return text in menu_buttons
+
+async def clear_state_if_needed(message: Message, state: FSMContext, current_state=None):
+    """
+    Проверяет и очищает состояние FSM, если пользователь использует другую команду.
+    Возвращает True, если состояние было очищено.
+    """
+    current_fsm_state = await state.get_state()
+    
+    # Если есть активное состояние и это не текущее состояние команды
+    if current_fsm_state and current_fsm_state != current_state:
+        # Определяем тип состояния для информативного сообщения
+        state_str = str(current_fsm_state)
+        
+        # Формируем сообщение в зависимости от типа состояния
+        if "ConnectBot" in state_str:
+            await state.clear()
+            await message.answer(
+                "ℹ️ Процесс подключения бота отменен.\n\n"
+                "Вы можете начать заново, используя команду <code>/connect</code> или кнопку <b>🤖 Подключить бота</b>.",
+                parse_mode="HTML"
+            )
+            return True
+        elif "AddProduct" in state_str:
+            # Удаляем временные файлы фото, если они есть (ПЕРЕД очисткой состояния)
+            try:
+                data = await state.get_data()
+                photos_list = data.get('photos', [])
+                for photo_data in photos_list:
+                    try:
+                        if 'tmp_path' in photo_data and os.path.exists(photo_data['tmp_path']):
+                            os.unlink(photo_data['tmp_path'])
+                    except:
+                        pass
+            except:
+                pass
+            await state.clear()
+            return True
+        elif "AddCategory" in state_str:
+            await state.clear()
+            return True
+        elif "SetShopName" in state_str:
+            await state.clear()
+            return True
+        elif "SetWelcomeImage" in state_str:
+            await state.clear()
+            return True
+        elif "SetWelcomeDescription" in state_str:
+            await state.clear()
+            return True
+        elif "AddChannel" in state_str:
+            await state.clear()
+            return True
+        else:
+            # Для любых других состояний просто очищаем
+            await state.clear()
+            return True
+    
+    return False
+
+@dp.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    """Отменить текущую операцию и очистить состояние FSM"""
+    current_fsm_state = await state.get_state()
+    if current_fsm_state:
+        # Удаляем временные файлы, если они есть (для AddProduct) - ПЕРЕД очисткой состояния
+        try:
+            data = await state.get_data()
+            photos_list = data.get('photos', [])
+            for photo_data in photos_list:
+                try:
+                    if 'tmp_path' in photo_data and os.path.exists(photo_data['tmp_path']):
+                        os.unlink(photo_data['tmp_path'])
+                except:
+                    pass
+        except:
+            pass
+        
+        await state.clear()
+        await message.answer("✅ Операция отменена. Используйте /manage для управления витриной.")
+    else:
+        await message.answer("ℹ️ Нет активных операций для отмены.")
+
 @dp.message(Command("start"))
-async def cmd_start(message: Message, command: CommandObject):
+async def cmd_start(message: Message, command: CommandObject, state: FSMContext):
+    # Сбрасываем состояние FSM при использовании команды /start
+    await clear_state_if_needed(message, state)
     # Проверяем, есть ли параметр в команде (например, /start store_123456)
     param = command.args if command.args else None
     
@@ -192,12 +304,356 @@ async def cmd_start(message: Message, command: CommandObject):
     ))
     
     msg = f"Привет, {message.from_user.first_name}! Нажми кнопку ниже, чтобы открыть свою витрину."
-    msg += "\n\nИспользуйте /manage для управления товарами и публикации витрины."
+    msg += "\n\nИспользуйте ≠/manage для управления товарами и публикации витрины."
 
     await message.answer(msg, reply_markup=builder.as_markup())
 
+@dp.message(Command("getlink"))
+async def cmd_getlink(message: Message, command: CommandObject, state: FSMContext):
+    # Сбрасываем состояние FSM при использовании команды /getlink
+    await clear_state_if_needed(message, state)
+    """
+    Получить Web App ссылку для бота.
+    Если бот зарегистрирован - показывает ссылку автоматически.
+    Если нет - можно указать токен и название Web App.
+    Формат: /getlink [bot_token] [web_app_name]
+    """
+    user_id = message.from_user.id
+    args = command.args if command.args else ""
+    
+    # Если параметры не указаны, пытаемся получить ссылки для всех зарегистрированных ботов
+    if not args:
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Получаем список подключенных ботов пользователя
+                async with session.get(
+                    f"{API_URL}/bots/my",
+                    params={"owner_user_id": user_id}
+                ) as resp:
+                    if resp.status != 200:
+                        return await message.answer(
+                            "❌ <b>Использование:</b>\n\n"
+                            "<code>/getlink</code> - показать ссылки для всех зарегистрированных ботов\n"
+                            "<code>/getlink &lt;bot_token&gt; &lt;web_app_name&gt;</code> - получить ссылку для нового бота\n\n"
+                            "<b>Примеры:</b>\n"
+                            "• <code>/getlink</code> (для зарегистрированных ботов)\n"
+                            "• <code>/getlink 8026360824:AAEI9RAEODgwcKHmkJ0MAFkQPXkNzGcW46c shop1</code>",
+                            parse_mode="HTML"
+                        )
+                    
+                    bots = await resp.json()
+                    
+                    if not bots:
+                        return await message.answer(
+                            "🤖 <b>У вас нет подключенных ботов</b>\n\n"
+                            "Используйте команду <code>/connect</code> для подключения бота.\n\n"
+                            "Или используйте формат:\n"
+                            "<code>/getlink &lt;bot_token&gt; &lt;web_app_name&gt;</code>",
+                            parse_mode="HTML"
+                        )
+                    
+                    # Формируем сообщение со ссылками
+                    msg = "🔗 <b>Web App ссылки на ваши магазины:</b>\n\n"
+                    
+                    for bot in bots:
+                        bot_username = bot.get("bot_username", "unknown")
+                        is_active = bot.get("is_active", True)
+                        web_app_name = bot.get("direct_link_name") or "shop"
+                        
+                        if is_active:
+                            web_app_link = f"t.me/{bot_username}/{web_app_name}"
+                            bot_username_escaped = bot_username.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                            web_app_name_escaped = web_app_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                            msg += f"🤖 <b>@{bot_username_escaped}</b>\n"
+                            msg += f"🔗 <code>{web_app_link}</code>\n"
+                            msg += f"📱 Web App: <code>{web_app_name_escaped}</code>\n\n"
+                    
+                    msg += "💡 <b>Как использовать:</b>\n"
+                    msg += "• Скопируйте ссылку и поделитесь ею\n"
+                    msg += "• Ссылка откроет Mini App <b>поверх чата</b> без перехода в бота\n"
+                    msg += "• Работает в группах и каналах"
+                    
+                    await message.answer(msg, parse_mode="HTML")
+                    return
+        except Exception as e:
+            logging.error(f"Exception getting registered bots: {e}")
+            return await message.answer(
+                f"❌ Ошибка при получении списка ботов: {str(e)}",
+                parse_mode="HTML"
+            )
+    
+    # Если указаны параметры, получаем ссылку по токену
+    parts = args.strip().split(maxsplit=1)
+    if len(parts) < 2:
+        return await message.answer(
+            "❌ Не указано название Web App.\n\n"
+            "<b>Формат:</b> <code>/getlink &lt;bot_token&gt; &lt;web_app_name&gt;</code>\n\n"
+            "<b>Пример:</b> <code>/getlink 8026360824:AAEI9RAEODgwcKHmkJ0MAFkQPXkNzGcW46c shop1</code>\n\n"
+            "💡 Или просто <code>/getlink</code> для зарегистрированных ботов.",
+            parse_mode="HTML"
+        )
+    
+    bot_token = parts[0]
+    web_app_name = parts[1]
+    
+    # Проверяем формат токена
+    if ':' not in bot_token:
+        return await message.answer(
+            "❌ Неверный формат токена.\n\n"
+            "Токен должен быть в формате: <code>123456:ABC-DEF...</code>",
+            parse_mode="HTML"
+        )
+    
+    try:
+        # Получаем информацию о боте через Telegram API
+        async with aiohttp.ClientSession() as session:
+            url = f"https://api.telegram.org/bot{bot_token}/getMe"
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return await message.answer(
+                        "❌ Ошибка при получении информации о боте.\n\n"
+                        "Проверьте правильность токена.",
+                        parse_mode="HTML"
+                    )
+                
+                data = await resp.json()
+                if not data.get("ok"):
+                    return await message.answer(
+                        f"❌ Ошибка Telegram API: {data.get('description', 'Unknown error')}",
+                        parse_mode="HTML"
+                    )
+                
+                bot_info = data.get("result", {})
+                bot_username = bot_info.get("username")
+                
+                if not bot_username:
+                    return await message.answer(
+                        "❌ Бот не имеет username.\n\n"
+                        "Убедитесь, что бот имеет username в @BotFather.",
+                        parse_mode="HTML"
+                    )
+                
+                # Формируем Web App ссылку
+                web_app_link = f"t.me/{bot_username}/{web_app_name}"
+                
+                await message.answer(
+                    f"✅ <b>Web App ссылка для бота:</b>\n\n"
+                    f"🤖 Бот: <b>@{bot_username}</b>\n"
+                    f"📱 Название Web App: <code>{web_app_name}</code>\n"
+                    f"🔗 Ссылка: <code>{web_app_link}</code>\n\n"
+                    f"💡 <b>Как использовать:</b>\n"
+                    f"• Скопируйте ссылку и поделитесь ею\n"
+                    f"• Ссылка откроет Mini App <b>поверх чата</b> без перехода в бота\n"
+                    f"• Работает в группах и каналах\n\n"
+                    f"⚠️ <b>Важно:</b> Убедитесь, что Web App с названием <code>{web_app_name}</code> создан через <code>/newapp</code> в @BotFather для этого бота.",
+                    parse_mode="HTML"
+                )
+                
+    except Exception as e:
+        logging.error(f"Exception getting bot link: {e}")
+        await message.answer(
+            f"❌ Произошла ошибка: {str(e)}",
+            parse_mode="HTML"
+        )
+
+@dp.message(Command("connect"))
+async def cmd_connect(message: Message, state: FSMContext):
+    # Сбрасываем предыдущее состояние перед началом новой операции
+    await clear_state_if_needed(message, state, ConnectBot.token)
+    """
+    Подключить нового бота к системе.
+    Пользователь создает бота в @BotFather и подключает его через эту команду.
+    """
+    user_id = message.from_user.id
+    
+    await message.answer(
+        "🤖 <b>Подключение бота к системе</b>\n\n"
+        "Чтобы подключить своего бота:\n\n"
+        "1️⃣ Создайте бота в @BotFather:\n"
+        "   • Откройте @BotFather\n"
+        "   • Отправьте <code>/newbot</code>\n"
+        "   • Следуйте инструкциям\n"
+        "   • Скопируйте токен бота\n\n"
+        "2️⃣ Отправьте токен бота сюда\n\n"
+        "3️⃣ Укажите название Web App\n\n"
+        "4️⃣ Создайте Web App в @BotFather:\n"
+        "   • Откройте @BotFather\n"
+        "   • Отправьте <code>/newapp</code>\n"
+        "   • Выберите вашего бота\n"
+        "   • Введите название Web App (то же, что в шаге 3)\n"
+        "   • Введите описание\n"
+        "   • Загрузите фото (640x360)\n"
+        "   • URL: <code>https://webapp-eight-vert.vercel.app</code>\n\n"
+        "💡 <b>Отправьте токен бота сейчас:</b>",
+        parse_mode="HTML"
+    )
+    
+    await state.set_state(ConnectBot.token)
+
+@dp.message(ConnectBot.token)
+async def process_bot_token(message: Message, state: FSMContext):
+    """
+    Обработать токен бота и сохранить его, затем запросить название Web App.
+    """
+    # Если пользователь отправил команду или кнопку меню, сбрасываем состояние и передаем управление соответствующему обработчику
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        # Сбрасываем состояние перед передачей управления
+        await clear_state_if_needed(message, state)
+        # Возвращаем управление, чтобы сообщение было обработано соответствующим обработчиком
+        return
+    
+    user_id = message.from_user.id
+    bot_token = message.text.strip()
+    
+    # Проверяем формат токена (примерно: 123456:ABC-DEF...)
+    if not bot_token or ':' not in bot_token:
+        await message.answer(
+            "❌ Неверный формат токена.\n\n"
+            "Токен должен быть в формате: <code>123456:ABC-DEF...</code>\n\n"
+            "Попробуйте еще раз или отправьте <code>/cancel</code> для отмены.",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Сохраняем токен в состоянии
+    await state.update_data(bot_token=bot_token)
+    
+    # Запрашиваем название Web App
+    await message.answer(
+        "✅ Токен принят!\n\n"
+        "📝 <b>Теперь укажите название Web App</b>\n\n"
+        "Это название, которое вы указали при создании Web App через <code>/newapp</code> в @BotFather.\n"
+        "Например: <code>shop1</code>, <code>TGshowcase</code>, <code>my_shop</code> и т.д.\n\n"
+        "💡 Если вы еще не создали Web App, укажите любое название (например: <code>shop</code>).\n"
+        "Затем создайте Web App через <code>/newapp</code> в @BotFather с этим же названием.\n\n"
+        "<b>Отправьте название Web App:</b>",
+        parse_mode="HTML"
+    )
+    
+    await state.set_state(ConnectBot.web_app_name)
+
+@dp.message(ConnectBot.web_app_name)
+async def process_web_app_name(message: Message, state: FSMContext):
+    """
+    Обработать название Web App и зарегистрировать бота.
+    """
+    # Если пользователь отправил команду или кнопку меню, сбрасываем состояние и передаем управление соответствующему обработчику
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        # Сбрасываем состояние перед передачей управления
+        await clear_state_if_needed(message, state)
+        # Возвращаем управление, чтобы сообщение было обработано соответствующим обработчиком
+        return
+    
+    user_id = message.from_user.id
+    web_app_name = message.text.strip()
+    
+    # Получаем токен из состояния
+    data = await state.get_data()
+    bot_token = data.get("bot_token")
+    
+    if not bot_token:
+        await message.answer("❌ Ошибка: токен бота не найден. Начните заново с команды <code>/connect</code>.", parse_mode="HTML")
+        await state.clear()
+        return
+    
+    # Валидация названия Web App (только буквы, цифры, подчеркивания, дефисы)
+    if not web_app_name or not web_app_name.replace("_", "").replace("-", "").isalnum():
+        await message.answer(
+            "❌ Неверный формат названия Web App.\n\n"
+            "Название может содержать только буквы, цифры, подчеркивания (_) и дефисы (-).\n\n"
+            "Попробуйте еще раз или отправьте <code>/cancel</code> для отмены.",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Отправляем запрос в backend для регистрации
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{API_URL}/bots/register",
+                json={
+                    "bot_token": bot_token,
+                    "owner_user_id": user_id,
+                    "direct_link_name": web_app_name  # Используем то же поле в БД для Web App названия
+                }
+            ) as resp:
+                if resp.status == 200:
+                    bot_data = await resp.json()
+                    bot_username = bot_data.get("bot_username", "unknown")
+                    saved_web_app_name = bot_data.get("direct_link_name")
+                    
+                    # Если direct_link_name не вернулся, используем переданное значение
+                    if not saved_web_app_name:
+                        saved_web_app_name = web_app_name
+                        logging.warning(f"direct_link_name not returned from API, using provided value: {web_app_name}")
+                    
+                    # Формируем Web App ссылку
+                    web_app_link = f"t.me/{bot_username}/{saved_web_app_name}"
+                    
+                    await message.answer(
+                        f"✅ <b>Бот успешно подключен!</b>\n\n"
+                        f"🤖 Бот: @{bot_username}\n"
+                        f"📱 Web App: <code>{saved_web_app_name}</code>\n"
+                        f"🔗 Ссылка: <code>{web_app_link}</code>\n\n"
+                        f"📋 <b>Следующие шаги:</b>\n\n"
+                        f"1️⃣ Откройте @BotFather\n"
+                        f"2️⃣ Отправьте <code>/newapp</code>\n"
+                        f"3️⃣ Выберите вашего бота: @{bot_username}\n"
+                        f"4️⃣ Введите название: <code>{saved_web_app_name}</code>\n"
+                        f"5️⃣ Введите описание\n"
+                        f"6️⃣ Загрузите фото (640x360)\n"
+                        f"7️⃣ URL: <code>https://webapp-eight-vert.vercel.app</code>\n\n"
+                        f"✅ После настройки используйте команду <code>/mylink</code> для получения ссылки!",
+                        parse_mode="HTML"
+                    )
+                elif resp.status == 409:
+                    error_text = await resp.text()
+                    await message.answer(
+                        "⚠️ Этот бот уже зарегистрирован.\n\n"
+                        "Если это ваш бот, он уже подключен к системе.\n\n"
+                        "Используйте команду <code>/mylink</code> для получения ссылки.",
+                        parse_mode="HTML"
+                    )
+                else:
+                    error_text = await resp.text()
+                    logging.error(f"Error registering bot: status={resp.status}, error={error_text}")
+                    await message.answer(
+                        f"❌ Ошибка при регистрации бота.\n\n"
+                        f"Проверьте:\n"
+                        f"• Правильность токена\n"
+                        f"• Что бот создан в @BotFather\n"
+                        f"• Что бот имеет username\n\n"
+                        f"Попробуйте еще раз или отправьте <code>/cancel</code> для отмены.",
+                        parse_mode="HTML"
+                    )
+    except Exception as e:
+        logging.error(f"Exception registering bot: {e}")
+        await message.answer(
+            f"❌ Произошла ошибка: {str(e)}\n\n"
+            f"Попробуйте еще раз или отправьте <code>/cancel</code> для отмены.",
+            parse_mode="HTML"
+        )
+    
+    await state.clear()
+
+@dp.message(F.text == "🔗 Мои ссылки")
+async def get_my_links_button(message: Message, state: FSMContext):
+    """Обработчик кнопки для получения ссылок на Mini App"""
+    # Проверяем и очищаем состояние, если пользователь был в процессе подключения бота
+    await clear_state_if_needed(message, state)
+    await _cmd_mylink_impl(message)
+
+@dp.message(F.text == "🤖 Подключить бота")
+async def connect_bot_button(message: Message, state: FSMContext):
+    """Обработчик кнопки для подключения нового бота"""
+    # Сбрасываем предыдущее состояние перед началом новой операции
+    await clear_state_if_needed(message, state, ConnectBot.token)
+    await cmd_connect(message, state)
+
 @dp.message(F.text == "📤 Поделиться витриной")
-async def share_store(message: Message):
+async def share_store(message: Message, state: FSMContext):
+    # Проверяем и очищаем состояние, если пользователь был в процессе подключения бота
+    await clear_state_if_needed(message, state)
     """Показать список каналов для отправки витрины"""
     user_id = message.from_user.id
     
@@ -243,7 +699,9 @@ async def share_store(message: Message):
 
 @dp.message(Command("post"))
 @dp.message(F.text == "/post")
-async def cmd_post(message: Message):
+async def cmd_post(message: Message, state: FSMContext):
+    # Сбрасываем состояние FSM при использовании команды /post
+    await clear_state_if_needed(message, state)
     chat_type = message.chat.type
     chat_id = message.chat.id
     logging.info(f"/post command received - chat_type: {chat_type}, chat_id: {chat_id}, user_id: {message.from_user.id}")
@@ -361,8 +819,101 @@ async def cmd_post(message: Message):
         logging.error(f"Error in /post: {error_msg}, chat_type: {chat_type}, chat_id: {chat_id}")
         await message.answer(f"❌ Ошибка: {error_msg}")
 
-@dp.message(Command("manage"))
-async def cmd_manage(message: Message):
+async def _cmd_mylink_impl(message: Message):
+    """
+    Внутренняя реализация команды /mylink (без state для использования из callback handlers)
+    """
+    user_id = message.from_user.id
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Получаем список подключенных ботов пользователя
+            async with session.get(
+                f"{API_URL}/bots/my",
+                params={"owner_user_id": user_id}
+            ) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    logging.error(f"Error getting bots: status={resp.status}, error={error_text}")
+                    return await message.answer(
+                        f"❌ Ошибка при получении списка ботов.\n\n"
+                        f"Убедитесь, что вы подключили бота через команду <code>/connect</code>.",
+                        parse_mode="HTML"
+                    )
+                
+                bots = await resp.json()
+                
+                if not bots:
+                    return await message.answer(
+                        "🤖 <b>У вас нет подключенных ботов</b>\n\n"
+                        "Чтобы получить ссылку на Mini App:\n\n"
+                        "1️⃣ Используйте команду <code>/connect</code> для подключения бота\n"
+                        "2️⃣ Создайте Web App через <code>/newapp</code> в @BotFather\n"
+                        "3️⃣ Затем используйте <code>/mylink</code> для получения ссылки",
+                        parse_mode="HTML"
+                    )
+                
+                # Формируем сообщение со ссылками с инлайн-кнопками для удаления
+                # Используем HTML для более надежного форматирования
+                msg = "🔗 <b>Web App ссылки на ваши магазины:</b>\n\n"
+                
+                builder = InlineKeyboardBuilder()
+                
+                for bot in bots:
+                    bot_username = bot.get("bot_username", "unknown")
+                    bot_id = bot.get("id")
+                    is_active = bot.get("is_active", True)
+                    # Используем direct_link_name из базы (хранит название Web App) или "shop" по умолчанию
+                    direct_link_name_from_db = bot.get("direct_link_name")
+                    web_app_name = direct_link_name_from_db if direct_link_name_from_db else "shop"
+                    logging.info(f"Bot {bot_username}: direct_link_name from DB = {direct_link_name_from_db}, using = {web_app_name}")
+                    
+                    if is_active:
+                        # Формируем Web App ссылку в формате t.me/{bot_username}/{web_app_name}
+                        web_app_link = f"t.me/{bot_username}/{web_app_name}"
+                        # Экранируем специальные символы для HTML
+                        bot_username_escaped = bot_username.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        web_app_name_escaped = web_app_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        msg += f"🤖 <b>@{bot_username_escaped}</b>\n"
+                        msg += f"🔗 Ссылка: <code>{web_app_link}</code>\n"
+                        msg += f"📱 Web App: <code>{web_app_name_escaped}</code>\n\n"
+                        
+                        # Добавляем кнопку удаления для каждого бота
+                        builder.button(
+                            text=f"🗑️ Удалить @{bot_username_escaped}",
+                            callback_data=f"delete_bot_{bot_id}"
+                        )
+                    else:
+                        bot_username_escaped = bot_username.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        msg += f"🤖 <b>@{bot_username_escaped}</b> (неактивен)\n\n"
+                
+                builder.adjust(1)  # По одной кнопке в ряд
+                
+                msg += "💡 <b>Как использовать:</b>\n"
+                msg += "• Скопируйте ссылку и поделитесь ею\n"
+                msg += "• Ссылка откроет ваш магазин <b>поверх чата</b> без перехода в бота\n"
+                msg += "• Работает в личных чатах, группах и каналах\n"
+                msg += "• Web App создается через <code>/newapp</code> в @BotFather"
+                
+                await message.answer(msg, parse_mode="HTML", reply_markup=builder.as_markup())
+                
+    except Exception as e:
+        logging.error(f"Exception getting bot links: {e}")
+        await message.answer(
+            f"❌ Произошла ошибка: {str(e)}\n\n"
+            f"Попробуйте позже или обратитесь в поддержку."
+        )
+
+@dp.message(Command("mylink"))
+async def cmd_mylink(message: Message, state: FSMContext):
+    # Сбрасываем состояние FSM при использовании команды /mylink
+    await clear_state_if_needed(message, state)
+    await _cmd_mylink_impl(message)
+
+async def _cmd_manage_impl(message: Message):
+    """
+    Внутренняя реализация команды /manage (без state для использования из callback handlers)
+    """
     kb = [
         [KeyboardButton(text="➕ Добавить товар")],
         [KeyboardButton(text="🗑️ Удалить товар")],
@@ -372,20 +923,33 @@ async def cmd_manage(message: Message):
         [KeyboardButton(text="🖼️ Логотип магазина")],
         [KeyboardButton(text="📝 Описание магазина")],
         [KeyboardButton(text="📢 Управление каналами")],
-        [KeyboardButton(text="📤 Поделиться витриной")]
+        [KeyboardButton(text="📤 Поделиться витриной")],
+        [KeyboardButton(text="🤖 Подключить бота"), KeyboardButton(text="🔗 Мои ссылки")]
     ]
     keyboard = ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
     await message.answer("Управление витриной:", reply_markup=keyboard)
 
+@dp.message(Command("manage"))
+async def cmd_manage(message: Message, state: FSMContext):
+    # Сбрасываем состояние FSM при использовании команды /manage
+    await clear_state_if_needed(message, state)
+    await _cmd_manage_impl(message)
+
 # Добавление категории
 @dp.message(F.text == "📁 Добавить категорию")
 async def start_add_category(message: Message, state: FSMContext):
+    # Проверяем и очищаем состояние, если пользователь был в процессе подключения бота
+    await clear_state_if_needed(message, state)
     await state.update_data(user_id=message.from_user.id)
     await state.set_state(AddCategory.name)
     await message.answer("Введите название новой категории:", reply_markup=types.ReplyKeyboardRemove())
 
 @dp.message(AddCategory.name)
 async def process_category_name(message: Message, state: FSMContext):
+    # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
     data = await state.get_data()
     user_id = data.get('user_id', message.from_user.id)
     
@@ -400,10 +964,12 @@ async def process_category_name(message: Message, state: FSMContext):
             else:
                 await message.answer(f"❌ Ошибка: {await resp.text()}")
     await state.clear()
-    await cmd_manage(message)
+    await _cmd_manage_impl(message)
 
 @dp.message(F.text == "📋 Список категорий")
-async def list_categories(message: Message):
+async def list_categories(message: Message, state: FSMContext):
+    # Сбрасываем состояние FSM при использовании этой кнопки
+    await clear_state_if_needed(message, state)
     user_id = message.from_user.id
     
     async with aiohttp.ClientSession() as session:
@@ -463,7 +1029,7 @@ async def delete_category_confirm(callback: types.CallbackQuery):
                 result = await resp.json()
                 await callback.answer("✅ Категория удалена!", show_alert=True)
                 await callback.message.delete()
-                await cmd_manage(callback.message)
+                await _cmd_manage_impl(callback.message)
             elif resp.status == 404:
                 await callback.answer("❌ Категория не найдена", show_alert=True)
             else:
@@ -473,6 +1039,8 @@ async def delete_category_confirm(callback: types.CallbackQuery):
 # Управление названием магазина
 @dp.message(F.text == "🏷️ Название магазина")
 async def manage_shop_name(message: Message, state: FSMContext):
+    # Проверяем и очищаем состояние, если пользователь был в процессе подключения бота
+    await clear_state_if_needed(message, state)
     user_id = message.from_user.id
     
     # Получаем текущее название магазина
@@ -499,13 +1067,18 @@ async def manage_shop_name(message: Message, state: FSMContext):
 
 @dp.message(SetShopName.name)
 async def process_shop_name(message: Message, state: FSMContext):
+    # Если пользователь отправил команду (кроме /clear и /cancel) или кнопку меню, не обрабатываем её здесь
+    if (is_command(message.text or "") and message.text not in ["/clear", "/cancel"]) or is_menu_button(message.text or ""):
+        return
+    
     user_id = message.from_user.id
     
     if message.text == "/clear":
         shop_name = None
     elif message.text == "/cancel":
         await state.clear()
-        return await cmd_manage(message)
+        await _cmd_manage_impl(message)
+        return
     else:
         shop_name = message.text.strip()
         if len(shop_name) > 100:
@@ -540,11 +1113,13 @@ async def process_shop_name(message: Message, state: FSMContext):
                 await message.answer(f"❌ Ошибка: {error_text}")
     
     await state.clear()
-    await cmd_manage(message)
+    await _cmd_manage_impl(message)
 
 # Управление логотипом магазина
 @dp.message(F.text == "🖼️ Логотип магазина")
 async def manage_welcome_image(message: Message, state: FSMContext):
+    # Сбрасываем состояние FSM перед началом новой операции
+    await clear_state_if_needed(message, state, SetWelcomeImage.image)
     user_id = message.from_user.id
     
     # Получаем текущие настройки
@@ -614,10 +1189,14 @@ async def process_welcome_image(message: Message, state: FSMContext):
         await message.answer(f"❌ Ошибка при обработке фото: {str(e)}")
     
     await state.clear()
-    await cmd_manage(message)
+    await _cmd_manage_impl(message)
 
 @dp.message(SetWelcomeImage.image)
 async def process_welcome_image_text(message: Message, state: FSMContext):
+    # Если пользователь отправил команду (кроме /clear и /cancel) или кнопку меню, не обрабатываем её здесь
+    if (is_command(message.text or "") and message.text not in ["/clear", "/cancel"]) or is_menu_button(message.text or ""):
+        return
+    
     user_id = message.from_user.id
     
     if message.text == "/clear":
@@ -634,17 +1213,20 @@ async def process_welcome_image_text(message: Message, state: FSMContext):
                     await message.answer(f"❌ Ошибка: {error_text}")
     elif message.text == "/cancel":
         await state.clear()
-        return await cmd_manage(message)
+        await _cmd_manage_impl(message)
+        return
     else:
         await message.answer("❌ Пожалуйста, отправьте фото или используйте команды /clear или /cancel")
         return
     
     await state.clear()
-    await cmd_manage(message)
+    await _cmd_manage_impl(message)
 
 # Управление описанием магазина
 @dp.message(F.text == "📝 Описание магазина")
 async def manage_welcome_description(message: Message, state: FSMContext):
+    # Сбрасываем состояние FSM перед началом новой операции
+    await clear_state_if_needed(message, state, SetWelcomeDescription.description)
     user_id = message.from_user.id
     
     # Получаем текущие настройки
@@ -673,13 +1255,18 @@ async def manage_welcome_description(message: Message, state: FSMContext):
 
 @dp.message(SetWelcomeDescription.description)
 async def process_welcome_description(message: Message, state: FSMContext):
+    # Если пользователь отправил команду (кроме /clear и /cancel) или кнопку меню, не обрабатываем её здесь
+    if (is_command(message.text or "") and message.text not in ["/clear", "/cancel"]) or is_menu_button(message.text or ""):
+        return
+    
     user_id = message.from_user.id
     
     if message.text == "/clear":
         welcome_description = None
     elif message.text == "/cancel":
         await state.clear()
-        return await cmd_manage(message)
+        await _cmd_manage_impl(message)
+        return
     else:
         welcome_description = message.text.strip()
         if len(welcome_description) > 500:
@@ -716,11 +1303,13 @@ async def process_welcome_description(message: Message, state: FSMContext):
                 await message.answer(f"❌ Ошибка: {error_text}")
     
     await state.clear()
-    await cmd_manage(message)
+    await _cmd_manage_impl(message)
 
 # Управление каналами
 @dp.message(F.text == "📢 Управление каналами")
-async def manage_channels(message: Message):
+async def manage_channels(message: Message, state: FSMContext):
+    # Сбрасываем состояние FSM при использовании этой кнопки
+    await clear_state_if_needed(message, state)
     user_id = message.from_user.id
     
     # Получаем список каналов
@@ -769,7 +1358,9 @@ async def manage_channels(message: Message):
 
 # Удаление товара
 @dp.message(F.text == "🗑️ Удалить товар")
-async def delete_product_start(message: Message):
+async def delete_product_start(message: Message, state: FSMContext):
+    # Сбрасываем состояние FSM при использовании этой кнопки
+    await clear_state_if_needed(message, state)
     user_id = message.from_user.id
     
     # Получаем список товаров пользователя
@@ -814,7 +1405,7 @@ async def delete_product_confirm(callback: types.CallbackQuery):
             if resp.status == 200:
                 await callback.answer("✅ Товар удален!", show_alert=True)
                 await callback.message.delete()
-                await cmd_manage(callback.message)
+                await _cmd_manage_impl(callback.message)
             elif resp.status == 404:
                 await callback.answer("❌ Товар не найден", show_alert=True)
             else:
@@ -907,6 +1498,8 @@ async def add_channel_by_forward(message: Message):
         logging.error(f"Error adding channel by forward: {error_msg}")
         await message.answer(f"❌ Ошибка при добавлении канала: {error_msg}")
 
+
+
 # Обработчик callback для отправки витрины в канал
 @dp.callback_query(F.data.startswith("share_"))
 async def send_store_to_channel(callback: types.CallbackQuery):
@@ -924,107 +1517,84 @@ async def send_store_to_channel(callback: types.CallbackQuery):
     if not channel:
         return await callback.answer("❌ Канал не найден", show_alert=True)
     
-    share_url = f"{WEBAPP_URL}?user_id={user_id}"
-    
     # Получаем настройки магазина
     shop_settings = await get_shop_settings(user_id)
     shop_name = shop_settings.get('shop_name', 'магазин')
     shop_name_display = shop_name if shop_name != 'магазин' else 'Магазин'
-    button_text = f"Открыть {shop_name_display}" if shop_name != 'магазин' else "🛍️ Открыть магазин"
     welcome_description = shop_settings.get('welcome_description')
+    
+    # Проверяем реальный тип чата (делаем это ДО формирования сообщения)
+    chat_type = channel.get('chat_type', 'unknown')  # Инициализируем значением по умолчанию
+    try:
+        chat_info = await bot.get_chat(channel['chat_id'])
+        chat_type = chat_info.type
+        logging.info(f"📤 Sending store to {chat_type} {channel['chat_id']}")
+    except Exception as e:
+        logging.warning(f"Could not get chat info for {channel['chat_id']}: {e}")
+        # Используем значение из базы данных или 'unknown'
+        chat_type = channel.get('chat_type', 'unknown')
+        logging.info(f"📤 Sending store to {chat_type} {channel['chat_id']} (from DB)")
     
     msg = f"**{shop_name_display}**\n\n"
     if welcome_description:
         msg += f"{welcome_description}\n\n"
     
-    chat_type = channel.get('chat_type', '').lower()
+    if chat_type == 'private':
+        msg += "💡 Нажмите кнопку - магазин откроется прямо здесь!"
+    else:
+        msg += "💡 Нажмите кнопку - откроется бот, и магазин запустится внутри Telegram!"
     
-    # Проверяем реальный тип чата через API (на случай, если в БД сохранен неправильный тип)
+    # Вариант 1: Поделиться через главного бота (WebApp кнопка внутри бота)
+    # Используем WebApp кнопку для личных чатов и deep link для групп/каналов
+    builder = InlineKeyboardBuilder()
+    button_text = f"🛍 Открыть {shop_name_display}" if shop_name != 'магазин' else "🛍 Открыть магазин"
+    share_url = f"{WEBAPP_URL}?user_id={user_id}"
+    
+    if chat_type == 'private':
+        # В личных чатах используем WebApp кнопку напрямую (открывает магазин внутри бота)
+        builder.row(types.InlineKeyboardButton(
+            text=button_text,
+            web_app=WebAppInfo(url=share_url)
+        ))
+        logging.info(f"✅ Using WebApp button for private chat (opens inside bot)")
+    else:
+        # В группах и каналах WebApp кнопки не работают
+        # Используем deep link на бота, который откроет магазин внутри бота
+        bot_link = await get_bot_deeplink(user_id)
+        builder.row(types.InlineKeyboardButton(
+            text=button_text,
+            url=bot_link
+        ))
+        logging.info(f"✅ Using deep link for {chat_type} (opens bot, then store inside)")
+    
+    builder_markup = builder.as_markup()
+    
     try:
-        chat_info = await bot.get_chat(channel['chat_id'])
-        real_chat_type = chat_info.type
-        logging.info(f"Channel {channel['chat_id']} - stored type: {chat_type}, real type: {real_chat_type}")
+        # Если есть фото, отправляем его отдельным сообщением ПЕРЕД текстовым
+        welcome_image_url = shop_settings.get('welcome_image_url')
+        if welcome_image_url:
+            try:
+                await bot.send_photo(
+                    chat_id=channel['chat_id'],
+                    photo=welcome_image_url,
+                    parse_mode="Markdown"
+                )
+                logging.info(f"📷 Sent welcome image to {chat_type or 'unknown'} {channel['chat_id']}")
+            except Exception as photo_err:
+                logging.warning(f"⚠️ Could not send welcome image: {photo_err}")
         
-        # Используем реальный тип чата
-        # ВАЖНО: WebApp кнопки не работают при удаленной отправке (через bot.send_message)
-        # даже в супергруппах. Используем deep link для всех случаев удаленной отправки
-        if real_chat_type == 'supergroup':
-            # Для удаленной отправки используем deep link на бота
-            # Пользователь перейдет в бота, и там откроется WebApp кнопка
-            bot_link = await get_bot_deeplink(user_id)
-            builder = InlineKeyboardBuilder()
-            builder.row(types.InlineKeyboardButton(
-                text=button_text, 
-                url=bot_link
-            ))
-            
-            msg += "💡 Нажмите кнопку - откроется бот, и магазин запустится внутри Telegram!"
-            
-            try:
-                sent_msg = await send_shop_message(bot, channel['chat_id'], msg, builder.as_markup(), user_id)
-                logging.info(f"✅ Successfully sent store to supergroup {channel['chat_id']} with deep link, message_id: {sent_msg.message_id}")
-                await callback.answer(f"✅ Витрина отправлена в '{channel['title']}'!")
-                return
-            except Exception as e:
-                error_msg = str(e)
-                logging.error(f"❌ Error sending to supergroup {channel['chat_id']}: {error_msg}")
-                
-                if "chat not found" in error_msg.lower() or "not a member" in error_msg.lower():
-                    error_text = "❌ Бот не является участником или не имеет прав на отправку сообщений"
-                else:
-                    error_text = f"❌ Ошибка: {error_msg}"
-                await callback.answer(error_text, show_alert=True)
-                return
-        else:
-            # Не супергруппа - используем deep link
-            chat_type = real_chat_type
-    except Exception as e:
-        logging.warning(f"Could not get chat info for {channel['chat_id']}: {e}, using stored type: {chat_type}")
-        # Если не удалось получить информацию, используем сохраненный тип
-        if chat_type == 'supergroup':
-            # Для удаленной отправки используем deep link (WebApp не работает при удаленной отправке)
-            bot_link = await get_bot_deeplink(user_id)
-            builder = InlineKeyboardBuilder()
-            builder.row(types.InlineKeyboardButton(
-                text=button_text, 
-                url=bot_link
-            ))
-            
-            msg += "💡 Нажмите кнопку - откроется бот, и магазин запустится внутри Telegram!"
-            
-            try:
-                sent_msg = await send_shop_message(bot, channel['chat_id'], msg, builder.as_markup(), user_id)
-                logging.info(f"Successfully sent store to {chat_type} {channel['chat_id']} with deep link, message_id: {sent_msg.message_id}")
-                await callback.answer(f"✅ Витрина отправлена в '{channel['title']}'!")
-                return
-            except Exception as send_err:
-                error_msg = str(send_err)
-                logging.error(f"Error sending to {chat_type}: {error_msg}")
-                error_text = f"❌ Ошибка: {error_msg}"
-                await callback.answer(error_text, show_alert=True)
-                return
-    
-    # Для каналов и обычных групп используем deep link на бота
-    if chat_type == 'channel':
-        msg += "💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!"
-    elif chat_type == 'group':
-        msg += "💡 Нажмите кнопку, чтобы перейти в бота и открыть магазин!\n"
-        msg += "💡 **Совет:** Конвертируйте группу в супергруппу, чтобы магазин открывался сразу внутри Telegram"
-    
-    bot_link = await get_bot_deeplink(user_id)
-    builder_url = InlineKeyboardBuilder()
-    builder_url.row(types.InlineKeyboardButton(
-        text=button_text, 
-        url=bot_link
-    ))
-    
-    try:
-        sent_msg = await send_shop_message(bot, channel['chat_id'], msg, builder_url.as_markup(), user_id)
-        logging.info(f"Successfully sent store to {chat_type} {channel['chat_id']} with URL, message_id: {sent_msg.message_id}")
+        # Отправляем текстовое сообщение с кнопкой
+        sent_msg = await bot.send_message(
+            chat_id=channel['chat_id'],
+            text=msg,
+            reply_markup=builder_markup,
+            parse_mode="Markdown"
+        )
+        logging.info(f"✅ Successfully sent store to {chat_type or 'unknown'} {channel['chat_id']}, message_id: {sent_msg.message_id}")
         await callback.answer(f"✅ Витрина отправлена в '{channel['title']}'!")
     except Exception as e:
         error_msg = str(e)
-        logging.error(f"Error sending store to {chat_type} {channel['chat_id']}: {error_msg}")
+        logging.error(f"❌ Error sending to {chat_type or 'unknown'} {channel['chat_id']}: {error_msg}")
         
         if "chat not found" in error_msg.lower() or "not a member" in error_msg.lower():
             error_text = "❌ Бот не является участником или не имеет прав на отправку сообщений"
@@ -1032,6 +1602,52 @@ async def send_store_to_channel(callback: types.CallbackQuery):
             error_text = f"❌ Ошибка: {error_msg}"
         
         await callback.answer(error_text, show_alert=True)
+
+
+
+# Обработчик callback для удаления бота
+@dp.callback_query(F.data.startswith("delete_bot_"))
+async def delete_bot_callback(callback: types.CallbackQuery):
+    bot_id = int(callback.data.split("_")[2])
+    user_id = callback.from_user.id
+    
+    # Запрашиваем подтверждение
+    # Сначала получаем информацию о боте
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{API_URL}/bots/my",
+                params={"owner_user_id": user_id}
+            ) as resp:
+                if resp.status != 200:
+                    return await callback.answer("❌ Ошибка при получении информации о боте", show_alert=True)
+                
+                bots = await resp.json()
+                bot = next((b for b in bots if b.get("id") == bot_id), None)
+                
+                if not bot:
+                    return await callback.answer("❌ Бот не найден", show_alert=True)
+                
+                bot_username = bot.get("bot_username", "unknown")
+                
+                # Удаляем бота
+                async with session.delete(
+                    f"{API_URL}/bots/{bot_id}",
+                    params={"owner_user_id": user_id}
+                ) as delete_resp:
+                    if delete_resp.status == 200:
+                        await callback.answer(f"✅ Бот @{bot_username} удален!")
+                        # Обновляем сообщение - показываем обновленный список
+                        await _cmd_mylink_impl(callback.message)
+                    elif delete_resp.status == 404:
+                        await callback.answer("❌ Бот не найден", show_alert=True)
+                    else:
+                        error_text = await delete_resp.text()
+                        logging.error(f"Error deleting bot: status={delete_resp.status}, error={error_text}")
+                        await callback.answer("❌ Ошибка при удалении бота", show_alert=True)
+    except Exception as e:
+        logging.error(f"Exception deleting bot: {e}")
+        await callback.answer(f"❌ Произошла ошибка: {str(e)}", show_alert=True)
 
 # Обработчик callback для удаления канала
 @dp.callback_query(F.data.startswith("del_channel_"))
@@ -1054,18 +1670,28 @@ async def delete_channel(callback: types.CallbackQuery):
 
 @dp.message(F.text == "➕ Добавить товар")
 async def start_add_product(message: Message, state: FSMContext):
+    # Проверяем и очищаем состояние, если пользователь был в процессе подключения бота
+    await clear_state_if_needed(message, state)
     await state.update_data(user_id=message.from_user.id)
     await state.set_state(AddProduct.name)
     await message.answer("Введите название товара:", reply_markup=types.ReplyKeyboardRemove())
 
 @dp.message(AddProduct.name)
 async def process_name(message: Message, state: FSMContext):
+    # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
     await state.update_data(name=message.text)
     await state.set_state(AddProduct.price)
     await message.answer("Введите цену товара (число):")
 
 @dp.message(AddProduct.price)
 async def process_price(message: Message, state: FSMContext):
+    # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
     try:
         price = float(message.text)
         await state.update_data(price=price)
@@ -1102,6 +1728,10 @@ async def process_category(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(AddProduct.discount)
 async def process_discount(message: Message, state: FSMContext):
+    # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
     try:
         discount = float(message.text)
         await state.update_data(discount=discount)
@@ -1112,6 +1742,10 @@ async def process_discount(message: Message, state: FSMContext):
 
 @dp.message(AddProduct.description)
 async def process_description(message: Message, state: FSMContext):
+    # Если пользователь отправил команду (кроме /skip) или кнопку меню, не обрабатываем её здесь
+    if (is_command(message.text or "") and message.text != "/skip") or is_menu_button(message.text or ""):
+        return
+    
     description = message.text if message.text != "/skip" else None
     await state.update_data(description=description)
     await state.set_state(AddProduct.quantity)
@@ -1119,6 +1753,10 @@ async def process_description(message: Message, state: FSMContext):
 
 @dp.message(AddProduct.quantity)
 async def process_quantity(message: Message, state: FSMContext):
+    # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
     try:
         quantity = int(message.text)
         if quantity < 0:
@@ -1172,6 +1810,10 @@ async def process_photos(message: Message, state: FSMContext):
 
 @dp.message(AddProduct.photos)
 async def process_photos_done(message: Message, state: FSMContext):
+    # Если пользователь отправил команду (кроме /done и /skip) или кнопку меню, не обрабатываем её здесь
+    if (is_command(message.text or "") and message.text not in ["/done", "/skip"]) or is_menu_button(message.text or ""):
+        return
+    
     if message.text == "/done" or message.text == "/skip":
         data = await state.get_data()
         user_id = data.get('user_id', message.from_user.id)

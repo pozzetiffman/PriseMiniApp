@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, Union
 
 class OrderBase(BaseModel):
-    product_id: int
+    product_id: Optional[int]  # Может быть None, если товар был удален
     quantity: int = 1
 
 class OrderCreate(OrderBase):
