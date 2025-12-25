@@ -174,3 +174,5 @@ if __name__ == "__main__":
     for p in bot_products:
         print(f"  - {p.name} (ID: {p.id}, Price: {p.price})")
 
+
+

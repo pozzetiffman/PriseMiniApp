@@ -1899,7 +1899,7 @@ async def process_photos_done(message: Message, state: FSMContext):
                     pass
             
             await state.clear()
-            await cmd_manage(message)
+            await cmd_manage(message, state)
     else:
         await message.answer("Отправьте фото товара, /done чтобы закончить, или /skip чтобы пропустить фото:")
 

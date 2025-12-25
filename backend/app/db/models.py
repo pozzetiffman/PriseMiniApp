@@ -95,6 +95,7 @@ class SoldProduct(Base):
     image_url = Column(String, nullable=True)  # Первое изображение
     images_urls = Column(Text, nullable=True)  # JSON массив URL изображений
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    quantity = Column(Integer, default=1)  # Количество проданного товара
     sold_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время продажи
     
     product = relationship("Product", backref="sold_records")

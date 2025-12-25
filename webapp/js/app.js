@@ -35,11 +35,28 @@ const reservationModal = document.getElementById('reservation-modal');
 const reservationClose = document.querySelector('.reservation-close');
 const orderModal = document.getElementById('order-modal');
 const orderClose = document.querySelector('.order-close');
+const sellModal = document.getElementById('sell-modal');
+const sellClose = document.querySelector('.sell-close');
 
 // Состояние модального окна товара
 let currentImageIndex = 0;
 let currentImages = [];
 let currentProduct = null;
+let currentImageLoadId = 0; // Уникальный ID для отслеживания актуальности загрузки изображения
+
+// Детекция устройства (мобильное/десктоп)
+// В Telegram WebView на мобильных устройствах нужно использовать blob URL для обхода блокировки
+// На десктопе можно использовать прямые URL
+function isMobileDevice() {
+    // Проверяем через Telegram WebApp platform
+    const tg = getTelegramInstance();
+    if (tg && tg.platform) {
+        return tg.platform === 'ios' || tg.platform === 'android';
+    }
+    // Fallback: проверяем через user agent
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (window.innerWidth <= 768);
+}
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async () => {
@@ -263,6 +280,8 @@ window.loadData = async function loadData() {
         console.log('✅ Step 2 complete: Products loaded:', products.length);
         // Сохраняем все товары для фильтрации
         allProducts = products;
+        // Обновляем опции фильтра на основе доступных товаров
+        updateProductFilterOptions();
         // Применяем фильтры (если они активны)
         applyFilters();
         
@@ -445,48 +464,73 @@ function renderProducts(products) {
             hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
         }
         
-        // Создаем badge количества товара или "Под заказ" (только если quantity_enabled включен)
+        // Создаем badge количества товара или "Под заказ"
         let quantityBadge = null;
         const shopSettings = getCurrentShopSettings();
         const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
-        if (quantityEnabled) {
-            // Отладочный вывод
-            if (prod.id) {
-                console.log(`[BADGE DEBUG] Product ${prod.id} "${prod.name}":`, {
-                    is_made_to_order: prod.is_made_to_order,
-                    type: typeof prod.is_made_to_order,
-                    quantity: prod.quantity,
-                    full_product: prod
-                });
-            }
-            // Если товар под заказ, показываем "Под заказ"
-            // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
-            const isMadeToOrder = prod.is_made_to_order === true || 
-                                  prod.is_made_to_order === 1 || 
-                                  prod.is_made_to_order === '1' ||
-                                  prod.is_made_to_order === 'true' ||
-                                  String(prod.is_made_to_order).toLowerCase() === 'true';
-            console.log(`[BADGE DEBUG] Product ${prod.id} isMadeToOrder check: raw=${prod.is_made_to_order} (${typeof prod.is_made_to_order}), converted=${isMadeToOrder}`);
-            if (isMadeToOrder) {
-                quantityBadge = document.createElement('div');
-                quantityBadge.className = 'product-quantity-badge';
-                quantityBadge.textContent = 'Под заказ';
-                quantityBadge.style.background = 'rgba(90, 200, 250, 0.95)'; // Синий для под заказ
-                quantityBadge.style.color = '#ffffff';
-            } else if (prod.quantity !== undefined && prod.quantity !== null) {
-                quantityBadge = document.createElement('div');
-                quantityBadge.className = 'product-quantity-badge';
-                const quantity = prod.quantity;
-                if (quantity > 0) {
-                    quantityBadge.textContent = `В наличии: ${quantity}`;
-                    quantityBadge.style.background = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
-                    quantityBadge.style.color = '#ffffff';
+        
+        // Отладочный вывод
+        if (prod.id) {
+            console.log(`[BADGE DEBUG] Product ${prod.id} "${prod.name}":`, {
+                is_made_to_order: prod.is_made_to_order,
+                type: typeof prod.is_made_to_order,
+                quantity: prod.quantity,
+                quantityEnabled: quantityEnabled,
+                full_product: prod
+            });
+        }
+        
+        // Если товар под заказ, показываем "Под заказ"
+        // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
+        const isMadeToOrder = prod.is_made_to_order === true || 
+                              prod.is_made_to_order === 1 || 
+                              prod.is_made_to_order === '1' ||
+                              prod.is_made_to_order === 'true' ||
+                              String(prod.is_made_to_order).toLowerCase() === 'true';
+        console.log(`[BADGE DEBUG] Product ${prod.id} isMadeToOrder check: raw=${prod.is_made_to_order} (${typeof prod.is_made_to_order}), converted=${isMadeToOrder}`);
+        
+        if (isMadeToOrder) {
+            quantityBadge = document.createElement('div');
+            quantityBadge.className = 'product-quantity-badge';
+            quantityBadge.textContent = 'Под заказ';
+            quantityBadge.style.background = 'rgba(90, 200, 250, 0.95)'; // Синий для под заказ
+            quantityBadge.style.color = '#ffffff';
+        } else if (prod.quantity !== undefined && prod.quantity !== null) {
+            quantityBadge = document.createElement('div');
+            quantityBadge.className = 'product-quantity-badge';
+            const quantity = prod.quantity;
+            if (quantity > 0) {
+                // Проверяем активные резервации
+                const activeReservationsCount = prod.reservation && prod.reservation.active_count ? prod.reservation.active_count : 0;
+                const availableCount = quantity - activeReservationsCount;
+                
+                // Если quantity_enabled включен, показываем количество с учетом резерваций
+                if (quantityEnabled) {
+                    if (activeReservationsCount > 0) {
+                        // Если есть резервации, показываем "Доступно: X из Y"
+                        quantityBadge.textContent = `Доступно: ${availableCount} из ${quantity}`;
+                    } else {
+                        // Если резерваций нет, показываем просто "В наличии: Y"
+                        quantityBadge.textContent = `В наличии: ${quantity}`;
+                    }
                 } else {
-                    quantityBadge.textContent = 'Нет в наличии';
-                    quantityBadge.style.background = 'rgba(255, 59, 48, 0.95)'; // Красный для отсутствия
-                    quantityBadge.style.color = '#ffffff';
+                    // Если quantity_enabled выключен, показываем просто "В наличии"
+                    quantityBadge.textContent = 'В наличии';
                 }
+                quantityBadge.style.background = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
+                quantityBadge.style.color = '#ffffff';
+            } else {
+                quantityBadge.textContent = 'Нет в наличии';
+                quantityBadge.style.background = 'rgba(255, 59, 48, 0.95)'; // Красный для отсутствия
+                quantityBadge.style.color = '#ffffff';
             }
+        } else if (!quantityEnabled) {
+            // Если quantity_enabled выключен и quantity не указан, показываем просто "В наличии"
+            quantityBadge = document.createElement('div');
+            quantityBadge.className = 'product-quantity-badge';
+            quantityBadge.textContent = 'В наличии';
+            quantityBadge.style.background = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
+            quantityBadge.style.color = '#ffffff';
         }
         
         // КРИТИЧЕСКИ ВАЖНО: Добавляем imageDiv в card ПЕРЕД созданием img
@@ -509,11 +553,6 @@ function renderProducts(products) {
         }
         
         if (fullImg) {
-            // КРИТИЧЕСКОЕ РЕШЕНИЕ: Загружаем изображение через fetch и создаем blob URL
-            // Это обходит блокировку Telegram WebView для ngrok доменов
-            // Telegram WebView может блокировать прямые запросы к ngrok доменам через <img src>
-            // Но fetch запросы работают, поэтому мы загружаем через fetch и создаем blob URL
-            
             // Показываем placeholder во время загрузки
             imageDiv.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
             const loadingPlaceholder = document.createElement('div');
@@ -565,27 +604,82 @@ function renderProducts(products) {
                 }
             };
             
-            // Загружаем изображение через fetch для обхода блокировки Telegram WebView
-            fetch(fullImg, {
-                headers: {
-                    'ngrok-skip-browser-warning': '69420'
-                }
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                // Создаем blob URL для обхода блокировки ngrok доменов
-                const blobUrl = URL.createObjectURL(blob);
-                
-                if (prod.id) {
-                    console.log(`[IMG DEBUG] Product ${prod.id}: Image loaded via fetch, blob URL created: ${blobUrl.substring(0, 50)}...`);
-                }
-                
-                // Создаем img элемент и устанавливаем blob URL
+            // Определяем, мобильное устройство или десктоп
+            const isMobile = isMobileDevice();
+            
+            if (isMobile) {
+                // На мобильных устройствах используем fetch + blob URL для обхода блокировки Telegram WebView
+                // Telegram WebView может блокировать прямые запросы к ngrok доменам через <img src>
+                // Но fetch запросы работают, поэтому мы загружаем через fetch и создаем blob URL
+                fetch(fullImg, {
+                    headers: {
+                        'ngrok-skip-browser-warning': '69420'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    // Создаем blob URL для обхода блокировки ngrok доменов
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    if (prod.id) {
+                        console.log(`[IMG DEBUG] Product ${prod.id}: Image loaded via fetch, blob URL created (mobile)`);
+                    }
+                    
+                    // Создаем img элемент и устанавливаем blob URL
+                    const img = document.createElement('img');
+                    img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block;';
+                    img.alt = prod.name;
+                    
+                    img.onload = function() {
+                        // Изображение загружено успешно
+                        if (prod.id) {
+                            console.log(`[IMG DEBUG] Product ${prod.id}: IMAGE LOADED SUCCESSFULLY via blob URL (mobile)`);
+                        }
+                        // Удаляем placeholder
+                        if (loadingPlaceholder.parentNode) {
+                            loadingPlaceholder.remove();
+                        }
+                    };
+                    
+                    img.onerror = function() {
+                        // Ошибка загрузки изображения
+                        if (prod.id) {
+                            console.error(`[IMG DEBUG] Product ${prod.id}: IMAGE LOAD ERROR - blob URL failed (mobile)`);
+                        }
+                        URL.revokeObjectURL(blobUrl); // Освобождаем память
+                        showError();
+                    };
+                    
+                    // Заменяем placeholder на изображение
+                    imageDiv.innerHTML = '';
+                    imageDiv.appendChild(img);
+                    if (discountBadge) {
+                        imageDiv.appendChild(discountBadge);
+                    }
+                    if (hotOfferBadge) {
+                        imageDiv.appendChild(hotOfferBadge);
+                    }
+                    if (reservedBadge) {
+                        imageDiv.appendChild(reservedBadge);
+                    }
+                    
+                    // Устанавливаем blob URL
+                    img.src = blobUrl;
+                })
+                .catch(error => {
+                    if (prod.id) {
+                        console.error(`[IMG DEBUG] Product ${prod.id}: Fetch error (mobile):`, error);
+                        console.error(`[IMG DEBUG] Product ${prod.id}: Failed URL: "${fullImg}"`);
+                    }
+                    showError();
+                });
+            } else {
+                // На десктопе используем прямые URL (более надежно и быстрее)
                 const img = document.createElement('img');
                 img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block;';
                 img.alt = prod.name;
@@ -593,7 +687,7 @@ function renderProducts(products) {
                 img.onload = function() {
                     // Изображение загружено успешно
                     if (prod.id) {
-                        console.log(`[IMG DEBUG] Product ${prod.id}: IMAGE LOADED SUCCESSFULLY via blob URL`);
+                        console.log(`[IMG DEBUG] Product ${prod.id}: IMAGE LOADED SUCCESSFULLY via direct URL (desktop)`);
                     }
                     // Удаляем placeholder
                     if (loadingPlaceholder.parentNode) {
@@ -602,12 +696,35 @@ function renderProducts(products) {
                 };
                 
                 img.onerror = function() {
-                    // Ошибка загрузки изображения
+                    // Ошибка загрузки изображения - пробуем через fetch как fallback
                     if (prod.id) {
-                        console.error(`[IMG DEBUG] Product ${prod.id}: IMAGE LOAD ERROR - blob URL failed`);
+                        console.warn(`[IMG DEBUG] Product ${prod.id}: Direct URL failed, trying fetch fallback (desktop)`);
                     }
-                    URL.revokeObjectURL(blobUrl); // Освобождаем память
-                    showError();
+                    // Fallback: пробуем через fetch
+                    fetch(fullImg, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        img.src = blobUrl;
+                        if (prod.id) {
+                            console.log(`[IMG DEBUG] Product ${prod.id}: Image loaded via fetch fallback (desktop)`);
+                        }
+                    })
+                    .catch(error => {
+                        if (prod.id) {
+                            console.error(`[IMG DEBUG] Product ${prod.id}: Fetch fallback also failed:`, error);
+                        }
+                        showError();
+                    });
                 };
                 
                 // Заменяем placeholder на изображение
@@ -623,19 +740,9 @@ function renderProducts(products) {
                     imageDiv.appendChild(reservedBadge);
                 }
                 
-                // Устанавливаем blob URL
-                img.src = blobUrl;
-                
-                // Сохраняем blob URL для последующей очистки (опционально)
-                // Можно добавить очистку при удалении карточки
-            })
-            .catch(error => {
-                if (prod.id) {
-                    console.error(`[IMG DEBUG] Product ${prod.id}: Fetch error:`, error);
-                    console.error(`[IMG DEBUG] Product ${prod.id}: Failed URL: "${fullImg}"`);
-                }
-                showError();
-            });
+                // Устанавливаем прямой URL
+                img.src = fullImg;
+            }
         } else {
             // ДИАГНОСТИКА: fullImg пустой
             if (prod.id) {
@@ -709,9 +816,16 @@ function renderProducts(products) {
 
 // Показ модального окна товара
 function showProductModal(prod, finalPrice, fullImages) {
+    console.log(`[MODAL] showProductModal called: productId=${prod.id}, productName="${prod.name}", fullImages.length=${fullImages ? fullImages.length : 0}`);
+    
+    // Сбрасываем ID загрузки при открытии нового товара
+    currentImageLoadId = 0;
+    
     currentProduct = prod;
-    currentImages = fullImages;
+    currentImages = fullImages || [];
     currentImageIndex = 0;
+    
+    console.log(`[MODAL] State updated: currentImages.length=${currentImages.length}, currentImageLoadId=${currentImageLoadId}`);
     
     // Отслеживаем просмотр конкретного товара (только для клиентов, не для владельца)
     if (appContext && appContext.role === 'client' && appContext.shop_owner_id) {
@@ -796,7 +910,7 @@ function showProductModal(prod, finalPrice, fullImages) {
         const soldBtn = document.createElement('button');
         soldBtn.className = 'reserve-btn btn-sold';
         soldBtn.textContent = '✅ Продан';
-        soldBtn.onclick = () => markAsSold(prod.id);
+        soldBtn.onclick = () => markAsSold(prod.id, prod);
         editControl.appendChild(soldBtn);
         
         // Кнопка "Удалить"
@@ -835,29 +949,47 @@ function showProductModal(prod, finalPrice, fullImages) {
         modalPriceContainer.appendChild(oldPriceSpan);
     }
     
-    // Количество товара в модальном окне (только если quantity_enabled включен)
+    // Количество товара в модальном окне
     const modalQuantityDiv = document.getElementById('modal-quantity');
     if (modalQuantityDiv) {
         const shopSettingsForModal = getCurrentShopSettings();
         const quantityEnabledForModal = shopSettingsForModal ? (shopSettingsForModal.quantity_enabled !== false) : true;
-        if (quantityEnabledForModal) {
-            // Если товар под заказ, показываем "Под заказ"
-            // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
-            const isMadeToOrder = prod.is_made_to_order === true || 
-                                  prod.is_made_to_order === 1 || 
-                                  prod.is_made_to_order === '1' ||
-                                  prod.is_made_to_order === 'true' ||
-                                  String(prod.is_made_to_order).toLowerCase() === 'true';
-            console.log(`[MODAL DEBUG] Product ${prod.id} isMadeToOrder check: raw=${prod.is_made_to_order} (${typeof prod.is_made_to_order}), converted=${isMadeToOrder}`);
-            if (isMadeToOrder) {
-                modalQuantityDiv.style.display = 'block';
-                modalQuantityDiv.textContent = '📦 Под заказ';
-            } else if (prod.quantity !== undefined && prod.quantity !== null) {
-                modalQuantityDiv.style.display = 'block';
-                modalQuantityDiv.textContent = `📦 В наличии: ${prod.quantity} шт.`;
+        
+        // Если товар под заказ, показываем "Под заказ"
+        // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
+        const isMadeToOrder = prod.is_made_to_order === true || 
+                              prod.is_made_to_order === 1 || 
+                              prod.is_made_to_order === '1' ||
+                              prod.is_made_to_order === 'true' ||
+                              String(prod.is_made_to_order).toLowerCase() === 'true';
+        console.log(`[MODAL DEBUG] Product ${prod.id} isMadeToOrder check: raw=${prod.is_made_to_order} (${typeof prod.is_made_to_order}), converted=${isMadeToOrder}`);
+        
+        if (isMadeToOrder) {
+            modalQuantityDiv.style.display = 'block';
+            modalQuantityDiv.textContent = '📦 Под заказ';
+        } else if (prod.quantity !== undefined && prod.quantity !== null) {
+            modalQuantityDiv.style.display = 'block';
+            // Проверяем активные резервации
+            const activeReservationsCount = prod.reservation && prod.reservation.active_count ? prod.reservation.active_count : 0;
+            const availableCount = prod.quantity - activeReservationsCount;
+            
+            // Если quantity_enabled включен, показываем количество с учетом резерваций
+            if (quantityEnabledForModal) {
+                if (activeReservationsCount > 0) {
+                    // Если есть резервации, показываем "Доступно: X из Y шт."
+                    modalQuantityDiv.textContent = `📦 Доступно: ${availableCount} из ${prod.quantity} шт.`;
+                } else {
+                    // Если резерваций нет, показываем просто "В наличии: Y шт."
+                    modalQuantityDiv.textContent = `📦 В наличии: ${prod.quantity} шт.`;
+                }
             } else {
-                modalQuantityDiv.style.display = 'none';
+                // Если quantity_enabled выключен, показываем просто "В наличии"
+                modalQuantityDiv.textContent = '📦 В наличии';
             }
+        } else if (!quantityEnabledForModal) {
+            // Если quantity_enabled выключен и quantity не указан, показываем просто "В наличии"
+            modalQuantityDiv.style.display = 'block';
+            modalQuantityDiv.textContent = '📦 В наличии';
         } else {
             modalQuantityDiv.style.display = 'none';
         }
@@ -881,8 +1013,8 @@ function showProductModal(prod, finalPrice, fullImages) {
     // Проверяем, можно ли еще резервировать товар (для товаров с quantity > 1)
     const canStillReserve = productQuantity > 0 && activeReservationsCount < productQuantity;
     
-    // Показываем информацию о резервации только если quantity_enabled включен
-    if (quantityEnabledForReservation && hasActiveReservation) {
+    // Показываем информацию о резервации (всегда, если есть резервация)
+    if (hasActiveReservation) {
         // Backend уже вернул только активные резервации, просто показываем время
         // Backend возвращает время в UTC через isoformat()
         // Парсим время правильно (если нет Z в конце, добавляем его для UTC)
@@ -925,8 +1057,8 @@ function showProductModal(prod, finalPrice, fullImages) {
         
         modalReservationStatus.style.display = 'block';
         
-        // Показываем информацию о резервации с учетом количества
-        if (productQuantity > 1 && activeReservationsCount > 0) {
+        // Показываем информацию о резервации с учетом количества (только если quantity_enabled включен)
+        if (quantityEnabledForReservation && productQuantity > 1 && activeReservationsCount > 0) {
             const availableCount = productQuantity - activeReservationsCount;
             modalReservationStatus.textContent = `⏰ Зарезервировано: ${activeReservationsCount} из ${productQuantity} шт. (доступно: ${availableCount} шт.) до ${timeText}`;
         } else {
@@ -979,15 +1111,15 @@ function showProductModal(prod, finalPrice, fullImages) {
     
     // Показываем кнопку резервации, если:
     // - Нет активной резервации ИЛИ
-    // - Есть активная резервация, но можно еще резервировать (quantity > active_count)
-    // - И количество товаров включено, И резервация включена
+    // - Есть активная резервация, но можно еще резервировать (quantity > active_count) - только если quantity_enabled включен
+    // - И резервация включена
     // - И товар НЕ под заказ (товары под заказ нельзя резервировать)
-    const shouldShowReserveButton = (!hasActiveReservation || canStillReserve) && 
-                                     appContext.role === 'client' && 
+    // ВАЖНО: Если quantity_enabled = false, резервация работает, но без показа количества
+    const shouldShowReserveButton = appContext.role === 'client' && 
                                      appContext.permissions.can_reserve && 
-                                     quantityEnabled &&
                                      reservationsEnabled &&
-                                     !isMadeToOrder; // Товары под заказ нельзя резервировать
+                                     !isMadeToOrder && // Товары под заказ нельзя резервировать
+                                     (quantityEnabled ? (!hasActiveReservation || canStillReserve) : !hasActiveReservation); // Если quantity_enabled выключен, просто проверяем отсутствие резервации
     
     if (shouldShowReserveButton) {
         const reserveBtn = document.createElement('button');
@@ -995,8 +1127,8 @@ function showProductModal(prod, finalPrice, fullImages) {
         reserveBtn.textContent = '🔒 Зарезервировать';
         reserveBtn.onclick = () => showReservationModal(prod.id);
         modalReservationButton.appendChild(reserveBtn);
-    } else if (!reservationsEnabled || !quantityEnabled) {
-        console.log('🔒 Reservations or quantity disabled - button not shown');
+    } else if (!reservationsEnabled) {
+        console.log('🔒 Reservations disabled - button not shown');
     }
     
     // Показываем кнопку "Заказать" для товаров под заказ (только для клиентов)
@@ -1020,15 +1152,119 @@ function showReservationModal(productId) {
         return;
     }
     
+    // Находим товар в текущем списке (используем allProducts или currentProduct)
+    let product = currentProduct; // Сначала пробуем текущий товар из модального окна
+    if (!product || product.id !== productId) {
+        // Если не совпадает, ищем в allProducts
+        product = allProducts.find(p => p.id === productId);
+    }
+    if (!product) {
+        console.error('❌ Product not found:', productId, 'allProducts length:', allProducts.length);
+        alert('❌ Ошибка: товар не найден');
+        return;
+    }
+    
+    const productQuantity = product.quantity || 0;
+    console.log('🔒 showReservationModal:', { productId, productQuantity, productName: product.name });
+    
+    // Проверяем, включен ли показ количества в настройках
+    const shopSettings = getCurrentShopSettings();
+    const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
+    console.log('🔒 quantityEnabled from settings:', quantityEnabled);
+    
+    const quantityContainer = document.getElementById('reservation-quantity-container');
+    const quantityInput = document.getElementById('reservation-quantity');
+    const quantityInfo = document.getElementById('reservation-quantity-info');
+    
+    if (!quantityContainer || !quantityInput || !quantityInfo) {
+        console.error('❌ Reservation modal elements not found!', { quantityContainer, quantityInput, quantityInfo });
+        alert('❌ Ошибка: элементы модального окна не найдены');
+        return;
+    }
+    
+    // Показываем выбор количества только если quantity_enabled включен И quantity > 1
+    if (quantityEnabled && productQuantity > 1) {
+        console.log('🔒 Showing quantity selector for product with quantity:', productQuantity);
+        quantityContainer.style.display = 'block';
+        quantityInput.max = productQuantity;
+        quantityInput.value = 1;
+        
+        // Показываем информацию о доступном количестве
+        const activeReservationsCount = product.reservation ? 1 : 0;
+        const availableCount = productQuantity - activeReservationsCount;
+        quantityInfo.textContent = `Доступно для резервации: ${availableCount} из ${productQuantity} шт.`;
+        
+        // Обновляем max при изменении
+        quantityInput.oninput = () => {
+            const value = parseInt(quantityInput.value) || 1;
+            if (value > availableCount) {
+                quantityInput.value = availableCount;
+            }
+            if (value < 1) {
+                quantityInput.value = 1;
+            }
+        };
+    } else {
+        // Если quantity_enabled выключен ИЛИ quantity = 1 или null/undefined, скрываем выбор количества
+        console.log('🔒 Hiding quantity selector (quantity_enabled=false or quantity <= 1 or null)');
+        quantityContainer.style.display = 'none';
+    }
+    
+    if (!reservationModal) {
+        console.error('❌ Reservation modal not found!');
+        alert('❌ Ошибка: модальное окно резервации не найдено');
+        return;
+    }
+    
+    console.log('🔒 Opening reservation modal');
     reservationModal.style.display = 'block';
+    
+    // Убеждаемся, что обработчики событий устанавливаются заново каждый раз
     const options = document.querySelectorAll('.reservation-option');
-    options.forEach(option => {
-        option.onclick = async () => {
-            const hours = parseInt(option.dataset.hours);
+    console.log('🔒 Found reservation options:', options.length);
+    
+    if (options.length === 0) {
+        console.error('❌ No reservation options found!');
+        alert('❌ Ошибка: кнопки выбора времени не найдены');
+        return;
+    }
+    
+    options.forEach((option, index) => {
+        // Удаляем старые обработчики
+        const newOption = option.cloneNode(true);
+        option.parentNode.replaceChild(newOption, option);
+        
+        newOption.onclick = async () => {
+            const hours = parseInt(newOption.dataset.hours);
+            let quantity = 1;
+            
+            console.log('🔒 Reservation option clicked:', { hours, productQuantity, quantityEnabled, containerDisplay: quantityContainer ? quantityContainer.style.display : 'not found' });
+            
+            // Если показывается выбор количества (quantity_enabled включен И quantity > 1), берем значение из input
+            if (quantityEnabled && productQuantity > 1 && quantityContainer && quantityContainer.style.display !== 'none') {
+                quantity = parseInt(quantityInput.value) || 1;
+                const activeReservationsCount = product.reservation ? 1 : 0;
+                const availableCount = Math.max(0, productQuantity - activeReservationsCount);
+                console.log('🔒 Quantity check:', { quantity, availableCount, productQuantity, activeReservationsCount });
+                if (quantity > availableCount) {
+                    alert(`❌ Недостаточно товара. Доступно для резервации: ${availableCount} шт.`);
+                    return;
+                }
+                if (quantity < 1) {
+                    alert('❌ Количество должно быть не менее 1');
+                    return;
+                }
+            } else {
+                console.log('🔒 Using default quantity=1 (quantity selector not shown or quantity <= 1)');
+            }
+            
+            console.log('🔒 Creating reservation with:', { productId, hours, quantity });
             reservationModal.style.display = 'none';
-            await createReservation(productId, hours);
+            await createReservation(productId, hours, quantity);
         };
     });
+    
+    console.log('🔒 Reservation modal setup complete');
 }
 
 // Показ модального окна заказа
@@ -1094,17 +1330,21 @@ async function createOrder(productId, quantity) {
 }
 
 // Создание резервации
-async function createReservation(productId, hours) {
+async function createReservation(productId, hours, quantity = 1) {
     try {
+        console.log('🔒 createReservation called:', { productId, hours, quantity });
         if (!appContext) {
             alert('❌ Ошибка: контекст не загружен');
             return;
         }
         
         // reserved_by_user_id определяется на backend из initData
-        const reservation = await createReservationAPI(productId, hours);
+        console.log('🔒 Calling createReservationAPI with quantity:', quantity);
+        const reservation = await createReservationAPI(productId, hours, quantity);
+        console.log('✅ Reservation created:', reservation);
         
-        alert(`✅ Товар зарезервирован на ${hours} ${hours === 1 ? 'час' : hours === 2 ? 'часа' : 'часов'}`);
+        const quantityText = quantity > 1 ? ` (${quantity} шт.)` : '';
+        alert(`✅ Товар зарезервирован на ${hours} ${hours === 1 ? 'час' : hours === 2 ? 'часа' : 'часов'}${quantityText}`);
         
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
@@ -1285,22 +1525,14 @@ async function saveProductEdit(productId) {
 function showModalImage(index) {
     const modalImage = document.getElementById('modal-image');
     
-    if (currentImages.length === 0) {
-        modalImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-        modalImage.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
-        return;
-    }
+    // ВАЖНО: Всегда очищаем предыдущее состояние перед показом нового содержимого
+    // Это критично для исправления бага, когда после товара без фото не показываются фото других товаров
     
-    if (index < 0 || index >= currentImages.length) return;
+    // Увеличиваем ID загрузки, чтобы отменить старые запросы
+    currentImageLoadId++;
+    const loadId = currentImageLoadId;
     
-    currentImageIndex = index;
-    const fullImg = currentImages[index];
-    
-    // Очищаем содержимое, но сохраняем структуру для навигации
-    const oldContainer = modalImage.querySelector('.image-container');
-    if (oldContainer) {
-        oldContainer.remove();
-    }
+    console.log(`[MODAL IMG] showModalImage called: index=${index}, loadId=${loadId}, currentImages.length=${currentImages.length}, currentProduct=${currentProduct ? currentProduct.id : 'null'}`);
     
     // Очищаем предыдущий blob URL если был
     const oldBlobUrl = modalImage.dataset.blobUrl;
@@ -1309,38 +1541,143 @@ function showModalImage(index) {
         delete modalImage.dataset.blobUrl;
     }
     
+    // Удаляем старую навигацию по фото, если она есть
+    const oldNav = modalImage.querySelector('.image-navigation');
+    if (oldNav) {
+        oldNav.remove();
+    }
+    
+    // Очищаем содержимое полностью
+    modalImage.innerHTML = '';
+    
+    // Если товар без фото, показываем placeholder и выходим
+    if (currentImages.length === 0) {
+        console.log(`[MODAL IMG] No images, showing placeholder (loadId=${loadId})`);
+        modalImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+        modalImage.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+        return;
+    }
+    
+    if (index < 0 || index >= currentImages.length) {
+        console.warn(`[MODAL IMG] Invalid index: ${index}, currentImages.length=${currentImages.length}`);
+        return;
+    }
+    
+    currentImageIndex = index;
+    const fullImg = currentImages[index];
+    console.log(`[MODAL IMG] Loading image: index=${index}, url="${fullImg}", loadId=${loadId}`);
+    
     const imageContainer = document.createElement('div');
     imageContainer.className = 'image-container';
+    imageContainer.dataset.loadId = loadId; // Сохраняем ID загрузки для проверки актуальности
     imageContainer.style.cssText = 'position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;';
     imageContainer.innerHTML = '<div style="color: var(--tg-theme-hint-color); font-size: 48px;">⏳</div>';
     modalImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
     modalImage.appendChild(imageContainer);
     
-    // Загружаем изображение через fetch для обхода блокировки Telegram WebView
-    fetch(fullImg, {
-        headers: {
-            'ngrok-skip-browser-warning': '69420'
-        }
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.blob();
-    })
-    .then(blob => {
-        // Создаем blob URL для обхода блокировки ngrok доменов
-        const blobUrl = URL.createObjectURL(blob);
-        modalImage.dataset.blobUrl = blobUrl; // Сохраняем для последующей очистки
-        
+    // Функция для проверки, что контейнер все еще актуален
+    const isContainerValid = () => {
+        const container = modalImage.querySelector(`.image-container[data-load-id="${loadId}"]`);
+        return container && container === imageContainer;
+    };
+    
+    // Определяем, мобильное устройство или десктоп
+    const isMobile = isMobileDevice();
+    
+    if (isMobile) {
+        // На мобильных устройствах используем fetch + blob URL для обхода блокировки Telegram WebView
+        fetch(fullImg, {
+            headers: {
+                'ngrok-skip-browser-warning': '69420'
+            }
+        })
+        .then(response => {
+            // Проверяем актуальность перед обработкой ответа
+            if (loadId !== currentImageLoadId || !isContainerValid()) {
+                console.log(`[MODAL IMG] Load cancelled: loadId=${loadId}, currentLoadId=${currentImageLoadId}`);
+                return null;
+            }
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // Проверяем актуальность перед созданием изображения
+            if (!blob || loadId !== currentImageLoadId || !isContainerValid()) {
+                if (blob) {
+                    console.log(`[MODAL IMG] Load cancelled after blob: loadId=${loadId}, currentLoadId=${currentImageLoadId}`);
+                }
+                return;
+            }
+            
+            // Создаем blob URL для обхода блокировки ngrok доменов
+            const blobUrl = URL.createObjectURL(blob);
+            modalImage.dataset.blobUrl = blobUrl; // Сохраняем для последующей очистки
+            
+            const img = document.createElement('img');
+            img.style.cssText = 'width: 100%; height: 100%; object-fit: contain; border-radius: 12px; display: block;';
+            img.alt = currentProduct ? currentProduct.name : 'Product';
+            
+            img.onload = () => {
+                // Проверяем актуальность перед обновлением DOM
+                if (loadId !== currentImageLoadId || !isContainerValid()) {
+                    console.log(`[MODAL IMG] Image load cancelled on onload: loadId=${loadId}, currentLoadId=${currentImageLoadId}`);
+                    URL.revokeObjectURL(blobUrl);
+                    return;
+                }
+                
+                imageContainer.innerHTML = '';
+                imageContainer.appendChild(img);
+                modalImage.style.backgroundColor = 'transparent';
+                
+                console.log(`[MODAL IMG] Image loaded successfully (mobile): loadId=${loadId}`);
+                
+                // Добавляем навигацию по фото, если их больше одного
+                if (currentImages.length > 1) {
+                    updateImageNavigation();
+                }
+            };
+            
+            img.onerror = () => {
+                if (loadId !== currentImageLoadId || !isContainerValid()) {
+                    return;
+                }
+                URL.revokeObjectURL(blobUrl);
+                delete modalImage.dataset.blobUrl;
+                imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+                console.error(`[MODAL IMG] Image load error (mobile): loadId=${loadId}`);
+            };
+            
+            img.src = blobUrl;
+        })
+        .catch(error => {
+            // Проверяем актуальность перед обработкой ошибки
+            if (loadId !== currentImageLoadId || !isContainerValid()) {
+                return;
+            }
+            console.error('[MODAL IMG] Fetch error (mobile):', error);
+            console.error('[MODAL IMG] Failed URL:', fullImg);
+            imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+        });
+    } else {
+        // На десктопе используем прямые URL (более надежно и быстрее)
         const img = document.createElement('img');
         img.style.cssText = 'width: 100%; height: 100%; object-fit: contain; border-radius: 12px; display: block;';
         img.alt = currentProduct ? currentProduct.name : 'Product';
         
         img.onload = () => {
+            // Проверяем актуальность перед обновлением DOM
+            if (loadId !== currentImageLoadId || !isContainerValid()) {
+                console.log(`[MODAL IMG] Image load cancelled on onload (desktop): loadId=${loadId}, currentLoadId=${currentImageLoadId}`);
+                return;
+            }
+            
             imageContainer.innerHTML = '';
             imageContainer.appendChild(img);
             modalImage.style.backgroundColor = 'transparent';
+            
+            console.log(`[MODAL IMG] Image loaded successfully (desktop): loadId=${loadId}`);
             
             // Добавляем навигацию по фото, если их больше одного
             if (currentImages.length > 1) {
@@ -1349,18 +1686,49 @@ function showModalImage(index) {
         };
         
         img.onerror = () => {
-            URL.revokeObjectURL(blobUrl);
-            delete modalImage.dataset.blobUrl;
-            imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+            // Проверяем актуальность перед fallback
+            if (loadId !== currentImageLoadId || !isContainerValid()) {
+                return;
+            }
+            
+            // Ошибка загрузки изображения - пробуем через fetch как fallback
+            console.warn('[MODAL IMG] Direct URL failed, trying fetch fallback (desktop)');
+            // Fallback: пробуем через fetch
+            fetch(fullImg, {
+                headers: {
+                    'ngrok-skip-browser-warning': '69420'
+                }
+            })
+            .then(response => {
+                if (loadId !== currentImageLoadId || !isContainerValid()) {
+                    return null;
+                }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                if (!blob || loadId !== currentImageLoadId || !isContainerValid()) {
+                    return;
+                }
+                const blobUrl = URL.createObjectURL(blob);
+                modalImage.dataset.blobUrl = blobUrl; // Сохраняем для последующей очистки
+                img.src = blobUrl;
+                console.log('[MODAL IMG] Image loaded via fetch fallback (desktop)');
+            })
+            .catch(error => {
+                if (loadId !== currentImageLoadId || !isContainerValid()) {
+                    return;
+                }
+                console.error('[MODAL IMG] Fetch fallback also failed:', error);
+                imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+            });
         };
         
-        img.src = blobUrl;
-    })
-    .catch(error => {
-        console.error('[MODAL IMG] Fetch error:', error);
-        console.error('[MODAL IMG] Failed URL:', fullImg);
-        imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
-    });
+        // Устанавливаем прямой URL
+        img.src = fullImg;
+    }
 }
 
 // Обновление навигации по фото
@@ -1531,14 +1899,43 @@ function updateImageNavigation() {
 
 // Настройка модальных окон
 function setupModals() {
+    // Функция для очистки состояния модального окна товара
+    const cleanupProductModal = () => {
+        console.log('[MODAL] cleanupProductModal called');
+        const modalImage = document.getElementById('modal-image');
+        if (modalImage) {
+            // Очищаем blob URL если был
+            const oldBlobUrl = modalImage.dataset.blobUrl;
+            if (oldBlobUrl) {
+                URL.revokeObjectURL(oldBlobUrl);
+                delete modalImage.dataset.blobUrl;
+            }
+            // Очищаем навигацию
+            const oldNav = modalImage.querySelector('.image-navigation');
+            if (oldNav) {
+                oldNav.remove();
+            }
+            // Полностью очищаем содержимое
+            modalImage.innerHTML = '';
+        }
+        // Сбрасываем состояние
+        currentImages = [];
+        currentImageIndex = 0;
+        currentProduct = null;
+        currentImageLoadId = 0; // Сбрасываем ID загрузки
+        console.log('[MODAL] State cleared');
+    };
+    
     // Закрытие модального окна товара
     modalClose.onclick = () => {
+        cleanupProductModal();
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
     };
     
     modal.onclick = (e) => {
         if (e.target === modal) {
+            cleanupProductModal();
             modal.style.display = 'none';
             document.body.style.overflow = 'auto';
         }
@@ -1568,6 +1965,21 @@ function setupModals() {
         orderModal.onclick = (e) => {
             if (e.target === orderModal) {
                 orderModal.style.display = 'none';
+            }
+        };
+    }
+    
+    // Закрытие модального окна продажи
+    if (sellClose) {
+        sellClose.onclick = () => {
+            sellModal.style.display = 'none';
+        };
+    }
+    
+    if (sellModal) {
+        sellModal.onclick = (e) => {
+            if (e.target === sellModal) {
+                sellModal.style.display = 'none';
             }
         };
     }
@@ -1610,6 +2022,12 @@ function setupModals() {
             if (editProductModal && editProductModal.style.display === 'block') {
                 editProductModal.style.display = 'none';
             }
+            if (sellModal && sellModal.style.display === 'block') {
+                sellModal.style.display = 'none';
+            }
+            if (orderModal && orderModal.style.display === 'block') {
+                orderModal.style.display = 'none';
+            }
         }
     });
 }
@@ -1636,32 +2054,132 @@ window.cancelReservationFromCart = async function(reservationId, productId) {
 };
 
 // Пометить товар как проданный
-async function markAsSold(productId) {
-    if (!confirm('Пометить товар как проданный? Товар будет скрыт с витрины и добавлен в историю продаж.')) {
-        return;
-    }
-    
+async function markAsSold(productId, product = null) {
     try {
         if (!appContext) {
             alert('❌ Ошибка: контекст не загружен');
             return;
         }
         
-        await markProductSoldAPI(productId, appContext.shop_owner_id);
-        alert('✅ Товар помечен как проданный');
+        // Если product не передан, ищем его в allProducts
+        if (!product) {
+            product = allProducts.find(p => p.id === productId);
+        }
         
-        // Закрываем модальное окно
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
+        // Проверяем количество товара
+        const productQuantity = product?.quantity || 0;
+        const hasQuantity = productQuantity > 1;
         
-        // Обновляем данные
-        setTimeout(async () => {
-            await loadData();
-        }, 500);
+        if (hasQuantity) {
+            // Если товаров больше 1, показываем модальное окно для выбора количества
+            showSellModal(productId, product);
+        } else {
+            // Если товаров 1 или нет, продаем 1 товар по умолчанию
+            if (!confirm('Пометить товар как проданный? Товар будет скрыт с витрины и добавлен в историю продаж.')) {
+                return;
+            }
+            await markProductSoldAPI(productId, appContext.shop_owner_id, 1);
+            alert('✅ Товар помечен как проданный');
+            
+            // Закрываем модальное окно
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            
+            // Обновляем данные
+            setTimeout(async () => {
+                await loadData();
+            }, 500);
+        }
     } catch (e) {
         console.error('Mark as sold error:', e);
         alert(`❌ Ошибка: ${e.message}`);
     }
+}
+
+// Показать модальное окно для продажи товара
+function showSellModal(productId, product) {
+    if (!appContext) {
+        alert('❌ Ошибка: контекст не загружен');
+        return;
+    }
+    
+    if (!sellModal) {
+        alert('❌ Ошибка: модальное окно продажи не найдено');
+        return;
+    }
+    
+    const productQuantity = product?.quantity !== undefined && product?.quantity !== null ? product.quantity : 0;
+    
+    // Устанавливаем максимальное значение и значение по умолчанию
+    const quantityInput = document.getElementById('sell-quantity');
+    const sellAllCheckbox = document.getElementById('sell-all-checkbox');
+    
+    if (quantityInput) {
+        quantityInput.value = 1;
+        quantityInput.max = Math.max(1, productQuantity);
+        quantityInput.min = 1;
+    }
+    
+    // Сбрасываем чекбокс "Продать все"
+    if (sellAllCheckbox) {
+        sellAllCheckbox.checked = false;
+    }
+    
+    // Обработчик чекбокса "Продать все"
+    if (sellAllCheckbox && quantityInput) {
+        sellAllCheckbox.onchange = (e) => {
+            if (e.target.checked) {
+                quantityInput.value = productQuantity;
+                quantityInput.disabled = true;
+            } else {
+                quantityInput.disabled = false;
+                quantityInput.value = 1;
+            }
+        };
+    }
+    
+    // Показываем информацию о доступном количестве
+    const quantityInfo = document.getElementById('sell-quantity-info');
+    if (quantityInfo) {
+        quantityInfo.textContent = `Доступно: ${productQuantity} шт.`;
+    }
+    
+    // Устанавливаем обработчик кнопки продажи
+    const submitBtn = document.getElementById('sell-submit');
+    if (submitBtn) {
+        submitBtn.onclick = async () => {
+            let quantity;
+            if (sellAllCheckbox && sellAllCheckbox.checked) {
+                quantity = productQuantity;
+            } else {
+                quantity = parseInt(quantityInput.value) || 1;
+            }
+            
+            if (quantity < 1) {
+                alert('❌ Количество должно быть не менее 1');
+                return;
+            }
+            if (quantity > productQuantity) {
+                alert(`❌ Нельзя продать больше, чем есть в наличии (${productQuantity} шт.)`);
+                return;
+            }
+            
+            sellModal.style.display = 'none';
+            await markProductSoldAPI(productId, appContext.shop_owner_id, quantity);
+            alert(`✅ Продано ${quantity} шт. товара`);
+            
+            // Закрываем модальное окно товара
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            
+            // Обновляем данные
+            setTimeout(async () => {
+                await loadData();
+            }, 500);
+        };
+    }
+    
+    sellModal.style.display = 'block';
 }
 
 // Удалить товар
@@ -1777,10 +2295,19 @@ function initFilters() {
     });
     
     // Фильтры по наличию (чекбоксы)
+    // Маппинг между data-filter атрибутами и свойствами productFilters
+    const filterMapping = {
+        'in-stock': 'inStock',
+        'hot-offer': 'hotOffer',
+        'with-discount': 'withDiscount',
+        'made-to-order': 'madeToOrder'
+    };
+    
     document.querySelectorAll('[data-filter]').forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
             const filterType = e.target.dataset.filter;
-            productFilters[filterType] = e.target.checked;
+            const filterKey = filterMapping[filterType] || filterType;
+            productFilters[filterKey] = e.target.checked;
             applyFilters();
         });
     });
@@ -1871,6 +2398,94 @@ function updateCategoryFilterCount() {
         countElement.style.display = 'inline-block';
     } else {
         countElement.style.display = 'none';
+    }
+}
+
+// Обновление опций фильтра на основе доступных товаров
+function updateProductFilterOptions() {
+    if (allProducts.length === 0) {
+        // Если товаров нет, скрываем все опции фильтра
+        document.querySelectorAll('[data-filter]').forEach(option => {
+            const filterOption = option.closest('.filter-option');
+            if (filterOption) {
+                filterOption.style.display = 'none';
+            }
+        });
+        return;
+    }
+    
+    // Проверяем наличие товаров для каждого типа фильтра
+    const hasInStock = allProducts.some(prod => {
+        const isMadeToOrder = prod.is_made_to_order === true || 
+                              prod.is_made_to_order === 1 || 
+                              prod.is_made_to_order === '1' ||
+                              prod.is_made_to_order === 'true' ||
+                              String(prod.is_made_to_order).toLowerCase() === 'true';
+        if (isMadeToOrder) return false;
+        return prod.quantity !== undefined && prod.quantity !== null && prod.quantity > 0;
+    });
+    
+    const hasHotOffer = allProducts.some(prod => prod.is_hot_offer === true);
+    
+    const hasDiscount = allProducts.some(prod => prod.discount > 0);
+    
+    const hasMadeToOrder = allProducts.some(prod => {
+        return prod.is_made_to_order === true || 
+               prod.is_made_to_order === 1 || 
+               prod.is_made_to_order === '1' ||
+               prod.is_made_to_order === 'true' ||
+               String(prod.is_made_to_order).toLowerCase() === 'true';
+    });
+    
+    // Показываем/скрываем опции фильтра
+    const inStockOption = document.querySelector('[data-filter="in-stock"]');
+    if (inStockOption) {
+        const filterOption = inStockOption.closest('.filter-option');
+        if (filterOption) {
+            filterOption.style.display = hasInStock ? 'block' : 'none';
+        }
+    }
+    
+    const hotOfferOption = document.querySelector('[data-filter="hot-offer"]');
+    if (hotOfferOption) {
+        const filterOption = hotOfferOption.closest('.filter-option');
+        if (filterOption) {
+            filterOption.style.display = hasHotOffer ? 'block' : 'none';
+        }
+    }
+    
+    const withDiscountOption = document.querySelector('[data-filter="with-discount"]');
+    if (withDiscountOption) {
+        const filterOption = withDiscountOption.closest('.filter-option');
+        if (filterOption) {
+            filterOption.style.display = hasDiscount ? 'block' : 'none';
+        }
+    }
+    
+    const madeToOrderOption = document.querySelector('[data-filter="made-to-order"]');
+    if (madeToOrderOption) {
+        const filterOption = madeToOrderOption.closest('.filter-option');
+        if (filterOption) {
+            filterOption.style.display = hasMadeToOrder ? 'block' : 'none';
+        }
+    }
+    
+    // Сбрасываем фильтры, которые больше не доступны
+    if (!hasInStock && productFilters.inStock) {
+        productFilters.inStock = false;
+        if (inStockOption) inStockOption.checked = false;
+    }
+    if (!hasHotOffer && productFilters.hotOffer) {
+        productFilters.hotOffer = false;
+        if (hotOfferOption) hotOfferOption.checked = false;
+    }
+    if (!hasDiscount && productFilters.withDiscount) {
+        productFilters.withDiscount = false;
+        if (withDiscountOption) withDiscountOption.checked = false;
+    }
+    if (!hasMadeToOrder && productFilters.madeToOrder) {
+        productFilters.madeToOrder = false;
+        if (madeToOrderOption) madeToOrderOption.checked = false;
     }
 }
 

@@ -53,6 +53,7 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
 async def create_reservation(
     product_id: int = Query(...),
     hours: int = Query(..., ge=1, le=3),  # От 1 до 3 часов
+    quantity: int = Query(1, ge=1),  # Количество для резервации (по умолчанию 1)
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
@@ -72,7 +73,7 @@ async def create_reservation(
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
-    print(f"DEBUG: create_reservation called - product_id={product_id}, reserved_by_user_id={reserved_by_user_id} (from initData), hours={hours}")
+    print(f"DEBUG: create_reservation called - product_id={product_id}, reserved_by_user_id={reserved_by_user_id} (from initData), hours={hours}, quantity={quantity}")
     
     # Получаем товар
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
@@ -233,53 +234,44 @@ async def create_reservation(
             detail="Товар закончился. Резервация недоступна."
         )
     
-    if active_reservations_count >= product.quantity:
+    # Проверяем, что запрашиваемое количество не превышает доступное
+    available_quantity = product.quantity - active_reservations_count
+    if available_quantity <= 0:
         print(f"ERROR: Product {product_id} is fully reserved. Active: {active_reservations_count}, Quantity: {product.quantity}")
         raise HTTPException(
             status_code=400,
             detail=f"Все товары ({product.quantity} шт.) уже зарезервированы. Резервация недоступна."
         )
     
+    # Проверяем, что запрашиваемое количество не превышает доступное
+    if quantity > available_quantity:
+        print(f"ERROR: Requested quantity {quantity} exceeds available {available_quantity} for product {product_id}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Недостаточно товара для резервации. Доступно: {available_quantity} шт., запрошено: {quantity} шт."
+        )
+    
     # Все проверки пройдены, создаем резервацию
-    print(f"DEBUG: All checks passed! Creating reservation for user {reserved_by_user_id}, product {product_id}")
-    print(f"DEBUG: Creating reservation - reserved_until={reserved_until}")
+    print(f"DEBUG: All checks passed! Creating reservation for user {reserved_by_user_id}, product {product_id}, quantity={quantity}")
+    print(f"DEBUG: Creating reservation - reserved_until={reserved_until}, quantity={quantity}")
     
-    # Находим все синхронизированные копии товара по sync_product_id (надежный способ)
-    # чтобы создать резервации для всех копий
-    sync_id = product.sync_product_id or product.id
-    synced_products = db.query(models.Product).filter(
-        models.Product.user_id == product.user_id,
-        models.Product.sync_product_id == sync_id
-    ).all()
-    
-    # Fallback: если не нашли по sync_product_id, ищем по имени и цене (для обратной совместимости)
-    if not synced_products:
-        synced_products = db.query(models.Product).filter(
-            models.Product.user_id == product.user_id,
-            models.Product.name == product.name,
-            models.Product.price == product.price
-        ).all()
-        # Если нашли по имени и цене, устанавливаем sync_product_id для всех найденных товаров
-        if synced_products:
-            for p in synced_products:
-                if not p.sync_product_id:
-                    p.sync_product_id = sync_id
-            db.commit()
-    
-    print(f"DEBUG: Found {len(synced_products)} synced products for reservation (name='{product.name}', price={product.price}, sync_id={sync_id})")
-    
+    # Создаем резервации
+    # ВСЕГДА создаем резервации только для выбранного товара (product_id) в количестве quantity
+    # Не создаем резервации для всех синхронизированных продуктов, так как пользователь выбрал конкретный товар
     created_reservations = []
-    for synced_product in synced_products:
+    
+    # Создаем quantity резерваций только для выбранного товара
+    for i in range(quantity):
         reservation = models.Reservation(
-            product_id=synced_product.id,
-            user_id=synced_product.user_id,  # Владелец магазина
+            product_id=product.id,  # Используем выбранный товар
+            user_id=product.user_id,
             reserved_by_user_id=reserved_by_user_id,
             reserved_until=reserved_until,
             is_active=True
         )
         db.add(reservation)
         created_reservations.append(reservation)
-        print(f"DEBUG: Created reservation for product_id={synced_product.id} (bot_id={synced_product.bot_id})")
+        print(f"DEBUG: Created reservation {i+1}/{quantity} for product_id={product.id} (bot_id={product.bot_id})")
     
     db.commit()
     for res in created_reservations:
@@ -288,7 +280,7 @@ async def create_reservation(
     # Используем первую резервацию для возврата (оригинальный товар)
     reservation = created_reservations[0] if created_reservations else None
     
-    print(f"DEBUG: Reservation created successfully - {len(created_reservations)} reservations for {len(synced_products)} products, main reservation_id={reservation.id if reservation else None}, product_id={reservation.product_id if reservation else None}, reserved_until={reserved_until}")
+    print(f"DEBUG: Reservation created successfully - {len(created_reservations)} reservations for product_id={product.id}, main reservation_id={reservation.id if reservation else None}, reserved_until={reserved_until}")
     print(f"DEBUG: Notification check - TELEGRAM_BOT_TOKEN={'SET' if TELEGRAM_BOT_TOKEN else 'NOT SET'}, WEBAPP_URL={WEBAPP_URL}")
     
     # Отправляем уведомление владельцу магазина через Telegram Bot API (в фоне)
@@ -356,8 +348,9 @@ async def create_reservation(
                 user_link = reserved_by_name
             
             # Формируем сообщение
+            quantity_text = f" ({quantity} шт.)" if quantity > 1 else ""
             message = f"🔔 **Новая резервация товара**\n\n"
-            message += f"📦 Товар: {product.name}\n"
+            message += f"📦 Товар: {product.name}{quantity_text}\n"
             message += f"👤 Зарезервировал: {user_link}\n"
             message += f"⏰ Резервация до: {hours_text}\n\n"
             message += f"💡 Товар временно недоступен для других покупателей."

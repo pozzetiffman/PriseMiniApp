@@ -151,3 +151,5 @@ DEBUG: get_products called with user_id=...
 **Следующий шаг**: Перезапустите backend и протестируйте!
 
 
+
+

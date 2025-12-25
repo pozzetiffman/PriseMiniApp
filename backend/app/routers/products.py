@@ -3,7 +3,7 @@ import os
 import uuid
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header, Request, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from typing import List, Optional, Any
@@ -1173,10 +1173,114 @@ async def get_sold_products(
             "image_url": image_url_full,
             "images_urls": images_list,
             "category_id": sold.category_id,
+            "quantity": sold.quantity or 1,  # Количество проданного товара
             "sold_at": sold.sold_at.isoformat() if sold.sold_at else None
         })
     
     return result
+
+@router.delete("/sold/{sold_id}")
+async def delete_sold_product(
+    sold_id: int,
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Удалить запись о проданном товаре"""
+    # Проверяем авторизацию через initData
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    import os
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    
+    try:
+        authenticated_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=bot_token if bot_token else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Проверяем, что авторизованный пользователь является владельцем
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to delete this sold product")
+    
+    # Находим запись о проданном товаре
+    sold_product = db.query(models.SoldProduct).filter(
+        models.SoldProduct.id == sold_id,
+        models.SoldProduct.user_id == user_id
+    ).first()
+    
+    if not sold_product:
+        raise HTTPException(status_code=404, detail="Sold product not found")
+    
+    # Удаляем запись
+    db.delete(sold_product)
+    db.commit()
+    
+    return {"message": "Запись о проданном товаре удалена", "id": sold_id}
+
+@router.post("/sold/batch-delete")
+async def delete_sold_products(
+    sold_ids: List[int],
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Удалить несколько записей о проданных товарах"""
+    # Проверяем авторизацию через initData
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    import os
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    
+    try:
+        authenticated_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=bot_token if bot_token else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Проверяем, что авторизованный пользователь является владельцем
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to delete these sold products")
+    
+    # Проверяем, что список ID не пустой
+    if not sold_ids or len(sold_ids) == 0:
+        raise HTTPException(status_code=400, detail="No sold product IDs provided")
+    
+    id_list = sold_ids
+    
+    # Находим все записи о проданных товарах
+    sold_products = db.query(models.SoldProduct).filter(
+        models.SoldProduct.id.in_(id_list),
+        models.SoldProduct.user_id == user_id
+    ).all()
+    
+    if not sold_products:
+        raise HTTPException(status_code=404, detail="No sold products found")
+    
+    # Удаляем записи
+    deleted_count = len(sold_products)
+    for sold_product in sold_products:
+        db.delete(sold_product)
+    
+    db.commit()
+    
+    return {
+        "message": f"Удалено записей: {deleted_count}",
+        "deleted_count": deleted_count,
+        "deleted_ids": [sp.id for sp in sold_products]
+    }
 
 @router.get("/{product_id}", response_model=schemas.Product)
 def get_product_by_id(
@@ -2087,10 +2191,11 @@ async def delete_product(
 async def mark_product_sold(
     product_id: int,
     user_id: int = Query(...),
+    quantity: int = Query(1, ge=1),  # Количество для продажи (по умолчанию 1)
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
-    """Помечает товар как проданный: скрывает с витрины и добавляет в историю продаж"""
+    """Помечает товар как проданный: уменьшает quantity и добавляет в историю продаж"""
     # Проверяем авторизацию через initData
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
@@ -2122,8 +2227,30 @@ async def mark_product_sold(
     if authenticated_user_id != user_id:
         raise HTTPException(status_code=403, detail="You don't have permission to mark this product as sold")
     
-    # Помечаем товар как проданный
-    db_product.is_sold = True
+    # Проверяем количество товара
+    product_quantity = db_product.quantity or 0
+    
+    # Если товар под заказ (is_made_to_order = True), не проверяем quantity
+    is_made_to_order = db_product.is_made_to_order == True or db_product.is_made_to_order == 1
+    
+    if not is_made_to_order and product_quantity < quantity:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Недостаточно товара для продажи. В наличии: {product_quantity} шт., запрошено: {quantity} шт."
+        )
+    
+    # Уменьшаем quantity товара
+    if not is_made_to_order:
+        new_quantity = product_quantity - quantity
+        db_product.quantity = max(0, new_quantity)  # Не даем quantity стать отрицательным
+        
+        # Если quantity стал 0 или меньше, помечаем товар как проданный
+        if new_quantity <= 0:
+            db_product.is_sold = True
+    else:
+        # Для товаров под заказ просто помечаем как проданный
+        db_product.is_sold = True
+    
     db.flush()
     
     # Синхронизируем обновление товара во все боты
@@ -2142,6 +2269,7 @@ async def mark_product_sold(
         image_url=db_product.image_url,
         images_urls=db_product.images_urls,
         category_id=db_product.category_id,
+        quantity=quantity,
         sold_at=datetime.utcnow()
     )
     db.add(sold_product)
@@ -2149,6 +2277,7 @@ async def mark_product_sold(
     
     return {
         "id": db_product.id,
-        "is_sold": True,
-        "message": "Товар помечен как проданный"
+        "is_sold": db_product.is_sold,
+        "quantity": db_product.quantity,
+        "message": f"Продано {quantity} шт. товара"
     }

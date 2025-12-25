@@ -424,3 +424,95 @@ async def cancel_order(
     
     return {"message": "Order cancelled"}
 
+@router.delete("/{order_id}/delete")
+async def delete_order(
+    order_id: int,
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Удалить заказ из базы данных (только владелец магазина)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    order = db.query(models.Order).filter(models.Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Проверяем, что пользователь - владелец магазина
+    if order.user_id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Только владелец магазина может удалить заказ"
+        )
+    
+    # Удаляем заказ из базы данных
+    db.delete(order)
+    db.commit()
+    
+    return {"message": "Order deleted", "deleted_id": order_id}
+
+@router.post("/batch-delete")
+async def delete_orders(
+    order_ids: List[int],
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Удалить несколько заказов из базы данных (только владелец магазина)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    if not order_ids:
+        raise HTTPException(status_code=400, detail="Order IDs list is required")
+    
+    # Получаем заказы, которые принадлежат владельцу магазина
+    orders = db.query(models.Order).filter(
+        and_(
+            models.Order.id.in_(order_ids),
+            models.Order.user_id == user_id
+        )
+    ).all()
+    
+    if not orders:
+        raise HTTPException(status_code=404, detail="No orders found or you don't have permission to delete these orders")
+    
+    # Проверяем, что все заказы принадлежат владельцу
+    if len(orders) != len(order_ids):
+        raise HTTPException(status_code=403, detail="You don't have permission to delete some of these orders")
+    
+    deleted_count = len(orders)
+    deleted_ids = [order.id for order in orders]
+    
+    # Удаляем заказы
+    for order in orders:
+        db.delete(order)
+    
+    db.commit()
+    
+    return {
+        "message": f"Deleted {deleted_count} order(s)",
+        "deleted_count": deleted_count,
+        "deleted_ids": deleted_ids
+    }
+

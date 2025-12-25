@@ -142,8 +142,8 @@ export async function fetchUserReservations() {
 }
 
 // Создание резервации (reserved_by_user_id определяется на backend из initData)
-export async function createReservationAPI(productId, hours) {
-    const url = `${API_BASE}/api/reservations/?product_id=${productId}&hours=${hours}`;
+export async function createReservationAPI(productId, hours, quantity = 1) {
+    const url = `${API_BASE}/api/reservations/?product_id=${productId}&hours=${hours}&quantity=${quantity}`;
     console.log(`Reservation URL: ${url}`);
     
     const response = await fetch(url, {
@@ -459,9 +459,9 @@ export async function deleteProductAPI(productId, shopOwnerId) {
 }
 
 // Пометить товар как проданный
-export async function markProductSoldAPI(productId, shopOwnerId) {
-    const url = `${API_BASE}/api/products/${productId}/mark-sold?user_id=${shopOwnerId}`;
-    console.log(`Marking product as sold: productId=${productId}`);
+export async function markProductSoldAPI(productId, shopOwnerId, quantity = 1) {
+    const url = `${API_BASE}/api/products/${productId}/mark-sold?user_id=${shopOwnerId}&quantity=${quantity}`;
+    console.log(`Marking product as sold: productId=${productId}, quantity=${quantity}`);
     
     const response = await fetch(url, {
         method: 'POST',
@@ -499,6 +499,64 @@ export async function getSoldProductsAPI(shopOwnerId) {
     
     if (!response.ok) {
         let errorMessage = 'Не удалось загрузить проданные товары';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Удалить запись о проданном товаре
+export async function deleteSoldProductAPI(soldId, shopOwnerId) {
+    const url = `${API_BASE}/api/products/sold/${soldId}?user_id=${shopOwnerId}`;
+    console.log(`Deleting sold product: soldId=${soldId}, shopOwnerId=${shopOwnerId}`);
+    
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Delete sold product response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось удалить запись о проданном товаре';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Удалить несколько записей о проданных товарах
+export async function deleteSoldProductsAPI(soldIds, shopOwnerId) {
+    const url = `${API_BASE}/api/products/sold/batch-delete?user_id=${shopOwnerId}`;
+    console.log(`Deleting sold products: soldIds=${soldIds}, shopOwnerId=${shopOwnerId}`);
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            ...getBaseHeaders(),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(soldIds)
+    });
+    
+    const responseText = await response.text();
+    console.log(`Delete sold products response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось удалить записи о проданных товарах';
         try {
             const errorData = JSON.parse(responseText);
             errorMessage = errorData.detail || errorMessage;
@@ -685,4 +743,62 @@ export async function cancelOrderAPI(orderId) {
     }
     
     return true;
+}
+
+// Удалить заказ (только владелец магазина)
+export async function deleteOrderAPI(orderId) {
+    const url = `${API_BASE}/api/orders/${orderId}/delete`;
+    console.log(`Delete order URL: ${url}`);
+    
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Delete order response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось удалить заказ';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Удалить несколько заказов (только владелец магазина)
+export async function deleteOrdersAPI(orderIds) {
+    const url = `${API_BASE}/api/orders/batch-delete`;
+    console.log(`Delete orders URL: ${url}, orderIds=${orderIds}`);
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            ...getBaseHeaders(),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderIds)
+    });
+    
+    const responseText = await response.text();
+    console.log(`Delete orders response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось удалить заказы';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
 }

@@ -376,18 +376,14 @@ async def update_shop_settings(
         db.add(settings)
     else:
         # Обновляем только переданные поля
-        # Сначала обновляем quantity_enabled, если он передан
+        # Обновляем quantity_enabled, если он передан
+        # ВАЖНО: Резервация может работать независимо от quantity_enabled
+        # Если quantity_enabled = false, резервация работает, но без показа количества
         if 'quantity_enabled' in update_data:
             settings.quantity_enabled = update_data['quantity_enabled']
-            # Если quantity_enabled отключен, автоматически отключаем резервацию
-            if not update_data['quantity_enabled']:
-                settings.reservations_enabled = False
         if 'reservations_enabled' in update_data:
-            # Если quantity_enabled выключен, нельзя включить резервацию
-            if settings.quantity_enabled if hasattr(settings, 'quantity_enabled') else True:
-                settings.reservations_enabled = update_data['reservations_enabled']
-            else:
-                settings.reservations_enabled = False
+            # Резервация может быть включена независимо от quantity_enabled
+            settings.reservations_enabled = update_data['reservations_enabled']
         if 'shop_name' in update_data:
             settings.shop_name = update_data['shop_name']
         if 'welcome_image_url' in update_data:

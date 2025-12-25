@@ -122,7 +122,7 @@ async def proxy_image(filename: str):
             file_path = alt_path
         else:
             # Логируем для отладки
-            print(f"❌ Image not found: {filename}")
+            print(f"⚠️ Image not found: {filename}")
             print(f"   Tried path 1: {file_path}")
             print(f"   Tried path 2: {alt_path}")
             print(f"   Backend dir: {backend_dir}")
@@ -131,7 +131,19 @@ async def proxy_image(filename: str):
                 # Показываем список файлов в директории
                 files = list((backend_dir / "static" / "uploads").glob("*"))
                 print(f"   Files in directory: {[f.name for f in files[:10]]}")
-            raise HTTPException(status_code=404, detail=f"Image not found: {filename}")
+            
+            # Вместо 404 возвращаем placeholder изображение (1x1 прозрачный PNG)
+            # Это позволит фронтенду обработать отсутствие изображения корректно
+            placeholder_png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82'
+            from fastapi.responses import Response
+            return Response(
+                content=placeholder_png,
+                media_type='image/png',
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Access-Control-Allow-Origin": "*",
+                }
+            )
     
     # Определяем MIME type по расширению
     ext = filename.lower().split('.')[-1] if '.' in filename else ''

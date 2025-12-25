@@ -72,9 +72,9 @@ header {
     box-shadow: 0 -8px 32px var(--shadow-glass),
                 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     min-height: 64px;
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     border-radius: 24px 24px 0 0;
     padding-bottom: max(12px, calc(12px + env(safe-area-inset-bottom, 0px)));
@@ -90,7 +90,7 @@ header h1 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
+    justify-self: center;
     max-width: 100%;
     padding: 0 8px;
 }

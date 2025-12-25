@@ -40,6 +40,9 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                     )
                     db.add(new_category)
                     print(f"🔄 Synced category '{db_category.name}' to bot {bot.id} (CREATE)")
+                else:
+                    # Категория уже существует в этом боте - это нормально
+                    print(f"ℹ️ Category '{db_category.name}' already exists in bot {bot.id}, skipping creation")
             
             elif action == "update":
                 # Находим соответствующую категорию и обновляем ее
@@ -84,8 +87,13 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                 )
                 db.add(new_category)
                 print(f"🔄 Synced category '{db_category.name}' to main bot (CREATE)")
+            else:
+                # Категория уже существует в основном боте - это нормально
+                print(f"ℹ️ Category '{db_category.name}' already exists in main bot, skipping creation")
             
             # 2. Синхронизируем во все другие подключенные боты (кроме текущего)
+            # ВАЖНО: Синхронизируем даже если категория уже существует в основном боте
+            # Это гарантирует, что все боты имеют одинаковые категории
             for bot in connected_bots:
                 if bot.id == db_category.bot_id:
                     continue  # Пропускаем текущий бот
@@ -104,6 +112,9 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                     )
                     db.add(new_category)
                     print(f"🔄 Synced category '{db_category.name}' to bot {bot.id} (CREATE)")
+                else:
+                    # Категория уже существует в этом боте - это нормально
+                    print(f"ℹ️ Category '{db_category.name}' already exists in bot {bot.id}, skipping creation")
         
         elif action == "update":
             # 1. Обновляем категорию в основном боте
@@ -200,18 +211,10 @@ async def create_category(
             except:
                 final_bot_id = None
         else:
-            # Запрос от бота (localhost) - определяем bot_id по user_id
-            # Если у пользователя есть подключенный бот, используем его bot_id
-            user_bot = db.query(models.Bot).filter(
-                models.Bot.owner_user_id == user_id,
-                models.Bot.is_active == True
-            ).first()
-            if user_bot:
-                final_bot_id = user_bot.id
-                print(f"✅ Determined bot_id={final_bot_id} from user's connected bot for category creation")
-            else:
-                final_bot_id = None  # Основной бот
-                print(f"ℹ️ No connected bot found for user {user_id}, using main bot (bot_id=None)")
+            # Запрос от бота (localhost) - ВСЕГДА создаем в основном боте (bot_id=None)
+            # Категории будут синхронизированы во все подключенные боты автоматически
+            final_bot_id = None  # Основной бот
+            print(f"ℹ️ Category creation from bot - using main bot (bot_id=None), will sync to all connected bots")
     
     db_category = models.Category(
         name=category.name, 

@@ -1,5 +1,5 @@
 // Модуль админки магазина
-import { getShopSettings, updateShopSettings, getSoldProductsAPI, getShopOrdersAPI, completeOrderAPI, cancelOrderAPI, getVisitStatsAPI, getVisitsListAPI, getProductViewStatsAPI } from './api.js';
+import { getShopSettings, updateShopSettings, getSoldProductsAPI, getShopOrdersAPI, completeOrderAPI, cancelOrderAPI, deleteOrderAPI, deleteOrdersAPI, getVisitStatsAPI, getVisitsListAPI, getProductViewStatsAPI, deleteSoldProductAPI, deleteSoldProductsAPI } from './api.js';
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -94,8 +94,8 @@ function createAdminModal() {
                 <div id="admin-tab-settings" class="admin-tab-content active">
                     <div class="admin-setting">
                         <div class="admin-setting-label">
-                            <label for="quantity-enabled-toggle">Количество товаров</label>
-                            <p class="admin-setting-description">Показывать количество товаров и разрешить учет резервации</p>
+                            <label for="quantity-enabled-toggle">Показ количества товаров</label>
+                            <p class="admin-setting-description">Показывать количество товаров в карточках и модальном окне. При отключении будет отображаться "В наличии" без указания числа.</p>
                         </div>
                         <label class="toggle-switch">
                             <input type="checkbox" id="quantity-enabled-toggle" checked>
@@ -105,7 +105,7 @@ function createAdminModal() {
                     <div class="admin-setting">
                         <div class="admin-setting-label">
                             <label for="reservations-toggle">Резервация товаров</label>
-                            <p class="admin-setting-description">Разрешить клиентам резервировать товары на определенное время</p>
+                            <p class="admin-setting-description">Разрешить клиентам резервировать товары на определенное время. Работает независимо от показа количества.</p>
                         </div>
                         <label class="toggle-switch">
                             <input type="checkbox" id="reservations-toggle" checked>
@@ -113,7 +113,9 @@ function createAdminModal() {
                         </label>
                     </div>
                     <div class="admin-info">
-                        <p>💡 Когда количество товаров включено, отображается количество на складе и можно включить резервацию. При отключении количества резервация становится недоступной.</p>
+                        <p>💡 <strong>Как это работает:</strong><br>
+                        • <strong>Показ количества включен:</strong> отображается точное количество товара (например, "В наличии: 5"). При резервации товара с количеством больше 1 можно выбрать, сколько единиц зарезервировать.<br>
+                        • <strong>Показ количества выключен:</strong> отображается просто "В наличии" без числа. Резервация работает, но всегда резервируется 1 единица товара (выбор количества недоступен).</p>
                     </div>
                 </div>
                 <div id="admin-tab-orders" class="admin-tab-content">
@@ -157,8 +159,9 @@ export async function openAdmin() {
         }
         if (reservationsToggle) {
             reservationsToggle.checked = shopSettings.reservations_enabled === true;
-            // Делаем тумблер резервации неактивным, если количество товаров выключено
-            reservationsToggle.disabled = !(shopSettings.quantity_enabled !== false);
+            // Резервация может работать независимо от quantity_enabled
+            // Если quantity_enabled = false, резервация работает, но без показа количества
+            reservationsToggle.disabled = false;
         }
         
         // Показываем модальное окно
@@ -177,21 +180,20 @@ async function handleQuantityEnabledToggle(enabled) {
     console.log(`🔧 Toggling quantity enabled: ${enabled}`);
     
     try {
-        // Если quantity_enabled отключается, автоматически отключаем резервацию
+        // Обновляем только quantity_enabled (резервация может работать независимо)
         const updateData = {
             quantity_enabled: enabled
         };
-        if (!enabled) {
-            updateData.reservations_enabled = false;
-        }
         
         shopSettings = await updateShopSettings(updateData);
         console.log('✅ Shop settings updated:', shopSettings);
         
-        // Обновляем состояние тумблера резервации
+        // Обновляем состояние тумблера резервации (не блокируем его, если quantity_enabled выключен)
+        // Резервация может работать и без показа количества
         if (reservationsToggle) {
             reservationsToggle.checked = shopSettings.reservations_enabled === true;
-            reservationsToggle.disabled = !enabled;
+            // Не блокируем тумблер резервации, даже если quantity_enabled выключен
+            // reservationsToggle.disabled = !enabled;
         }
         
         // Показываем уведомление об успешном обновлении
@@ -225,14 +227,8 @@ async function handleQuantityEnabledToggle(enabled) {
 async function handleReservationsToggle(enabled) {
     console.log(`🔧 Toggling reservations: ${enabled}`);
     
-    // Проверяем, что quantity_enabled включен
-    if (!shopSettings || shopSettings.quantity_enabled === false) {
-        console.warn('⚠️ Cannot enable reservations when quantity is disabled');
-        if (reservationsToggle) {
-            reservationsToggle.checked = false;
-        }
-        return;
-    }
+    // Резервация может работать независимо от quantity_enabled
+    // Если quantity_enabled = false, резервация работает, но без выбора количества
     
     try {
         shopSettings = await updateShopSettings({
@@ -384,6 +380,98 @@ async function loadOrders() {
         
         // Рендерим список заказов
         ordersList.innerHTML = '';
+        
+        // Добавляем панель управления (выбрать все, удалить выбранные)
+        const controlsDiv = document.createElement('div');
+        controlsDiv.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 12px;
+            background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+            backdrop-filter: blur(20px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        `;
+        
+        const selectAllDiv = document.createElement('div');
+        selectAllDiv.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        
+        const selectAllCheckbox = document.createElement('input');
+        selectAllCheckbox.type = 'checkbox';
+        selectAllCheckbox.id = 'select-all-orders';
+        selectAllCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+        
+        const selectAllLabel = document.createElement('label');
+        selectAllLabel.htmlFor = 'select-all-orders';
+        selectAllLabel.textContent = 'Выбрать все';
+        selectAllLabel.style.cssText = 'font-size: 14px; color: var(--tg-theme-text-color); cursor: pointer;';
+        
+        selectAllDiv.appendChild(selectAllCheckbox);
+        selectAllDiv.appendChild(selectAllLabel);
+        
+        const deleteSelectedBtn = document.createElement('button');
+        deleteSelectedBtn.textContent = '🗑️ Удалить выбранные';
+        deleteSelectedBtn.style.cssText = `
+            padding: 6px 12px;
+            background: rgba(255, 59, 48, 0.2);
+            color: rgb(255, 59, 48);
+            border: 1px solid rgba(255, 59, 48, 0.5);
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            display: none;
+        `;
+        
+        controlsDiv.appendChild(selectAllDiv);
+        controlsDiv.appendChild(deleteSelectedBtn);
+        ordersList.appendChild(controlsDiv);
+        
+        // Обработчик "Выбрать все"
+        selectAllCheckbox.addEventListener('change', (e) => {
+            const checkboxes = document.querySelectorAll('.order-item-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = e.target.checked;
+            });
+            updateDeleteButtonVisibility();
+        });
+        
+        // Обработчик удаления выбранных
+        deleteSelectedBtn.addEventListener('click', async () => {
+            const selectedCheckboxes = document.querySelectorAll('.order-item-checkbox:checked');
+            if (selectedCheckboxes.length === 0) {
+                alert('❌ Выберите заказы для удаления');
+                return;
+            }
+            
+            const selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.dataset.orderId));
+            const count = selectedIds.length;
+            
+            if (!confirm(`Удалить ${count} ${count === 1 ? 'заказ' : count < 5 ? 'заказа' : 'заказов'}? Это действие нельзя отменить.`)) {
+                return;
+            }
+            
+            try {
+                await deleteOrdersAPI(selectedIds);
+                alert(`✅ Удалено ${count} ${count === 1 ? 'заказ' : count < 5 ? 'заказа' : 'заказов'}`);
+                await loadOrders(); // Перезагружаем список
+            } catch (error) {
+                console.error('Error deleting orders:', error);
+                alert(`❌ Ошибка при удалении: ${error.message}`);
+            }
+        });
+        
+        // Функция обновления видимости кнопки удаления
+        function updateDeleteButtonVisibility() {
+            const selectedCheckboxes = document.querySelectorAll('.order-item-checkbox:checked');
+            if (selectedCheckboxes.length > 0) {
+                deleteSelectedBtn.style.display = 'block';
+            } else {
+                deleteSelectedBtn.style.display = 'none';
+            }
+        }
+        
         orders.forEach(order => {
             const orderItem = document.createElement('div');
             orderItem.className = 'order-item';
@@ -397,17 +485,83 @@ async function loadOrders() {
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
+                position: relative;
             `;
             
-            // Заголовок с названием товара
+            // Чекбокс и название в одной строке
+            const headerDiv = document.createElement('div');
+            headerDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px;';
+            
+            const leftDiv = document.createElement('div');
+            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1;';
+            
+            // Чекбокс для выбора
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'order-item-checkbox';
+            checkbox.dataset.orderId = order.id;
+            checkbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+            checkbox.addEventListener('change', () => {
+                updateDeleteButtonVisibility();
+                // Обновляем состояние "Выбрать все"
+                const allCheckboxes = document.querySelectorAll('.order-item-checkbox');
+                const checkedCount = document.querySelectorAll('.order-item-checkbox:checked').length;
+                selectAllCheckbox.checked = checkedCount === allCheckboxes.length && allCheckboxes.length > 0;
+            });
+            
+            // Название товара
             const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color);';
-            // Если товар загружен через relationship, используем его, иначе загружаем отдельно
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1;';
             if (order.product && order.product.name) {
                 nameDiv.textContent = order.product.name;
             } else {
                 nameDiv.textContent = `Товар #${order.product_id}`;
             }
+            
+            leftDiv.appendChild(checkbox);
+            leftDiv.appendChild(nameDiv);
+            
+            headerDiv.appendChild(leftDiv);
+            
+            // Кнопка удаления - в нижнем правом углу
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '🗑️';
+            deleteBtn.style.cssText = `
+                position: absolute;
+                bottom: 8px;
+                right: 8px;
+                padding: 4px 8px;
+                background: rgba(255, 59, 48, 0.2);
+                color: rgb(255, 59, 48);
+                border: 1px solid rgba(255, 59, 48, 0.5);
+                border-radius: 6px;
+                font-size: 14px;
+                cursor: pointer;
+                min-width: 28px;
+                min-height: 28px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            deleteBtn.title = 'Удалить заказ';
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const productName = order.product && order.product.name ? order.product.name : `Товар #${order.product_id}`;
+                if (!confirm(`Удалить заказ "${productName}"? Это действие нельзя отменить.`)) {
+                    return;
+                }
+                
+                try {
+                    await deleteOrderAPI(order.id);
+                    alert('✅ Заказ удален');
+                    await loadOrders(); // Перезагружаем список
+                } catch (error) {
+                    console.error('Error deleting order:', error);
+                    alert(`❌ Ошибка при удалении: ${error.message}`);
+                }
+            });
+            
+            orderItem.appendChild(deleteBtn);
             
             // Информация о заказе
             const infoDiv = document.createElement('div');
@@ -449,14 +603,43 @@ async function loadOrders() {
             
             // Кнопки действий (только для невыполненных заказов)
             const actionsDiv = document.createElement('div');
-            actionsDiv.style.cssText = 'display: flex; gap: 8px; margin-top: 8px;';
+            actionsDiv.style.cssText = 'display: flex; gap: 6px; margin-top: 6px; justify-content: flex-start; flex-wrap: wrap; max-width: 100%;';
             
             if (!order.is_completed && !order.is_cancelled) {
-                // Кнопка "Выполнить"
+                // Кнопка "Выполнить" - в стиле Liquid Glass
                 const completeBtn = document.createElement('button');
                 completeBtn.className = 'reserve-btn';
-                completeBtn.style.cssText = 'flex: 1; background: rgba(76, 175, 80, 0.9);';
+                completeBtn.style.cssText = `
+                    background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(76, 175, 80, 0.1) 100%);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    color: rgba(255, 255, 255, 0.95);
+                    padding: 5px 10px;
+                    font-size: 11px;
+                    font-weight: 600;
+                    border-radius: 8px;
+                    white-space: nowrap;
+                    flex: none;
+                    line-height: 1.2;
+                    max-width: fit-content;
+                    box-sizing: border-box;
+                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                                0 2px 8px rgba(76, 175, 80, 0.2);
+                    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    cursor: pointer;
+                `;
                 completeBtn.textContent = '✅ Выполнить';
+                completeBtn.onmouseenter = function() {
+                    this.style.transform = 'translateY(-1px)';
+                    this.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 3px 10px rgba(76, 175, 80, 0.3)';
+                };
+                completeBtn.onmouseleave = function() {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 2px 8px rgba(76, 175, 80, 0.2)';
+                };
                 completeBtn.onclick = async () => {
                     if (confirm('Выполнить этот заказ?')) {
                         try {
@@ -469,11 +652,40 @@ async function loadOrders() {
                     }
                 };
                 
-                // Кнопка "Отменить"
+                // Кнопка "Отменить" - в стиле Liquid Glass
                 const cancelBtn = document.createElement('button');
                 cancelBtn.className = 'reserve-btn';
-                cancelBtn.style.cssText = 'flex: 1; background: rgba(244, 67, 54, 0.9);';
+                cancelBtn.style.cssText = `
+                    background: linear-gradient(135deg, rgba(244, 67, 54, 0.2) 0%, rgba(244, 67, 54, 0.1) 100%);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    color: rgba(255, 255, 255, 0.95);
+                    padding: 5px 10px;
+                    font-size: 11px;
+                    font-weight: 600;
+                    border-radius: 8px;
+                    white-space: nowrap;
+                    flex: none;
+                    line-height: 1.2;
+                    max-width: fit-content;
+                    box-sizing: border-box;
+                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                                0 2px 8px rgba(244, 67, 54, 0.2);
+                    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    cursor: pointer;
+                `;
                 cancelBtn.textContent = '❌ Отменить';
+                cancelBtn.onmouseenter = function() {
+                    this.style.transform = 'translateY(-1px)';
+                    this.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 3px 10px rgba(244, 67, 54, 0.3)';
+                };
+                cancelBtn.onmouseleave = function() {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 2px 8px rgba(244, 67, 54, 0.2)';
+                };
                 cancelBtn.onclick = async () => {
                     if (confirm('Отменить этот заказ? Заказ будет удален из списка.')) {
                         try {
@@ -490,7 +702,7 @@ async function loadOrders() {
                 actionsDiv.appendChild(cancelBtn);
             }
             
-            orderItem.appendChild(nameDiv);
+            orderItem.appendChild(headerDiv);
             orderItem.appendChild(infoDiv);
             if (actionsDiv.children.length > 0) {
                 orderItem.appendChild(actionsDiv);
@@ -546,6 +758,98 @@ async function loadSoldProducts() {
         
         // Рендерим список проданных товаров
         soldProductsList.innerHTML = '';
+        
+        // Добавляем панель управления (выбрать все, удалить выбранные)
+        const controlsDiv = document.createElement('div');
+        controlsDiv.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 12px;
+            background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+            backdrop-filter: blur(20px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        `;
+        
+        const selectAllDiv = document.createElement('div');
+        selectAllDiv.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        
+        const selectAllCheckbox = document.createElement('input');
+        selectAllCheckbox.type = 'checkbox';
+        selectAllCheckbox.id = 'select-all-sold';
+        selectAllCheckbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+        
+        const selectAllLabel = document.createElement('label');
+        selectAllLabel.htmlFor = 'select-all-sold';
+        selectAllLabel.textContent = 'Выбрать все';
+        selectAllLabel.style.cssText = 'font-size: 14px; color: var(--tg-theme-text-color); cursor: pointer;';
+        
+        selectAllDiv.appendChild(selectAllCheckbox);
+        selectAllDiv.appendChild(selectAllLabel);
+        
+        const deleteSelectedBtn = document.createElement('button');
+        deleteSelectedBtn.textContent = '🗑️ Удалить выбранные';
+        deleteSelectedBtn.style.cssText = `
+            padding: 6px 12px;
+            background: rgba(255, 59, 48, 0.2);
+            color: rgb(255, 59, 48);
+            border: 1px solid rgba(255, 59, 48, 0.5);
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            display: none;
+        `;
+        
+        controlsDiv.appendChild(selectAllDiv);
+        controlsDiv.appendChild(deleteSelectedBtn);
+        soldProductsList.appendChild(controlsDiv);
+        
+        // Обработчик "Выбрать все"
+        selectAllCheckbox.addEventListener('change', (e) => {
+            const checkboxes = document.querySelectorAll('.sold-item-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = e.target.checked;
+            });
+            updateDeleteButtonVisibility();
+        });
+        
+        // Обработчик удаления выбранных
+        deleteSelectedBtn.addEventListener('click', async () => {
+            const selectedCheckboxes = document.querySelectorAll('.sold-item-checkbox:checked');
+            if (selectedCheckboxes.length === 0) {
+                alert('❌ Выберите записи для удаления');
+                return;
+            }
+            
+            const selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.dataset.soldId));
+            const count = selectedIds.length;
+            
+            if (!confirm(`Удалить ${count} ${count === 1 ? 'запись' : count < 5 ? 'записи' : 'записей'}? Это действие нельзя отменить.`)) {
+                return;
+            }
+            
+            try {
+                await deleteSoldProductsAPI(selectedIds, shopOwnerId);
+                alert(`✅ Удалено ${count} ${count === 1 ? 'запись' : count < 5 ? 'записи' : 'записей'}`);
+                await loadSoldProducts(); // Перезагружаем список
+            } catch (error) {
+                console.error('Error deleting sold products:', error);
+                alert(`❌ Ошибка при удалении: ${error.message}`);
+            }
+        });
+        
+        // Функция обновления видимости кнопки удаления
+        function updateDeleteButtonVisibility() {
+            const selectedCheckboxes = document.querySelectorAll('.sold-item-checkbox:checked');
+            if (selectedCheckboxes.length > 0) {
+                deleteSelectedBtn.style.display = 'block';
+            } else {
+                deleteSelectedBtn.style.display = 'none';
+            }
+        }
+        
         soldProducts.forEach(sold => {
             const soldItem = document.createElement('div');
             soldItem.className = 'sold-product-item';
@@ -559,41 +863,117 @@ async function loadSoldProducts() {
                 display: flex;
                 flex-direction: column;
                 gap: 6px;
+                position: relative;
             `;
+            
+            // Чекбокс и название в одной строке
+            const headerDiv = document.createElement('div');
+            headerDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px;';
+            
+            const leftDiv = document.createElement('div');
+            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1;';
+            
+            // Чекбокс для выбора
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'sold-item-checkbox';
+            checkbox.dataset.soldId = sold.id;
+            checkbox.style.cssText = 'width: 16px; height: 16px; cursor: pointer;';
+            checkbox.addEventListener('change', () => {
+                updateDeleteButtonVisibility();
+                // Обновляем состояние "Выбрать все"
+                const allCheckboxes = document.querySelectorAll('.sold-item-checkbox');
+                const checkedCount = document.querySelectorAll('.sold-item-checkbox:checked').length;
+                selectAllCheckbox.checked = checkedCount === allCheckboxes.length && allCheckboxes.length > 0;
+            });
             
             // Название
             const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color);';
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1;';
             nameDiv.textContent = sold.name;
             
-            // Цена и дата в одной строке
-            const infoDiv = document.createElement('div');
-            infoDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;';
+            leftDiv.appendChild(checkbox);
+            leftDiv.appendChild(nameDiv);
             
-            // Цена
-            const finalPrice = sold.discount > 0 ? Math.round(sold.price * (1 - sold.discount / 100)) : sold.price;
-            const priceDiv = document.createElement('div');
-            priceDiv.style.cssText = 'font-size: 16px; font-weight: 700; color: var(--tg-theme-link-color);';
-            priceDiv.textContent = `${finalPrice} ₽`;
+            headerDiv.appendChild(leftDiv);
+            
+            // Кнопка удаления - в нижнем правом углу
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '🗑️';
+            deleteBtn.style.cssText = `
+                position: absolute;
+                bottom: 8px;
+                right: 8px;
+                padding: 4px 8px;
+                background: rgba(255, 59, 48, 0.2);
+                color: rgb(255, 59, 48);
+                border: 1px solid rgba(255, 59, 48, 0.5);
+                border-radius: 6px;
+                font-size: 14px;
+                cursor: pointer;
+                min-width: 28px;
+                min-height: 28px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            deleteBtn.title = 'Удалить запись';
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!confirm(`Удалить запись о продаже "${sold.name}"? Это действие нельзя отменить.`)) {
+                    return;
+                }
+                
+                try {
+                    await deleteSoldProductAPI(sold.id, shopOwnerId);
+                    alert('✅ Запись удалена');
+                    await loadSoldProducts(); // Перезагружаем список
+                } catch (error) {
+                    console.error('Error deleting sold product:', error);
+                    alert(`❌ Ошибка при удалении: ${error.message}`);
+                }
+            });
+            
+            soldItem.appendChild(deleteBtn);
+            
+            // Информация о продаже
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
+            
+            // Количество и цены
+            const quantity = sold.quantity || 1;
+            const unitPrice = sold.discount > 0 ? Math.round(sold.price * (1 - sold.discount / 100)) : sold.price;
+            const totalPrice = unitPrice * quantity;
+            
+            // Количество
+            const quantityDiv = document.createElement('div');
+            quantityDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-text-color);';
+            quantityDiv.textContent = `Количество: ${quantity} шт.`;
+            
+            // Цена за 1 шт
+            const unitPriceDiv = document.createElement('div');
+            unitPriceDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color);';
             if (sold.discount > 0) {
-                const oldPrice = document.createElement('span');
-                oldPrice.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color); text-decoration: line-through; margin-left: 6px;';
-                oldPrice.textContent = `${sold.price} ₽`;
-                priceDiv.appendChild(oldPrice);
+                unitPriceDiv.innerHTML = `Цена за 1 шт: <span style="text-decoration: line-through; margin-right: 6px;">${sold.price} ₽</span> <span style="color: var(--tg-theme-link-color); font-weight: 600;">${unitPrice} ₽</span>`;
+            } else {
+                unitPriceDiv.innerHTML = `Цена за 1 шт: <span style="color: var(--tg-theme-link-color); font-weight: 600;">${unitPrice} ₽</span>`;
+            }
+            
+            // Общая цена
+            const totalPriceDiv = document.createElement('div');
+            totalPriceDiv.style.cssText = 'font-size: 18px; font-weight: 700; color: var(--tg-theme-link-color); margin-top: 4px;';
+            if (sold.discount > 0) {
+                const oldTotalPrice = sold.price * quantity;
+                totalPriceDiv.innerHTML = `Общая цена: <span style="text-decoration: line-through; margin-right: 6px; font-size: 14px; color: var(--tg-theme-hint-color);">${oldTotalPrice} ₽</span> <span>${totalPrice} ₽</span>`;
+            } else {
+                totalPriceDiv.textContent = `Общая цена: ${totalPrice} ₽`;
             }
             
             // Дата продажи
             const dateDiv = document.createElement('div');
-            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color);';
+            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px;';
             if (sold.sold_at) {
                 const soldDate = new Date(sold.sold_at);
-                const dateStr = soldDate.toLocaleDateString('ru-RU', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
                 dateDiv.textContent = soldDate.toLocaleDateString('ru-RU', {
                     day: '2-digit',
                     month: '2-digit',
@@ -604,10 +984,12 @@ async function loadSoldProducts() {
                 });
             }
             
-            infoDiv.appendChild(priceDiv);
+            infoDiv.appendChild(quantityDiv);
+            infoDiv.appendChild(unitPriceDiv);
+            infoDiv.appendChild(totalPriceDiv);
             infoDiv.appendChild(dateDiv);
             
-            soldItem.appendChild(nameDiv);
+            soldItem.appendChild(headerDiv);
             soldItem.appendChild(infoDiv);
             
             soldProductsList.appendChild(soldItem);
