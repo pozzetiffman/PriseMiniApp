@@ -8,6 +8,18 @@ import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from 
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
 let currentCategoryId = null;
 
+// Состояние фильтров
+let selectedCategoryIds = new Set(); // Множественный выбор категорий
+let allCategories = []; // Все категории для фильтра
+let allProducts = []; // Все товары для фильтрации на клиенте
+let productFilters = {
+    price: 'all', // 'all', 'low', 'medium', 'high'
+    inStock: false,
+    hotOffer: false,
+    withDiscount: false,
+    madeToOrder: false
+};
+
 // Экспортируем функцию для получения appContext (для использования в других модулях)
 window.getAppContext = function() {
     return appContext;
@@ -176,6 +188,9 @@ window.updateShopNameInHeader = async function updateShopNameInHeader() {
     // 6. Настраиваем обработчики модальных окон
     setupModals();
     
+    // 6.5. Инициализируем фильтры
+    initFilters();
+    
     // 7. Инициализируем корзину
     setupCartButton();
     initCart();
@@ -239,13 +254,17 @@ window.loadData = async function loadData() {
         renderCategories(categories);
         
         // Загружаем товары для магазина (shop_owner_id)
+        // ВАЖНО: Загружаем ВСЕ товары без фильтрации по категории для работы фильтров
         console.log('📦 Step 2: Fetching products...');
-        const productsUrl = `${API_BASE}/api/products/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}${currentCategoryId ? `&category_id=${currentCategoryId}` : ''}`;
+        const productsUrl = `${API_BASE}/api/products/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}`;
         console.log('📦 Products URL:', productsUrl);
         console.log('📦 Using botId:', botId, 'for products');
-        const products = await fetchProducts(appContext.shop_owner_id, currentCategoryId, botId);
+        const products = await fetchProducts(appContext.shop_owner_id, null, botId); // Загружаем все товары
         console.log('✅ Step 2 complete: Products loaded:', products.length);
-        renderProducts(products);
+        // Сохраняем все товары для фильтрации
+        allProducts = products;
+        // Применяем фильтры (если они активны)
+        applyFilters();
         
         // Отслеживаем общее посещение магазина (только для клиентов, не для владельца)
         if (appContext && appContext.role === 'client' && appContext.shop_owner_id) {
@@ -273,6 +292,12 @@ window.loadData = async function loadData() {
 
 // Рендеринг категорий
 function renderCategories(categories) {
+    // Сохраняем категории для фильтра
+    allCategories = Array.isArray(categories) ? categories : [];
+    
+    // Обновляем фильтр категорий
+    updateCategoryFilter();
+    
     categoriesNav.innerHTML = '';
     
     const allBadge = document.createElement('div');
@@ -280,7 +305,9 @@ function renderCategories(categories) {
     allBadge.innerText = 'Все';
     allBadge.onclick = () => { 
         currentCategoryId = null; 
-        loadData(); 
+        selectedCategoryIds.clear();
+        updateCategoryFilter();
+        applyFilters(); 
     };
     categoriesNav.appendChild(allBadge);
 
@@ -291,7 +318,10 @@ function renderCategories(categories) {
             badge.innerText = cat.name;
             badge.onclick = () => { 
                 currentCategoryId = cat.id; 
-                loadData(); 
+                selectedCategoryIds.clear();
+                selectedCategoryIds.add(cat.id);
+                updateCategoryFilter();
+                applyFilters(); 
             };
             categoriesNav.appendChild(badge);
         });
@@ -1661,4 +1691,264 @@ async function deleteProduct(productId) {
         console.error('Delete product error:', e);
         alert(`❌ Ошибка: ${e.message}`);
     }
+}
+
+// ========== ФИЛЬТРЫ ==========
+
+// Инициализация фильтров
+function initFilters() {
+    const categoryFilterButton = document.getElementById('category-filter-button');
+    const categoryFilterDropdown = document.getElementById('category-filter-dropdown');
+    const productFilterButton = document.getElementById('product-filter-button');
+    const productFilterDropdown = document.getElementById('product-filter-dropdown');
+    const productFilterReset = document.getElementById('product-filter-reset');
+    
+    // Фильтр категорий - открытие/закрытие
+    if (categoryFilterButton && categoryFilterDropdown) {
+        categoryFilterButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = categoryFilterDropdown.style.display === 'block';
+            categoryFilterDropdown.style.display = isOpen ? 'none' : 'block';
+            categoryFilterButton.classList.toggle('active', !isOpen);
+            
+            // Закрываем другой фильтр
+            if (!isOpen) {
+                productFilterDropdown.style.display = 'none';
+                productFilterButton.classList.remove('active');
+            }
+        });
+    }
+    
+    // Фильтр товаров - открытие/закрытие
+    if (productFilterButton && productFilterDropdown) {
+        productFilterButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = productFilterDropdown.style.display === 'block';
+            productFilterDropdown.style.display = isOpen ? 'none' : 'block';
+            productFilterButton.classList.toggle('active', !isOpen);
+            
+            // Закрываем другой фильтр
+            if (!isOpen) {
+                categoryFilterDropdown.style.display = 'none';
+                categoryFilterButton.classList.remove('active');
+            }
+        });
+    }
+    
+    // Закрытие фильтров при клике вне их
+    document.addEventListener('click', (e) => {
+        if (!categoryFilterButton.contains(e.target) && !categoryFilterDropdown.contains(e.target)) {
+            categoryFilterDropdown.style.display = 'none';
+            categoryFilterButton.classList.remove('active');
+        }
+        if (!productFilterButton.contains(e.target) && !productFilterDropdown.contains(e.target)) {
+            productFilterDropdown.style.display = 'none';
+            productFilterButton.classList.remove('active');
+        }
+    });
+    
+    // Обработчики для фильтра категорий
+    const categoryFilterOptions = document.getElementById('category-filter-options');
+    if (categoryFilterOptions) {
+        // Обработчик для "Все категории"
+        const allCategoryCheckbox = document.querySelector('[data-category-id="all"]');
+        if (allCategoryCheckbox) {
+            allCategoryCheckbox.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    selectedCategoryIds.clear();
+                    // Снимаем все остальные чекбоксы
+                    document.querySelectorAll('[data-category-id]:not([data-category-id="all"])').forEach(cb => {
+                        cb.checked = false;
+                    });
+                    updateCategoryFilter();
+                    applyFilters();
+                }
+            });
+        }
+    }
+    
+    // Обработчики для фильтра товаров
+    // Фильтр по цене (радио-кнопки)
+    document.querySelectorAll('input[name="price-filter"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            productFilters.price = e.target.value;
+            applyFilters();
+        });
+    });
+    
+    // Фильтры по наличию (чекбоксы)
+    document.querySelectorAll('[data-filter]').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const filterType = e.target.dataset.filter;
+            productFilters[filterType] = e.target.checked;
+            applyFilters();
+        });
+    });
+    
+    // Кнопка сброса фильтра товаров
+    if (productFilterReset) {
+        productFilterReset.addEventListener('click', () => {
+            // Сбрасываем все фильтры товаров
+            productFilters = {
+                price: 'all',
+                inStock: false,
+                hotOffer: false,
+                withDiscount: false,
+                madeToOrder: false
+            };
+            
+            // Сбрасываем UI
+            document.querySelector('input[name="price-filter"][value="all"]').checked = true;
+            document.querySelectorAll('[data-filter]').forEach(cb => {
+                cb.checked = false;
+            });
+            
+            applyFilters();
+        });
+    }
+}
+
+// Обновление фильтра категорий
+function updateCategoryFilter() {
+    const categoryFilterOptions = document.getElementById('category-filter-options');
+    if (!categoryFilterOptions) return;
+    
+    categoryFilterOptions.innerHTML = '';
+    
+    allCategories.forEach(cat => {
+        const option = document.createElement('div');
+        option.className = 'filter-option';
+        
+        const label = document.createElement('label');
+        label.className = 'filter-checkbox-label';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'filter-checkbox';
+        checkbox.dataset.categoryId = cat.id;
+        checkbox.checked = selectedCategoryIds.has(cat.id);
+        
+        checkbox.addEventListener('change', (e) => {
+            const allCheckbox = document.querySelector('[data-category-id="all"]');
+            if (e.target.checked) {
+                selectedCategoryIds.add(cat.id);
+                // Снимаем "Все категории"
+                if (allCheckbox) {
+                    allCheckbox.checked = false;
+                }
+            } else {
+                selectedCategoryIds.delete(cat.id);
+                // Если ничего не выбрано, выбираем "Все категории"
+                if (selectedCategoryIds.size === 0 && allCheckbox) {
+                    allCheckbox.checked = true;
+                }
+            }
+            updateCategoryFilterCount();
+            applyFilters();
+        });
+        
+        const text = document.createElement('span');
+        text.className = 'filter-checkbox-text';
+        text.textContent = cat.name;
+        
+        label.appendChild(checkbox);
+        label.appendChild(text);
+        option.appendChild(label);
+        categoryFilterOptions.appendChild(option);
+    });
+    
+    updateCategoryFilterCount();
+}
+
+// Обновление счетчика выбранных категорий
+function updateCategoryFilterCount() {
+    const countElement = document.getElementById('category-filter-count');
+    if (!countElement) return;
+    
+    const count = selectedCategoryIds.size;
+    if (count > 0) {
+        countElement.textContent = count;
+        countElement.style.display = 'inline-block';
+    } else {
+        countElement.style.display = 'none';
+    }
+}
+
+// Применение фильтров к товарам
+function applyFilters() {
+    if (allProducts.length === 0) {
+        // Если товары еще не загружены, просто рендерим пустой список
+        productsGrid.innerHTML = '<p class="loading">Загрузка товаров...</p>';
+        return;
+    }
+    
+    let filteredProducts = [...allProducts];
+    
+    // Фильтр по категориям (множественный выбор)
+    // Если выбраны категории в фильтре, применяем их
+    // Если выбрана категория через старый интерфейс (currentCategoryId), применяем её
+    if (selectedCategoryIds.size > 0) {
+        filteredProducts = filteredProducts.filter(prod => {
+            return selectedCategoryIds.has(prod.category_id);
+        });
+    } else if (currentCategoryId !== null) {
+        // Если фильтр категорий не используется, но выбрана категория через badges
+        filteredProducts = filteredProducts.filter(prod => {
+            return prod.category_id === currentCategoryId;
+        });
+    }
+    
+    // Фильтр по цене
+    if (productFilters.price !== 'all') {
+        filteredProducts = filteredProducts.filter(prod => {
+            const finalPrice = prod.discount > 0 ? Math.round(prod.price * (1 - prod.discount / 100)) : prod.price;
+            switch (productFilters.price) {
+                case 'low':
+                    return finalPrice < 1000;
+                case 'medium':
+                    return finalPrice >= 1000 && finalPrice <= 5000;
+                case 'high':
+                    return finalPrice > 5000;
+                default:
+                    return true;
+            }
+        });
+    }
+    
+    // Фильтр "В наличии"
+    if (productFilters.inStock) {
+        filteredProducts = filteredProducts.filter(prod => {
+            const isMadeToOrder = prod.is_made_to_order === true || 
+                                  prod.is_made_to_order === 1 || 
+                                  prod.is_made_to_order === '1' ||
+                                  prod.is_made_to_order === 'true' ||
+                                  String(prod.is_made_to_order).toLowerCase() === 'true';
+            if (isMadeToOrder) return false;
+            return prod.quantity !== undefined && prod.quantity !== null && prod.quantity > 0;
+        });
+    }
+    
+    // Фильтр "Горящие предложения"
+    if (productFilters.hotOffer) {
+        filteredProducts = filteredProducts.filter(prod => prod.is_hot_offer === true);
+    }
+    
+    // Фильтр "Со скидкой"
+    if (productFilters.withDiscount) {
+        filteredProducts = filteredProducts.filter(prod => prod.discount > 0);
+    }
+    
+    // Фильтр "Под заказ"
+    if (productFilters.madeToOrder) {
+        filteredProducts = filteredProducts.filter(prod => {
+            return prod.is_made_to_order === true || 
+                   prod.is_made_to_order === 1 || 
+                   prod.is_made_to_order === '1' ||
+                   prod.is_made_to_order === 'true' ||
+                   String(prod.is_made_to_order).toLowerCase() === 'true';
+        });
+    }
+    
+    // Рендерим отфильтрованные товары
+    renderProducts(filteredProducts);
 }

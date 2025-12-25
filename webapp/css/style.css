@@ -11,8 +11,8 @@
     /* Liquid Glass цвета */
     --bg-primary: rgba(28, 28, 30, 0.8);
     --bg-secondary: rgba(44, 44, 46, 0.6);
-    --bg-glass: rgba(58, 58, 60, 0.4);
-    --bg-glass-light: rgba(72, 72, 74, 0.5);
+    --bg-glass: rgba(58, 58, 60, 0.75);
+    --bg-glass-light: rgba(72, 72, 74, 0.85);
     --text-primary: #ffffff;
     --text-secondary: #ebebf5;
     --text-hint: #8e8e93;
@@ -38,58 +38,152 @@ body {
     -webkit-user-select: none;
     user-select: none;
     min-height: 100vh;
+    position: relative;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(90, 200, 250, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(90, 200, 250, 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
 }
 
 header {
-    padding: 15px;
+    padding: 12px 16px;
+    padding-bottom: max(12px, calc(12px + env(safe-area-inset-bottom)));
     text-align: center;
     background: var(--bg-glass) !important;
-    backdrop-filter: var(--blur-medium);
-    -webkit-backdrop-filter: var(--blur-medium);
-    border-bottom: 1px solid var(--border-glass);
-    position: sticky;
-    top: 0;
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    border-top: 1px solid var(--border-glass);
+    border-bottom: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     z-index: 100;
-    box-shadow: 0 4px 20px var(--shadow-glass);
-    position: relative;
-    min-height: 50px;
+    box-shadow: 0 -8px 32px var(--shadow-glass),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    min-height: 64px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 12px;
+    border-radius: 24px 24px 0 0;
+    padding-bottom: max(12px, calc(12px + env(safe-area-inset-bottom, 0px)));
 }
 
 header h1 {
-    font-size: 18px;
+    font-size: 14px;
     margin: 0;
     color: var(--text-primary) !important;
     font-weight: 600;
-    letter-spacing: -0.3px;
-    flex: 1;
+    letter-spacing: -0.2px;
     text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    max-width: 100%;
+    padding: 0 8px;
 }
 
 .cart-button {
-    padding: 8px 16px;
-    background: var(--bg-glass);
-    backdrop-filter: var(--blur-small);
-    -webkit-backdrop-filter: var(--blur-small);
-    border: 1px solid var(--border-glass);
-    border-radius: 20px;
+    padding: 0 14px;
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.15) 0%, rgba(76, 175, 80, 0.08) 100%);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    border-radius: 16px;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
-    box-shadow: 0 2px 8px var(--shadow-light);
+    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    min-height: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
 }
 
 .cart-button:hover {
-    background: var(--bg-glass-light);
-    transform: scale(1.05);
-    box-shadow: 0 4px 16px var(--shadow-medium);
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.25) 0%, rgba(76, 175, 80, 0.15) 100%);
+    border-color: rgba(76, 175, 80, 0.5);
+    box-shadow: 0 6px 24px rgba(76, 175, 80, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-2px);
 }
+
+.cart-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+/* Состояние неактивной корзины (когда пуста) */
+.cart-button[style*="display: none"],
+.cart-button:not([style*="display: block"]):not([style*="display: flex"]) {
+    display: flex !important;
+    opacity: 0.3;
+    pointer-events: none;
+    cursor: default;
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.1) 0%, rgba(128, 128, 128, 0.05) 100%);
+    border-color: rgba(128, 128, 128, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.cart-button[style*="display: none"]:hover,
+.cart-button:not([style*="display: block"]):not([style*="display: flex"]):hover {
+    transform: none;
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.1) 0%, rgba(128, 128, 128, 0.05) 100%);
+    border-color: rgba(128, 128, 128, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+/* Активное состояние корзины (когда есть товары) */
+.cart-button[style*="display: block"],
+.cart-button[style*="display: flex"] {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+#cart-count {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.7) 100%);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 20px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    line-height: 1.4;
+}
+
+.cart-button[style*="display: none"] #cart-count,
+.cart-button:not([style*="display: block"]):not([style*="display: flex"]) #cart-count {
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.3) 0%, rgba(128, 128, 128, 0.2) 100%);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 0.5);
+}
+
 
 .cart-title {
     font-size: 20px;
@@ -225,11 +319,11 @@ header h1 {
 }
 
 .scroll-x {
-    display: flex;
+    display: none; /* Скрываем горизонтальный список категорий, так как есть фильтр */
     overflow-x: auto;
     white-space: nowrap;
-    padding: 10px;
-    gap: 10px;
+    padding: 8px 10px;
+    gap: 8px;
     -webkit-overflow-scrolling: touch;
 }
 
@@ -238,29 +332,34 @@ header h1 {
 }
 
 .category-badge {
-    padding: 10px 18px;
+    padding: 6px 14px;
     background: var(--bg-glass) !important;
     backdrop-filter: var(--blur-small);
     -webkit-backdrop-filter: var(--blur-small);
     border: 1px solid var(--border-glass);
-    border-radius: 20px;
-    font-size: 14px;
+    border-radius: 16px;
+    font-size: 12px;
     cursor: pointer;
     color: var(--text-secondary) !important;
     font-weight: 500;
     white-space: nowrap;
     box-shadow: 0 2px 8px var(--shadow-light);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .category-badge.active {
-    background: rgba(90, 200, 250, 0.3) !important;
+    background: rgba(90, 200, 250, 0.25) !important;
     backdrop-filter: var(--blur-small);
     -webkit-backdrop-filter: var(--blur-small);
     color: var(--tg-theme-button-color) !important;
-    border-color: rgba(90, 200, 250, 0.4);
-    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.3);
-    transform: scale(1.05);
+    border-color: rgba(90, 200, 250, 0.5);
+    box-shadow: 0 2px 8px rgba(90, 200, 250, 0.15), 
+                0 0 0 1px rgba(90, 200, 250, 0.2) inset;
+    transform: scale(1.01);
 }
 
 #products-grid {
@@ -296,12 +395,26 @@ header h1 {
     -webkit-backdrop-filter: var(--blur-medium);
     border-radius: 16px;
     padding: 12px;
-    box-shadow: 0 4px 20px var(--shadow-glass);
+    box-shadow: 0 4px 20px var(--shadow-glass),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     border: 1px solid var(--border-glass);
     display: flex;
     flex-direction: column;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
+    position: relative;
+}
+
+.product-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+    pointer-events: none;
+    border-radius: 16px;
 }
 
 .product-card:hover {
@@ -519,7 +632,8 @@ header h1 {
     max-height: 90vh;
     position: relative;
     animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 20px 60px var(--shadow-glass);
+    box-shadow: 0 20px 60px var(--shadow-glass),
+                0 0 0 1px rgba(255, 255, 255, 0.08) inset;
     border: 1px solid var(--border-glass);
     box-sizing: border-box;
     overflow-x: hidden;
@@ -853,31 +967,101 @@ html, body {
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+    position: relative;
+    z-index: 1;
 }
 
 main {
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)); /* Отступ для фиксированной шапки внизу + safe area + отступ */
 }
 
 /* Дополнительные стили для лучшей видимости на мобильных */
 @media (max-width: 480px) {
-    header h1 {
-        font-size: 17px;
-        padding: 0 50px;
+    header {
+        padding: 10px 12px;
+        padding-bottom: max(10px, calc(10px + env(safe-area-inset-bottom, 0px)));
+        min-height: 60px;
+        bottom: 0;
+        gap: 8px;
+        border-radius: 20px 20px 0 0;
     }
     
-    .cart-button {
-        font-size: 12px;
-        padding: 6px 12px;
+    header h1 {
+        font-size: 13px;
+        padding: 0 4px;
     }
     
     .admin-button {
-        padding: 6px 10px;
-        font-size: 16px;
         min-width: 40px;
+        width: 40px;
         height: 40px;
+        font-size: 18px;
+    }
+    
+    .cart-button {
+        min-height: 40px;
+        height: 40px;
+        padding: 0 12px;
+        font-size: 12px;
+    }
+    
+    #cart-count {
+        font-size: 10px;
+        padding: 2px 6px;
+        min-width: 18px;
+    }
+    
+    .cart-button {
+        font-size: 11px;
+        padding: 5px 10px;
+        min-height: 28px;
+    }
+    
+    .admin-button {
+        padding: 5px 8px;
+        font-size: 14px;
+        min-width: 28px;
+        height: 28px;
+    }
+    
+    main {
+        padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+    }
+    
+    .admin-tabs {
+        grid-template-columns: repeat(4, 1fr);
+        padding: 3px;
+        gap: 2px;
+    }
+    
+    .admin-tab {
+        padding: 8px 4px;
+        font-size: 10px;
+        min-height: 50px;
+    }
+    
+    .admin-tab span:first-child {
+        font-size: 16px !important;
+    }
+    
+    .admin-modal-content {
+        max-width: 98%;
+        width: calc(100% - 10px);
+        margin: 2% auto;
+        max-height: 96vh;
+    }
+    
+    .admin-modal-body {
+        padding: 12px;
+    }
+    
+    .stats-content,
+    .orders-list,
+    .sold-products-list {
+        max-height: calc(96vh - 180px) !important;
     }
     
     #products-grid {
@@ -922,6 +1106,55 @@ main {
         font-size: 14px;
     }
     
+    /* Адаптивные стили для фильтров */
+    .filters-container {
+        gap: 6px;
+        padding: 6px;
+    }
+    
+    .filter-button {
+        padding: 6px 12px;
+        font-size: 11px;
+        min-height: 30px;
+    }
+    
+    .filter-icon {
+        font-size: 12px;
+    }
+    
+    .filter-arrow {
+        font-size: 9px;
+    }
+    
+    .filter-dropdown {
+        max-height: 280px;
+        max-width: min(85vw, 300px);
+    }
+    
+    .filter-dropdown-content {
+        padding: 6px;
+    }
+    
+    .filter-section-title {
+        font-size: 10px;
+    }
+    
+    .filter-checkbox-text,
+    .filter-radio-text {
+        font-size: 11px;
+    }
+    
+    .filter-checkbox,
+    .filter-radio {
+        width: 14px;
+        height: 14px;
+    }
+    
+    .filter-reset-btn {
+        padding: 6px;
+        font-size: 11px;
+    }
+    
     .product-price {
         font-size: 17px;
     }
@@ -958,9 +1191,288 @@ main {
     opacity: 0.6;
 }
 
+/* Фильтры */
+.filters-container {
+    display: flex;
+    gap: 8px;
+    padding: 6px 8px;
+    background: transparent;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filter-wrapper {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.filter-button {
+    padding: 8px 14px;
+    background: linear-gradient(135deg, rgba(58, 58, 60, 0.75) 0%, rgba(44, 44, 46, 0.65) 100%) !important;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    color: var(--text-primary) !important;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(0, 0, 0, 0.3);
+    min-height: 32px;
+    white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+}
+
+.filter-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
+    pointer-events: none;
+    border-radius: 12px;
+}
+
+.filter-button:hover {
+    background: linear-gradient(135deg, rgba(72, 72, 74, 0.85) 0%, rgba(58, 58, 60, 0.75) 100%) !important;
+    border-color: rgba(90, 200, 250, 0.4);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+                0 4px 12px rgba(90, 200, 250, 0.2);
+    transform: translateY(-1px);
+}
+
+.filter-button.active {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.25) 0%, rgba(90, 200, 250, 0.15) 100%) !important;
+    border-color: rgba(90, 200, 250, 0.5);
+    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.25),
+                0 0 0 1px rgba(90, 200, 250, 0.3) inset,
+                0 2px 8px rgba(90, 200, 250, 0.2);
+}
+
+.filter-icon {
+    font-size: 14px;
+    position: relative;
+    z-index: 1;
+}
+
+.filter-label {
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.filter-count {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.4) 0%, rgba(90, 200, 250, 0.3) 100%);
+    color: var(--tg-theme-button-color);
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(90, 200, 250, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    position: relative;
+    z-index: 1;
+}
+
+.filter-arrow {
+    font-size: 10px;
+    transition: transform 0.3s ease;
+    position: relative;
+    z-index: 1;
+}
+
+.filter-button.active .filter-arrow {
+    transform: rotate(180deg);
+}
+
+.filter-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    max-width: min(90vw, 320px);
+    width: max-content;
+    background: rgba(60, 60, 62, 0.92) !important;
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px var(--shadow-glass),
+                0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    z-index: 100;
+    max-height: 350px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    animation: filterSlideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes filterSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.filter-dropdown-content {
+    padding: 8px;
+    min-width: 100%;
+    overflow-x: hidden;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.filter-section {
+    margin-bottom: 12px;
+}
+
+.filter-section:last-child {
+    margin-bottom: 0;
+}
+
+.filter-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-hint);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-glass);
+}
+
+.filter-option {
+    margin-bottom: 6px;
+}
+
+.filter-option:last-child {
+    margin-bottom: 0;
+}
+
+.filter-checkbox-label,
+.filter-radio-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 0;
+    width: 100%;
+}
+
+.filter-checkbox-label:hover,
+.filter-radio-label:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.filter-checkbox,
+.filter-radio {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    margin-top: 2px;
+    cursor: pointer;
+    accent-color: var(--tg-theme-button-color);
+    flex-shrink: 0;
+}
+
+.filter-checkbox-text,
+.filter-radio-text {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-primary);
+    user-select: none;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    line-height: 1.4;
+    min-width: 0;
+}
+
+.filter-actions {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-glass);
+}
+
+.filter-reset-btn {
+    width: 100%;
+    padding: 8px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.filter-reset-btn:hover {
+    background: var(--bg-glass-light);
+    border-color: rgba(255, 59, 48, 0.4);
+    color: #ff3b30;
+    transform: translateY(-1px);
+}
+
+.filter-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.filter-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.filter-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.filter-dropdown::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Отключаем горизонтальный скролл */
+.filter-dropdown {
+    overscroll-behavior-x: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.filter-dropdown-content {
+    overscroll-behavior-x: none;
+}
+
 /* Дополнительные эффекты для Liquid Glass */
 .scroll-x {
     background: transparent;
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 #products-grid {
@@ -988,23 +1500,47 @@ main {
 
 /* Стили для админки */
 .admin-button {
-    background: var(--bg-glass-light);
-    border: 1px solid var(--border-glass);
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.15) 0%, rgba(90, 200, 250, 0.08) 100%);
+    border: 1px solid rgba(90, 200, 250, 0.3);
     color: var(--text-primary);
-    padding: 8px 12px;
-    border-radius: 12px;
-    font-size: 18px;
+    padding: 0;
+    border-radius: 16px;
+    font-size: 20px;
     font-weight: 500;
     cursor: pointer;
-    backdrop-filter: var(--blur-small);
-    -webkit-backdrop-filter: var(--blur-small);
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px var(--shadow-light);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
     min-width: 44px;
+    width: 44px;
     height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.admin-button:hover {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.25) 0%, rgba(90, 200, 250, 0.15) 100%);
+    border-color: rgba(90, 200, 250, 0.5);
+    box-shadow: 0 6px 24px rgba(90, 200, 250, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-2px);
+}
+
+.admin-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.admin-button[style*="display: none"] {
+    display: flex !important;
+    opacity: 0.3;
+    pointer-events: none;
+    cursor: default;
 }
 
 .admin-button:hover {
@@ -1036,29 +1572,33 @@ main {
     background: var(--bg-glass);
     backdrop-filter: var(--blur-large);
     -webkit-backdrop-filter: var(--blur-large);
-    margin: 10% auto;
+    margin: 5% auto;
     padding: 0;
-    border-radius: 20px;
-    width: 90%;
-    max-width: 500px;
+    border-radius: 24px;
+    width: 95%;
+    max-width: 600px;
+    max-height: 90vh;
     box-shadow: 0 8px 32px var(--shadow-glass);
     border: 1px solid var(--border-glass);
     animation: modalSlideIn 0.3s ease;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .admin-modal-header {
-    padding: 20px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--border-glass);
     display: flex;
     justify-content: space-between;
     align-items: center;
     background: var(--bg-glass-light);
+    flex-shrink: 0;
 }
 
 .admin-modal-header h2 {
     margin: 0;
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -1077,29 +1617,47 @@ main {
 }
 
 .admin-modal-body {
-    padding: 25px;
-    max-height: 70vh;
+    padding: 20px;
     overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.admin-modal-body::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 /* Вкладки админки */
 .admin-tabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
     border-bottom: 1px solid var(--border-glass);
     background: var(--bg-glass-light);
+    flex-shrink: 0;
+    gap: 2px;
+    padding: 4px;
 }
 
 .admin-tab {
-    flex: 1;
-    padding: 14px 20px;
+    padding: 10px 8px;
     background: transparent;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-radius: 12px;
     color: var(--text-hint);
-    font-size: 15px;
+    font-size: 11px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+    min-height: 56px;
 }
 
 .admin-tab:hover {
@@ -1109,12 +1667,13 @@ main {
 
 .admin-tab.active {
     color: var(--tg-theme-link-color, #5ac8fa);
-    border-bottom-color: var(--tg-theme-link-color, #5ac8fa);
-    background: rgba(90, 200, 250, 0.1);
+    background: rgba(90, 200, 250, 0.15);
+    box-shadow: 0 2px 8px rgba(90, 200, 250, 0.2);
 }
 
 .admin-tab-content {
     display: none;
+    animation: fadeIn 0.2s ease;
 }
 
 .admin-tab-content.active {
@@ -1124,24 +1683,38 @@ main {
 /* Статистика */
 .stats-content {
     padding: 0;
+    max-height: calc(90vh - 200px);
+    overflow-y: auto;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.stats-content::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 .stats-section {
-    margin-bottom: 24px;
+    margin-bottom: 20px;
+}
+
+.stats-section h3 {
+    font-size: 16px !important;
+    margin-bottom: 12px !important;
 }
 
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 
 .stat-card {
     background: var(--bg-glass, rgba(28, 28, 30, 0.8));
     backdrop-filter: blur(20px);
     border-radius: 12px;
-    padding: 16px;
+    padding: 12px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     text-align: center;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -1153,15 +1726,15 @@ main {
 }
 
 .stat-value {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--tg-theme-link-color, #5ac8fa);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     line-height: 1.2;
 }
 
 .stat-label {
-    font-size: 13px;
+    font-size: 11px;
     color: var(--tg-theme-hint-color);
     line-height: 1.3;
 }
@@ -1195,27 +1768,68 @@ main {
 /* Список проданных товаров */
 .sold-products-list {
     padding: 0;
+    max-height: calc(90vh - 200px);
+    overflow-y: auto;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.sold-products-list::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 .sold-product-item {
     background: var(--bg-glass, rgba(28, 28, 30, 0.8));
     backdrop-filter: blur(20px);
     border-radius: 12px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     margin-bottom: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: background 0.2s ease;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px var(--shadow-light);
 }
 
 .sold-product-item:hover {
     background: rgba(28, 28, 30, 0.9);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--shadow-medium);
+}
+
+.orders-list {
+    padding: 0;
+    max-height: calc(90vh - 200px);
+    overflow-y: auto;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.orders-list::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.order-item {
+    background: var(--bg-glass, rgba(28, 28, 30, 0.8)) !important;
+    backdrop-filter: blur(20px) !important;
+    border-radius: 12px !important;
+    padding: 12px 14px !important;
+    margin-bottom: 8px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 2px 8px var(--shadow-light) !important;
+    transition: all 0.2s ease !important;
+}
+
+.order-item:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px var(--shadow-medium) !important;
 }
 
 .admin-setting {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 0;
+    padding: 16px 0;
     border-bottom: 1px solid var(--border-glass);
 }
 
@@ -1230,14 +1844,14 @@ main {
 
 .admin-setting-label label {
     display: block;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .admin-setting-description {
-    font-size: 14px;
+    font-size: 12px;
     color: var(--text-hint);
     margin: 0;
     line-height: 1.4;
@@ -1303,16 +1917,19 @@ main {
 }
 
 .admin-info {
-    margin-top: 20px;
-    padding: 15px;
+    margin-top: 16px;
+    padding: 12px 14px;
     background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
     border-radius: 12px;
     border: 1px solid var(--border-glass);
+    box-shadow: 0 2px 8px var(--shadow-light);
 }
 
 .admin-info p {
     margin: 0;
-    font-size: 14px;
+    font-size: 12px;
     color: var(--text-hint);
     line-height: 1.5;
 }

@@ -18,6 +18,102 @@
             <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
         </header>
         <main>
+            <!-- Фильтры -->
+            <div class="filters-container">
+                <!-- Фильтр категорий -->
+                <div class="filter-wrapper">
+                    <button class="filter-button" id="category-filter-button">
+                        <span class="filter-icon">📂</span>
+                        <span class="filter-label">Категории</span>
+                        <span class="filter-count" id="category-filter-count" style="display: none;">0</span>
+                        <span class="filter-arrow">▼</span>
+                    </button>
+                    <div class="filter-dropdown" id="category-filter-dropdown" style="display: none;">
+                        <div class="filter-dropdown-content">
+                            <div class="filter-option">
+                                <label class="filter-checkbox-label">
+                                    <input type="checkbox" class="filter-checkbox" data-category-id="all" checked>
+                                    <span class="filter-checkbox-text">Все категории</span>
+                                </label>
+                            </div>
+                            <div id="category-filter-options">
+                                <!-- Категории будут добавлены динамически -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Фильтр товаров -->
+                <div class="filter-wrapper">
+                    <button class="filter-button" id="product-filter-button">
+                        <span class="filter-icon">🔍</span>
+                        <span class="filter-label">Фильтр</span>
+                        <span class="filter-arrow">▼</span>
+                    </button>
+                    <div class="filter-dropdown" id="product-filter-dropdown" style="display: none;">
+                        <div class="filter-dropdown-content">
+                            <div class="filter-section">
+                                <div class="filter-section-title">Цена</div>
+                                <div class="filter-option">
+                                    <label class="filter-radio-label">
+                                        <input type="radio" name="price-filter" class="filter-radio" value="all" checked>
+                                        <span class="filter-radio-text">Все цены</span>
+                                    </label>
+                                </div>
+                                <div class="filter-option">
+                                    <label class="filter-radio-label">
+                                        <input type="radio" name="price-filter" class="filter-radio" value="low">
+                                        <span class="filter-radio-text">До 1000 ₽</span>
+                                    </label>
+                                </div>
+                                <div class="filter-option">
+                                    <label class="filter-radio-label">
+                                        <input type="radio" name="price-filter" class="filter-radio" value="medium">
+                                        <span class="filter-radio-text">1000 - 5000 ₽</span>
+                                    </label>
+                                </div>
+                                <div class="filter-option">
+                                    <label class="filter-radio-label">
+                                        <input type="radio" name="price-filter" class="filter-radio" value="high">
+                                        <span class="filter-radio-text">От 5000 ₽</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="filter-section">
+                                <div class="filter-section-title">Наличие</div>
+                                <div class="filter-option">
+                                    <label class="filter-checkbox-label">
+                                        <input type="checkbox" class="filter-checkbox" data-filter="in-stock">
+                                        <span class="filter-checkbox-text">В наличии</span>
+                                    </label>
+                                </div>
+                                <div class="filter-option">
+                                    <label class="filter-checkbox-label">
+                                        <input type="checkbox" class="filter-checkbox" data-filter="hot-offer">
+                                        <span class="filter-checkbox-text">🔥 Горящие предложения</span>
+                                    </label>
+                                </div>
+                                <div class="filter-option">
+                                    <label class="filter-checkbox-label">
+                                        <input type="checkbox" class="filter-checkbox" data-filter="with-discount">
+                                        <span class="filter-checkbox-text">Со скидкой</span>
+                                    </label>
+                                </div>
+                                <div class="filter-option">
+                                    <label class="filter-checkbox-label">
+                                        <input type="checkbox" class="filter-checkbox" data-filter="made-to-order">
+                                        <span class="filter-checkbox-text">Под заказ</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="filter-actions">
+                                <button class="filter-reset-btn" id="product-filter-reset">Сбросить</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <div id="categories-nav" class="scroll-x">
                 <!-- Категории будут здесь -->
             </div>

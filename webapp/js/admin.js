@@ -73,10 +73,22 @@ function createAdminModal() {
                 <span class="admin-close">&times;</span>
             </div>
             <div class="admin-tabs">
-                <button class="admin-tab active" data-tab="settings">⚙️ Настройки</button>
-                <button class="admin-tab" data-tab="orders">🛒 Заказы</button>
-                <button class="admin-tab" data-tab="sold">✅ Проданные</button>
-                <button class="admin-tab" data-tab="stats">📊 Статистика</button>
+                <button class="admin-tab active" data-tab="settings">
+                    <span style="font-size: 18px;">⚙️</span>
+                    <span>Настройки</span>
+                </button>
+                <button class="admin-tab" data-tab="orders">
+                    <span style="font-size: 18px;">🛒</span>
+                    <span>Заказы</span>
+                </button>
+                <button class="admin-tab" data-tab="sold">
+                    <span style="font-size: 18px;">✅</span>
+                    <span>Проданные</span>
+                </button>
+                <button class="admin-tab" data-tab="stats">
+                    <span style="font-size: 18px;">📊</span>
+                    <span>Статистика</span>
+                </button>
             </div>
             <div class="admin-modal-body">
                 <div id="admin-tab-settings" class="admin-tab-content active">
