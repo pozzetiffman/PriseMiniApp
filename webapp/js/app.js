@@ -10,14 +10,18 @@ let currentCategoryId = null;
 
 // Состояние фильтров
 let selectedCategoryIds = new Set(); // Множественный выбор категорий
-let allCategories = []; // Все категории для фильтра
+let allCategories = []; // Все категории для фильтра (плоский список)
+let categoriesHierarchy = []; // Структура категорий с подкатегориями (для отображения)
 let allProducts = []; // Все товары для фильтрации на клиенте
+let selectedMainCategoryId = null; // ID выбранной основной категории
 let productFilters = {
     price: 'all', // 'all', 'low', 'medium', 'high'
     inStock: false,
     hotOffer: false,
     withDiscount: false,
-    madeToOrder: false
+    madeToOrder: false,
+    newItems: false, // Новинки
+    sortBy: 'none' // 'none', 'price-asc', 'price-desc'
 };
 
 // Экспортируем функцию для получения appContext (для использования в других модулях)
@@ -65,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 1. Инициализируем Telegram WebApp
     // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
     try {
-        initTelegram();
+        await initTelegram();
     } catch (e) {
         productsGrid.innerHTML = `<p class="loading">${e.message}</p>`;
         return;
@@ -266,8 +270,16 @@ window.loadData = async function loadData() {
         console.log('📂 Final botId:', botId, 'type:', typeof botId);
         const categoriesUrl = `${API_BASE}/api/categories/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}`;
         console.log('📂 Categories URL:', categoriesUrl);
-        const categories = await fetchCategories(appContext.shop_owner_id, botId);
+        // Загружаем категории с иерархией (flat=false для отображения)
+        const categories = await fetchCategories(appContext.shop_owner_id, botId, false);
         console.log('✅ Step 1 complete: Categories loaded:', categories.length);
+        console.log('📂 Categories structure:', JSON.stringify(categories, null, 2));
+        if (categories && categories.length > 0) {
+            console.log('📂 First category:', categories[0]);
+            if (categories[0].subcategories) {
+                console.log('📂 First category subcategories:', categories[0].subcategories);
+            }
+        }
         renderCategories(categories);
         
         // Загружаем товары для магазина (shop_owner_id)
@@ -309,41 +321,480 @@ window.loadData = async function loadData() {
     }
 }
 
-// Рендеринг категорий
+// Рендеринг категорий - два выпадающих списка
 function renderCategories(categories) {
-    // Сохраняем категории для фильтра
-    allCategories = Array.isArray(categories) ? categories : [];
+    console.log('🔄 renderCategories called with:', categories);
+    
+    // Сохраняем структуру категорий
+    categoriesHierarchy = Array.isArray(categories) ? categories : [];
+    
+    // Преобразуем иерархию в плоский список для фильтрации
+    const flatCategories = [];
+    if (Array.isArray(categories)) {
+        categories.forEach(mainCat => {
+            flatCategories.push(mainCat);
+            if (mainCat.subcategories && Array.isArray(mainCat.subcategories)) {
+                mainCat.subcategories.forEach(subCat => {
+                    flatCategories.push(subCat);
+                });
+            }
+        });
+    }
+    allCategories = flatCategories;
     
     // Обновляем фильтр категорий
     updateCategoryFilter();
     
+    // Очищаем контейнер категорий
+    if (!categoriesNav) {
+        console.error('❌ categoriesNav element not found!');
+        return;
+    }
+    
+    // Принудительно показываем контейнер категорий
+    categoriesNav.style.display = 'block';
+    categoriesNav.style.overflow = 'visible';
     categoriesNav.innerHTML = '';
     
-    const allBadge = document.createElement('div');
-    allBadge.className = 'category-badge ' + (currentCategoryId === null ? 'active' : '');
-    allBadge.innerText = 'Все';
-    allBadge.onclick = () => { 
-        currentCategoryId = null; 
+    console.log('🔄 [RENDER] Creating dropdowns container...');
+    console.log('🔄 [RENDER] categoriesNav display after fix:', window.getComputedStyle(categoriesNav).display);
+    
+    // Контейнер для выпадающих списков (горизонтальное расположение с фильтром справа)
+    const dropdownsContainer = document.createElement('div');
+    dropdownsContainer.className = 'category-dropdowns-container';
+    dropdownsContainer.style.cssText = 'display: flex !important; flex-direction: row; gap: 8px; width: 100%; align-items: flex-start; justify-content: space-between;';
+    console.log('🔄 [RENDER] Dropdowns container created (horizontal layout with space-between)');
+    
+    // Контейнер для левой части (категории)
+    const leftContainer = document.createElement('div');
+    leftContainer.className = 'category-dropdowns-left';
+    leftContainer.style.cssText = 'display: flex !important; flex-direction: row; gap: 8px; align-items: flex-start; flex: 1;';
+    
+    // Первый выпадающий список - основные категории
+    const mainCategoriesDropdown = document.createElement('div');
+    mainCategoriesDropdown.className = 'category-dropdown';
+    console.log('🔄 Creating main categories dropdown, selectedMainCategoryId:', selectedMainCategoryId);
+    
+    const mainCategoriesButton = document.createElement('button');
+    mainCategoriesButton.className = 'category-dropdown-button';
+    mainCategoriesButton.type = 'button'; // Предотвращаем submit формы, если есть
+    const selectedMainCategory = categoriesHierarchy.find(cat => cat.id === selectedMainCategoryId);
+    const buttonText = selectedMainCategory ? selectedMainCategory.name : 'Категории';
+    mainCategoriesButton.innerHTML = `
+        <span>${buttonText}</span>
+        <span style="margin-left: auto;">▼</span>
+    `;
+    console.log('🔄 Main categories button created with text:', buttonText);
+    
+    const mainCategoriesList = document.createElement('div');
+    mainCategoriesList.className = 'category-dropdown-list';
+    mainCategoriesList.style.display = 'none';
+    // Убеждаемся, что список не скрыт через CSS
+    mainCategoriesList.setAttribute('data-visible', 'false');
+    
+    // Опция "Все"
+    const allOption = document.createElement('div');
+    allOption.className = 'category-dropdown-item' + (selectedMainCategoryId === null ? ' active' : '');
+    allOption.innerText = 'Все категории';
+    allOption.onclick = () => {
+        selectedMainCategoryId = null;
         selectedCategoryIds.clear();
-        updateCategoryFilter();
-        applyFilters(); 
+        currentCategoryId = null;
+        mainCategoriesList.style.display = 'none';
+        renderCategories(categoriesHierarchy);
+        applyFilters();
     };
-    categoriesNav.appendChild(allBadge);
-
+    mainCategoriesList.appendChild(allOption);
+    
+    // Основные категории
     if (Array.isArray(categories)) {
-        categories.forEach(cat => {
-            const badge = document.createElement('div');
-            badge.className = 'category-badge ' + (currentCategoryId === cat.id ? 'active' : '');
-            badge.innerText = cat.name;
-            badge.onclick = () => { 
-                currentCategoryId = cat.id; 
-                selectedCategoryIds.clear();
-                selectedCategoryIds.add(cat.id);
-                updateCategoryFilter();
-                applyFilters(); 
+        categories.forEach(mainCat => {
+            const option = document.createElement('div');
+            option.className = 'category-dropdown-item' + (selectedMainCategoryId === mainCat.id ? ' active' : '');
+            option.innerText = mainCat.name;
+            option.onclick = () => {
+                selectedMainCategoryId = mainCat.id;
+                // Если у категории есть подкатегории, выбираем все подкатегории
+                if (mainCat.subcategories && mainCat.subcategories.length > 0) {
+                    selectedCategoryIds.clear();
+                    mainCat.subcategories.forEach(subCat => {
+                        selectedCategoryIds.add(subCat.id);
+                    });
+                } else {
+                    // Если нет подкатегорий, выбираем саму категорию
+                    selectedCategoryIds.clear();
+                    selectedCategoryIds.add(mainCat.id);
+                }
+                currentCategoryId = null;
+                mainCategoriesList.style.display = 'none';
+                renderCategories(categoriesHierarchy);
+                applyFilters();
             };
-            categoriesNav.appendChild(badge);
+            mainCategoriesList.appendChild(option);
         });
+    }
+    
+    mainCategoriesButton.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const isVisible = mainCategoriesList.style.display === 'block' || mainCategoriesList.style.display === '';
+        const newDisplay = isVisible ? 'none' : 'block';
+        
+        // Закрываем все другие выпадающие списки
+        if (newDisplay === 'block') {
+            const allOtherLists = document.querySelectorAll('.category-dropdown-list');
+            allOtherLists.forEach(list => {
+                if (list !== mainCategoriesList) {
+                    list.style.display = 'none';
+                }
+            });
+            const allFilterDropdowns = document.querySelectorAll('.category-filter-dropdown');
+            allFilterDropdowns.forEach(dropdown => {
+                dropdown.style.display = 'none';
+            });
+            const allFilterButtons = document.querySelectorAll('.category-filter-button');
+            allFilterButtons.forEach(btn => {
+                btn.classList.remove('active');
+            });
+        }
+        
+        mainCategoriesList.style.display = newDisplay;
+        console.log('🔄 Main categories dropdown toggled, display:', newDisplay, 'was visible:', isVisible);
+    };
+    
+    mainCategoriesDropdown.appendChild(mainCategoriesButton);
+    mainCategoriesDropdown.appendChild(mainCategoriesList);
+    leftContainer.appendChild(mainCategoriesDropdown);
+    
+    // Второй выпадающий список - подкатегории (показывается только если выбрана основная категория с подкатегориями)
+    if (selectedMainCategory && selectedMainCategory.subcategories && selectedMainCategory.subcategories.length > 0) {
+        const subCategoriesDropdown = document.createElement('div');
+        subCategoriesDropdown.className = 'category-dropdown';
+        
+        const subCategoriesButton = document.createElement('button');
+        subCategoriesButton.className = 'category-dropdown-button';
+        const selectedSubCount = Array.from(selectedCategoryIds).filter(id => 
+            selectedMainCategory.subcategories.some(sub => sub.id === id)
+        ).length;
+        subCategoriesButton.innerHTML = `
+            <span>Подкатегории</span>
+            <span style="margin-left: auto;">▼</span>
+        `;
+        
+        const subCategoriesList = document.createElement('div');
+        subCategoriesList.className = 'category-dropdown-list';
+        subCategoriesList.style.display = 'none';
+        
+        // Опция "Все подкатегории"
+        const allSubOption = document.createElement('div');
+        allSubOption.className = 'category-dropdown-item';
+        allSubOption.innerText = 'Все подкатегории';
+        allSubOption.onclick = () => {
+            selectedCategoryIds.clear();
+            selectedMainCategory.subcategories.forEach(subCat => {
+                selectedCategoryIds.add(subCat.id);
+            });
+            subCategoriesList.style.display = 'none';
+            renderCategories(categoriesHierarchy);
+            applyFilters();
+        };
+        subCategoriesList.appendChild(allSubOption);
+        
+        // Подкатегории
+        selectedMainCategory.subcategories.forEach(subCat => {
+            const option = document.createElement('div');
+            const isSelected = selectedCategoryIds.has(subCat.id);
+            option.className = 'category-dropdown-item' + (isSelected ? ' active' : '');
+            option.innerHTML = `
+                <span>${subCat.name}</span>
+                <input type="checkbox" ${isSelected ? 'checked' : ''} style="margin-left: auto;">
+            `;
+            option.onclick = () => {
+                if (isSelected) {
+                    selectedCategoryIds.delete(subCat.id);
+                } else {
+                    selectedCategoryIds.add(subCat.id);
+                }
+                renderCategories(categoriesHierarchy);
+                applyFilters();
+            };
+            subCategoriesList.appendChild(option);
+        });
+        
+        subCategoriesButton.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const isVisible = subCategoriesList.style.display === 'block' || subCategoriesList.style.display === '';
+            const newDisplay = isVisible ? 'none' : 'block';
+            
+            // Закрываем все другие выпадающие списки
+            if (newDisplay === 'block') {
+                const allOtherLists = document.querySelectorAll('.category-dropdown-list');
+                allOtherLists.forEach(list => {
+                    if (list !== subCategoriesList) {
+                        list.style.display = 'none';
+                    }
+                });
+                const allFilterDropdowns = document.querySelectorAll('.category-filter-dropdown');
+                allFilterDropdowns.forEach(dropdown => {
+                    dropdown.style.display = 'none';
+                });
+                const allFilterButtons = document.querySelectorAll('.category-filter-button');
+                allFilterButtons.forEach(btn => {
+                    btn.classList.remove('active');
+                });
+            }
+            
+            subCategoriesList.style.display = newDisplay;
+            console.log('🔄 Subcategories dropdown toggled, display:', newDisplay, 'was visible:', isVisible);
+        };
+        
+        subCategoriesDropdown.appendChild(subCategoriesButton);
+        subCategoriesDropdown.appendChild(subCategoriesList);
+        leftContainer.appendChild(subCategoriesDropdown);
+    }
+    
+    // Добавляем левый контейнер в основной контейнер
+    dropdownsContainer.appendChild(leftContainer);
+    
+    // Добавляем кнопку фильтра со стрелками - ВСЕГДА показывается (независимо от подкатегорий)
+    const filterButton = document.createElement('button');
+    filterButton.className = 'category-filter-button';
+    filterButton.type = 'button';
+    filterButton.innerHTML = `↑↓`;
+    filterButton.title = 'Фильтр';
+    
+    // Создаем выпадающий список фильтра
+    const filterDropdown = document.createElement('div');
+    filterDropdown.className = 'category-filter-dropdown';
+    filterDropdown.style.display = 'none';
+    filterDropdown.innerHTML = `
+        <div class="filter-dropdown-content">
+            <div class="filter-section">
+                <div class="filter-section-title">Цена</div>
+                <div class="filter-option">
+                    <label class="filter-radio-label">
+                        <input type="radio" name="price-filter" class="filter-radio" value="all" checked>
+                        <span class="filter-radio-text">Все цены</span>
+                    </label>
+                </div>
+                <div class="filter-option">
+                    <label class="filter-radio-label">
+                        <input type="radio" name="price-filter" class="filter-radio" value="low">
+                        <span class="filter-radio-text">До 1000 ₽</span>
+                    </label>
+                </div>
+                <div class="filter-option">
+                    <label class="filter-radio-label">
+                        <input type="radio" name="price-filter" class="filter-radio" value="medium">
+                        <span class="filter-radio-text">1000 - 5000 ₽</span>
+                    </label>
+                </div>
+                <div class="filter-option">
+                    <label class="filter-radio-label">
+                        <input type="radio" name="price-filter" class="filter-radio" value="high">
+                        <span class="filter-radio-text">От 5000 ₽</span>
+                    </label>
+                </div>
+            </div>
+            <div class="filter-section">
+                <div class="filter-section-title">Статусы</div>
+                <div class="filter-option" data-filter-option="in-stock">
+                    <label class="filter-checkbox-label">
+                        <input type="checkbox" class="filter-checkbox" data-filter="in-stock">
+                        <span class="filter-checkbox-text">В наличии</span>
+                    </label>
+                </div>
+                <div class="filter-option" data-filter-option="hot-offer">
+                    <label class="filter-checkbox-label">
+                        <input type="checkbox" class="filter-checkbox" data-filter="hot-offer">
+                        <span class="filter-checkbox-text">🔥 Горящие предложения</span>
+                    </label>
+                </div>
+                <div class="filter-option" data-filter-option="with-discount">
+                    <label class="filter-checkbox-label">
+                        <input type="checkbox" class="filter-checkbox" data-filter="with-discount">
+                        <span class="filter-checkbox-text">Со скидкой</span>
+                    </label>
+                </div>
+                <div class="filter-option" data-filter-option="made-to-order">
+                    <label class="filter-checkbox-label">
+                        <input type="checkbox" class="filter-checkbox" data-filter="made-to-order">
+                        <span class="filter-checkbox-text">Под заказ</span>
+                    </label>
+                </div>
+                <div class="filter-option" data-filter-option="new-items">
+                    <label class="filter-checkbox-label">
+                        <input type="checkbox" class="filter-checkbox" data-filter="new-items">
+                        <span class="filter-checkbox-text">✨ Новинки</span>
+                    </label>
+                </div>
+            </div>
+            <div class="filter-section">
+                <div class="filter-section-title">Сортировка</div>
+                <div class="filter-option">
+                    <label class="filter-radio-label">
+                        <input type="radio" name="sort-filter" class="filter-radio" value="none" checked>
+                        <span class="filter-radio-text">Без сортировки</span>
+                    </label>
+                </div>
+                <div class="filter-option">
+                    <label class="filter-radio-label">
+                        <input type="radio" name="sort-filter" class="filter-radio" value="price-asc">
+                        <span class="filter-radio-text">По возрастанию цены</span>
+                    </label>
+                </div>
+                <div class="filter-option">
+                    <label class="filter-radio-label">
+                        <input type="radio" name="sort-filter" class="filter-radio" value="price-desc">
+                        <span class="filter-radio-text">По убыванию цены</span>
+                    </label>
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button class="filter-reset-btn category-filter-reset">Сбросить</button>
+            </div>
+        </div>
+    `;
+    
+    // Обработчик открытия/закрытия фильтра с автоматическим закрытием других выпадающих списков
+    filterButton.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const isOpen = filterDropdown.style.display === 'block';
+        
+        // Закрываем все другие выпадающие списки
+        const allDropdownLists = document.querySelectorAll('.category-dropdown-list');
+        allDropdownLists.forEach(list => {
+            list.style.display = 'none';
+        });
+        const allDropdownButtons = document.querySelectorAll('.category-dropdown-button');
+        allDropdownButtons.forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Обновляем опции фильтра при открытии
+        if (!isOpen && allProducts.length > 0) {
+            updateProductFilterOptions();
+        }
+        
+        if (!isOpen) {
+            // Открываем фильтр и рассчитываем позицию для fixed позиционирования
+            filterDropdown.style.display = 'block';
+            
+            // Получаем позицию кнопки фильтра относительно viewport
+            const buttonRect = filterButton.getBoundingClientRect();
+            const dropdownHeight = 400; // max-height фильтра
+            const viewportHeight = window.innerHeight;
+            
+            // Рассчитываем позицию: справа от кнопки, снизу от кнопки
+            let top = buttonRect.bottom + 4; // margin-top: 4px
+            let right = window.innerWidth - buttonRect.right;
+            
+            // Если фильтр не помещается снизу, показываем сверху
+            if (top + dropdownHeight > viewportHeight && buttonRect.top > dropdownHeight) {
+                top = buttonRect.top - dropdownHeight - 4;
+            }
+            
+            // Устанавливаем позицию
+            filterDropdown.style.top = `${top}px`;
+            filterDropdown.style.right = `${right}px`;
+            filterDropdown.style.left = 'auto';
+            filterDropdown.style.bottom = 'auto';
+        } else {
+            filterDropdown.style.display = 'none';
+        }
+        
+        filterButton.classList.toggle('active', !isOpen);
+    };
+    
+    // Обработчики для фильтра
+    const filterContainer = document.createElement('div');
+    filterContainer.className = 'category-filter-container';
+    filterContainer.style.position = 'relative';
+    filterContainer.style.flexShrink = '0'; // Зафиксированная ширина, не сжимается
+    filterContainer.appendChild(filterButton);
+    filterContainer.appendChild(filterDropdown);
+    
+    // Функция для обновления позиции фильтра при скролле или изменении размера
+    const updateFilterPosition = () => {
+        if (filterDropdown.style.display === 'block') {
+            const buttonRect = filterButton.getBoundingClientRect();
+            const dropdownHeight = 400;
+            const viewportHeight = window.innerHeight;
+            
+            let top = buttonRect.bottom + 4;
+            let right = window.innerWidth - buttonRect.right;
+            
+            if (top + dropdownHeight > viewportHeight && buttonRect.top > dropdownHeight) {
+                top = buttonRect.top - dropdownHeight - 4;
+            }
+            
+            filterDropdown.style.top = `${top}px`;
+            filterDropdown.style.right = `${right}px`;
+        }
+    };
+    
+    // Добавляем обработчики для обновления позиции
+    window.addEventListener('scroll', updateFilterPosition, true);
+    window.addEventListener('resize', updateFilterPosition);
+    
+    // Инициализируем обработчики фильтра после добавления в DOM
+    setTimeout(() => {
+        initCategoryFilterHandlers(filterDropdown);
+        // Обновляем опции фильтра при открытии, если товары уже загружены
+        if (allProducts.length > 0) {
+            updateProductFilterOptions();
+        }
+    }, 0);
+    
+    // Добавляем фильтр в правую часть контейнера
+    dropdownsContainer.appendChild(filterContainer);
+    
+    categoriesNav.appendChild(dropdownsContainer);
+    console.log('✅ [RENDER] Categories rendered, dropdowns container added to DOM');
+    console.log('✅ [RENDER] categoriesNav.innerHTML length:', categoriesNav.innerHTML.length);
+    console.log('✅ [RENDER] categoriesNav children count:', categoriesNav.children.length);
+    
+    // Проверяем, что элементы действительно в DOM
+    setTimeout(() => {
+        const checkDropdowns = document.querySelectorAll('.category-dropdown');
+        const checkButtons = document.querySelectorAll('.category-dropdown-button');
+        const checkLists = document.querySelectorAll('.category-dropdown-list');
+        console.log('✅ [RENDER CHECK] Found', checkDropdowns.length, 'dropdown elements in DOM');
+        console.log('✅ [RENDER CHECK] Found', checkButtons.length, 'dropdown buttons in DOM');
+        console.log('✅ [RENDER CHECK] Found', checkLists.length, 'dropdown lists in DOM');
+        
+        if (checkButtons.length > 0) {
+            console.log('✅ [RENDER CHECK] First button text:', checkButtons[0].innerText);
+            console.log('✅ [RENDER CHECK] First button onclick:', typeof checkButtons[0].onclick);
+        }
+    }, 100);
+    
+    // Закрываем выпадающие списки при клике вне их (только один раз)
+    if (!window.categoryDropdownClickHandler) {
+        window.categoryDropdownClickHandler = (e) => {
+            const allDropdowns = document.querySelectorAll('.category-dropdown');
+            allDropdowns.forEach(dropdown => {
+                if (!dropdown.contains(e.target)) {
+                    const list = dropdown.querySelector('.category-dropdown-list');
+                    if (list) list.style.display = 'none';
+                }
+            });
+            
+            // Также закрываем фильтр при клике вне его
+            const allFilterContainers = document.querySelectorAll('.category-filter-container');
+            allFilterContainers.forEach(container => {
+                if (!container.contains(e.target)) {
+                    const filterDropdown = container.querySelector('.category-filter-dropdown');
+                    const filterButton = container.querySelector('.category-filter-button');
+                    if (filterDropdown) filterDropdown.style.display = 'none';
+                    if (filterButton) filterButton.classList.remove('active');
+                }
+            });
+        };
+        document.addEventListener('click', window.categoryDropdownClickHandler);
+        console.log('✅ [RENDER] Category dropdown click handler registered');
     }
 }
 
@@ -2215,119 +2666,94 @@ async function deleteProduct(productId) {
 
 // Инициализация фильтров
 function initFilters() {
-    const categoryFilterButton = document.getElementById('category-filter-button');
-    const categoryFilterDropdown = document.getElementById('category-filter-dropdown');
-    const productFilterButton = document.getElementById('product-filter-button');
-    const productFilterDropdown = document.getElementById('product-filter-dropdown');
-    const productFilterReset = document.getElementById('product-filter-reset');
+    // Старые фильтры удалены, функционал перенесен в кнопку со стрелками
+    // Обработчики инициализируются в initCategoryFilterHandlers()
+    // Эта функция оставлена для обратной совместимости
+}
+
+// Инициализация обработчиков фильтра категорий
+function initCategoryFilterHandlers(filterDropdown) {
+    if (!filterDropdown) return;
     
-    // Фильтр категорий - открытие/закрытие
-    if (categoryFilterButton && categoryFilterDropdown) {
-        categoryFilterButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isOpen = categoryFilterDropdown.style.display === 'block';
-            categoryFilterDropdown.style.display = isOpen ? 'none' : 'block';
-            categoryFilterButton.classList.toggle('active', !isOpen);
-            
-            // Закрываем другой фильтр
-            if (!isOpen) {
-                productFilterDropdown.style.display = 'none';
-                productFilterButton.classList.remove('active');
-            }
-        });
-    }
-    
-    // Фильтр товаров - открытие/закрытие
-    if (productFilterButton && productFilterDropdown) {
-        productFilterButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isOpen = productFilterDropdown.style.display === 'block';
-            productFilterDropdown.style.display = isOpen ? 'none' : 'block';
-            productFilterButton.classList.toggle('active', !isOpen);
-            
-            // Закрываем другой фильтр
-            if (!isOpen) {
-                categoryFilterDropdown.style.display = 'none';
-                categoryFilterButton.classList.remove('active');
-            }
-        });
-    }
-    
-    // Закрытие фильтров при клике вне их
-    document.addEventListener('click', (e) => {
-        if (!categoryFilterButton.contains(e.target) && !categoryFilterDropdown.contains(e.target)) {
-            categoryFilterDropdown.style.display = 'none';
-            categoryFilterButton.classList.remove('active');
-        }
-        if (!productFilterButton.contains(e.target) && !productFilterDropdown.contains(e.target)) {
-            productFilterDropdown.style.display = 'none';
-            productFilterButton.classList.remove('active');
-        }
-    });
-    
-    // Обработчики для фильтра категорий
-    const categoryFilterOptions = document.getElementById('category-filter-options');
-    if (categoryFilterOptions) {
-        // Обработчик для "Все категории"
-        const allCategoryCheckbox = document.querySelector('[data-category-id="all"]');
-        if (allCategoryCheckbox) {
-            allCategoryCheckbox.addEventListener('change', (e) => {
-                if (e.target.checked) {
-                    selectedCategoryIds.clear();
-                    // Снимаем все остальные чекбоксы
-                    document.querySelectorAll('[data-category-id]:not([data-category-id="all"])').forEach(cb => {
-                        cb.checked = false;
-                    });
-                    updateCategoryFilter();
-                    applyFilters();
-                }
-            });
-        }
-    }
-    
-    // Обработчики для фильтра товаров
-    // Фильтр по цене (радио-кнопки)
-    document.querySelectorAll('input[name="price-filter"]').forEach(radio => {
+    // Обработчик для фильтра цены (радио-кнопки)
+    const priceRadios = filterDropdown.querySelectorAll('input[name="price-filter"]');
+    priceRadios.forEach(radio => {
         radio.addEventListener('change', (e) => {
             productFilters.price = e.target.value;
             applyFilters();
         });
     });
     
-    // Фильтры по наличию (чекбоксы)
-    // Маппинг между data-filter атрибутами и свойствами productFilters
-    const filterMapping = {
-        'in-stock': 'inStock',
-        'hot-offer': 'hotOffer',
-        'with-discount': 'withDiscount',
-        'made-to-order': 'madeToOrder'
-    };
-    
-    document.querySelectorAll('[data-filter]').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            const filterType = e.target.dataset.filter;
-            const filterKey = filterMapping[filterType] || filterType;
-            productFilters[filterKey] = e.target.checked;
+    // Обработчик для сортировки (радио-кнопки)
+    const sortRadios = filterDropdown.querySelectorAll('input[name="sort-filter"]');
+    sortRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            productFilters.sortBy = e.target.value;
             applyFilters();
         });
     });
     
-    // Кнопка сброса фильтра товаров
-    if (productFilterReset) {
-        productFilterReset.addEventListener('click', () => {
-            // Сбрасываем все фильтры товаров
-            productFilters = {
-                price: 'all',
-                inStock: false,
-                hotOffer: false,
-                withDiscount: false,
-                madeToOrder: false
-            };
+    // Обработчики для чекбоксов фильтров
+    const filterCheckboxes = filterDropdown.querySelectorAll('.filter-checkbox[data-filter]');
+    filterCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const filterType = e.target.dataset.filter;
+            const isChecked = e.target.checked;
+            
+            switch(filterType) {
+                case 'in-stock':
+                    productFilters.inStock = isChecked;
+                    break;
+                case 'hot-offer':
+                    productFilters.hotOffer = isChecked;
+                    break;
+                case 'with-discount':
+                    productFilters.withDiscount = isChecked;
+                    break;
+                case 'made-to-order':
+                    productFilters.madeToOrder = isChecked;
+                    break;
+                case 'new-items':
+                    productFilters.newItems = isChecked;
+                    break;
+            }
+            
+            applyFilters();
+        });
+    });
+    
+    // Обработчик для кнопки сброса
+    const resetButton = filterDropdown.querySelector('.category-filter-reset');
+    if (resetButton) {
+        resetButton.addEventListener('click', () => {
+            // Сбрасываем все фильтры
+            productFilters.price = 'all';
+            productFilters.inStock = false;
+            productFilters.hotOffer = false;
+            productFilters.withDiscount = false;
+            productFilters.madeToOrder = false;
+            productFilters.newItems = false;
+            productFilters.sortBy = 'none';
             
             // Сбрасываем UI
-            document.querySelector('input[name="price-filter"][value="all"]').checked = true;
-            document.querySelectorAll('[data-filter]').forEach(cb => {
-                cb.checked = false;
+            priceRadios.forEach(radio => {
+                if (radio.value === 'all') {
+                    radio.checked = true;
+                } else {
+                    radio.checked = false;
+                }
+            });
+            
+            sortRadios.forEach(radio => {
+                if (radio.value === 'none') {
+                    radio.checked = true;
+                } else {
+                    radio.checked = false;
+                }
+            });
+            
+            filterCheckboxes.forEach(checkbox => {
+                checkbox.checked = false;
             });
             
             applyFilters();
@@ -2405,11 +2831,8 @@ function updateCategoryFilterCount() {
 function updateProductFilterOptions() {
     if (allProducts.length === 0) {
         // Если товаров нет, скрываем все опции фильтра
-        document.querySelectorAll('[data-filter]').forEach(option => {
-            const filterOption = option.closest('.filter-option');
-            if (filterOption) {
-                filterOption.style.display = 'none';
-            }
+        document.querySelectorAll('[data-filter-option]').forEach(option => {
+            option.style.display = 'none';
         });
         return;
     }
@@ -2437,55 +2860,65 @@ function updateProductFilterOptions() {
                String(prod.is_made_to_order).toLowerCase() === 'true';
     });
     
-    // Показываем/скрываем опции фильтра
-    const inStockOption = document.querySelector('[data-filter="in-stock"]');
-    if (inStockOption) {
-        const filterOption = inStockOption.closest('.filter-option');
-        if (filterOption) {
-            filterOption.style.display = hasInStock ? 'block' : 'none';
+    // Проверяем наличие новинок (товары, созданные за последние 30 дней или с большим ID)
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const hasNewItems = allProducts.some(prod => {
+        // Если есть created_at, используем его
+        if (prod.created_at) {
+            const createdDate = new Date(prod.created_at);
+            return createdDate >= thirtyDaysAgo;
         }
-    }
+        // Иначе используем ID как индикатор новизны (больший ID = новее)
+        // Берем последние 20% товаров по ID как новинки
+        if (allProducts.length > 0) {
+            const sortedById = [...allProducts].sort((a, b) => (b.id || 0) - (a.id || 0));
+            const top20Percent = Math.max(1, Math.floor(sortedById.length * 0.2));
+            const newestIds = sortedById.slice(0, top20Percent).map(p => p.id);
+            return newestIds.includes(prod.id);
+        }
+        return false;
+    });
     
-    const hotOfferOption = document.querySelector('[data-filter="hot-offer"]');
-    if (hotOfferOption) {
-        const filterOption = hotOfferOption.closest('.filter-option');
+    // Показываем/скрываем опции фильтра через data-filter-option
+    const updateFilterOption = (filterType, hasItems) => {
+        const filterOption = document.querySelector(`[data-filter-option="${filterType}"]`);
         if (filterOption) {
-            filterOption.style.display = hasHotOffer ? 'block' : 'none';
+            filterOption.style.display = hasItems ? 'block' : 'none';
         }
-    }
+    };
     
-    const withDiscountOption = document.querySelector('[data-filter="with-discount"]');
-    if (withDiscountOption) {
-        const filterOption = withDiscountOption.closest('.filter-option');
-        if (filterOption) {
-            filterOption.style.display = hasDiscount ? 'block' : 'none';
-        }
-    }
-    
-    const madeToOrderOption = document.querySelector('[data-filter="made-to-order"]');
-    if (madeToOrderOption) {
-        const filterOption = madeToOrderOption.closest('.filter-option');
-        if (filterOption) {
-            filterOption.style.display = hasMadeToOrder ? 'block' : 'none';
-        }
-    }
+    updateFilterOption('in-stock', hasInStock);
+    updateFilterOption('hot-offer', hasHotOffer);
+    updateFilterOption('with-discount', hasDiscount);
+    updateFilterOption('made-to-order', hasMadeToOrder);
+    updateFilterOption('new-items', hasNewItems);
     
     // Сбрасываем фильтры, которые больше не доступны
     if (!hasInStock && productFilters.inStock) {
         productFilters.inStock = false;
-        if (inStockOption) inStockOption.checked = false;
+        const checkbox = document.querySelector('[data-filter="in-stock"]');
+        if (checkbox) checkbox.checked = false;
     }
     if (!hasHotOffer && productFilters.hotOffer) {
         productFilters.hotOffer = false;
-        if (hotOfferOption) hotOfferOption.checked = false;
+        const checkbox = document.querySelector('[data-filter="hot-offer"]');
+        if (checkbox) checkbox.checked = false;
     }
     if (!hasDiscount && productFilters.withDiscount) {
         productFilters.withDiscount = false;
-        if (withDiscountOption) withDiscountOption.checked = false;
+        const checkbox = document.querySelector('[data-filter="with-discount"]');
+        if (checkbox) checkbox.checked = false;
     }
     if (!hasMadeToOrder && productFilters.madeToOrder) {
         productFilters.madeToOrder = false;
-        if (madeToOrderOption) madeToOrderOption.checked = false;
+        const checkbox = document.querySelector('[data-filter="made-to-order"]');
+        if (checkbox) checkbox.checked = false;
+    }
+    if (!hasNewItems && productFilters.newItems) {
+        productFilters.newItems = false;
+        const checkbox = document.querySelector('[data-filter="new-items"]');
+        if (checkbox) checkbox.checked = false;
     }
 }
 
@@ -2499,15 +2932,30 @@ function applyFilters() {
     
     let filteredProducts = [...allProducts];
     
-    // Фильтр по категориям (множественный выбор)
-    // Если выбраны категории в фильтре, применяем их
-    // Если выбрана категория через старый интерфейс (currentCategoryId), применяем её
+    // Фильтр по категориям
+    // Если выбраны подкатегории через выпадающие списки, применяем их
     if (selectedCategoryIds.size > 0) {
         filteredProducts = filteredProducts.filter(prod => {
             return selectedCategoryIds.has(prod.category_id);
         });
+    } else if (selectedMainCategoryId !== null) {
+        // Если выбрана основная категория, но не выбраны подкатегории
+        // Показываем товары из всех её подкатегорий (если они есть)
+        const selectedMainCategory = categoriesHierarchy.find(cat => cat.id === selectedMainCategoryId);
+        if (selectedMainCategory && selectedMainCategory.subcategories && selectedMainCategory.subcategories.length > 0) {
+            // Основная категория с подкатегориями - показываем товары из всех подкатегорий
+            const subcategoryIds = new Set(selectedMainCategory.subcategories.map(sub => sub.id));
+            filteredProducts = filteredProducts.filter(prod => {
+                return subcategoryIds.has(prod.category_id);
+            });
+        } else if (selectedMainCategory && (!selectedMainCategory.subcategories || selectedMainCategory.subcategories.length === 0)) {
+            // Основная категория без подкатегорий - показываем товары из самой категории
+            filteredProducts = filteredProducts.filter(prod => {
+                return prod.category_id === selectedMainCategoryId;
+            });
+        }
     } else if (currentCategoryId !== null) {
-        // Если фильтр категорий не используется, но выбрана категория через badges
+        // Старый способ выбора категории (для обратной совместимости)
         filteredProducts = filteredProducts.filter(prod => {
             return prod.category_id === currentCategoryId;
         });
@@ -2561,6 +3009,43 @@ function applyFilters() {
                    prod.is_made_to_order === '1' ||
                    prod.is_made_to_order === 'true' ||
                    String(prod.is_made_to_order).toLowerCase() === 'true';
+        });
+    }
+    
+    // Фильтр "Новинки"
+    if (productFilters.newItems) {
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        filteredProducts = filteredProducts.filter(prod => {
+            // Если есть created_at, используем его
+            if (prod.created_at) {
+                const createdDate = new Date(prod.created_at);
+                return createdDate >= thirtyDaysAgo;
+            }
+            // Иначе используем ID как индикатор новизны
+            // Берем последние 20% товаров по ID как новинки
+            if (allProducts.length > 0) {
+                const sortedById = [...allProducts].sort((a, b) => (b.id || 0) - (a.id || 0));
+                const top20Percent = Math.max(1, Math.floor(sortedById.length * 0.2));
+                const newestIds = sortedById.slice(0, top20Percent).map(p => p.id);
+                return newestIds.includes(prod.id);
+            }
+            return false;
+        });
+    }
+    
+    // Сортировка
+    if (productFilters.sortBy !== 'none') {
+        filteredProducts.sort((a, b) => {
+            const priceA = a.discount > 0 ? Math.round(a.price * (1 - a.discount / 100)) : a.price;
+            const priceB = b.discount > 0 ? Math.round(b.price * (1 - b.discount / 100)) : b.price;
+            
+            if (productFilters.sortBy === 'price-asc') {
+                return priceA - priceB;
+            } else if (productFilters.sortBy === 'price-desc') {
+                return priceB - priceA;
+            }
+            return 0;
         });
     }
     

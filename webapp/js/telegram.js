@@ -1,9 +1,50 @@
 // Модуль инициализации Telegram WebApp
 let tg = null;
 
-export function initTelegram() {
+/**
+ * Ожидание загрузки Telegram WebApp скрипта
+ * @param {number} maxAttempts - максимальное количество попыток
+ * @param {number} delay - задержка между попытками в мс
+ * @returns {Promise<void>}
+ */
+function waitForTelegramWebApp(maxAttempts = 50, delay = 100) {
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
+        
+        const checkTelegram = () => {
+            attempts++;
+            
+            if (window.Telegram && window.Telegram.WebApp) {
+                console.log('✅ Telegram WebApp скрипт загружен');
+                resolve();
+                return;
+            }
+            
+            if (attempts >= maxAttempts) {
+                const errorMsg = '❌ КРИТИЧЕСКАЯ ОШИБКА: Telegram WebApp не найден. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
+                console.error(errorMsg);
+                console.error('⚠️ Попытки:', attempts, 'window.Telegram:', window.Telegram);
+                reject(new Error(errorMsg));
+                return;
+            }
+            
+            setTimeout(checkTelegram, delay);
+        };
+        
+        checkTelegram();
+    });
+}
+
+export async function initTelegram() {
     // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
-    // Если Telegram недоступен - это критическая ошибка
+    // Ждем загрузки Telegram WebApp скрипта
+    try {
+        await waitForTelegramWebApp();
+    } catch (e) {
+        throw e;
+    }
+    
+    // Проверяем наличие Telegram WebApp
     if (!window.Telegram || !window.Telegram.WebApp) {
         const errorMsg = '❌ КРИТИЧЕСКАЯ ОШИБКА: Telegram WebApp не найден. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
         console.error(errorMsg);
@@ -11,7 +52,11 @@ export function initTelegram() {
     }
     
     tg = window.Telegram.WebApp;
-    tg.expand();
+    
+    // Расширяем WebApp на весь экран
+    if (tg && typeof tg.expand === 'function') {
+        tg.expand();
+    }
     
     // Устанавливаем темную тему в стиле Liquid Glass (Telegram iOS)
     if (tg.setHeaderColor) {
