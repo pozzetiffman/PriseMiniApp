@@ -18,102 +18,6 @@
             <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
         </header>
         <main>
-            <!-- Фильтры -->
-            <div class="filters-container">
-                <!-- Фильтр категорий -->
-                <div class="filter-wrapper">
-                    <button class="filter-button" id="category-filter-button">
-                        <span class="filter-icon">📂</span>
-                        <span class="filter-label">Категории</span>
-                        <span class="filter-count" id="category-filter-count" style="display: none;">0</span>
-                        <span class="filter-arrow">▼</span>
-                    </button>
-                    <div class="filter-dropdown" id="category-filter-dropdown" style="display: none;">
-                        <div class="filter-dropdown-content">
-                            <div class="filter-option">
-                                <label class="filter-checkbox-label">
-                                    <input type="checkbox" class="filter-checkbox" data-category-id="all" checked>
-                                    <span class="filter-checkbox-text">Все категории</span>
-                                </label>
-                            </div>
-                            <div id="category-filter-options">
-                                <!-- Категории будут добавлены динамически -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Фильтр товаров -->
-                <div class="filter-wrapper">
-                    <button class="filter-button" id="product-filter-button">
-                        <span class="filter-icon">🔍</span>
-                        <span class="filter-label">Фильтр</span>
-                        <span class="filter-arrow">▼</span>
-                    </button>
-                    <div class="filter-dropdown" id="product-filter-dropdown" style="display: none;">
-                        <div class="filter-dropdown-content">
-                            <div class="filter-section">
-                                <div class="filter-section-title">Цена</div>
-                                <div class="filter-option">
-                                    <label class="filter-radio-label">
-                                        <input type="radio" name="price-filter" class="filter-radio" value="all" checked>
-                                        <span class="filter-radio-text">Все цены</span>
-                                    </label>
-                                </div>
-                                <div class="filter-option">
-                                    <label class="filter-radio-label">
-                                        <input type="radio" name="price-filter" class="filter-radio" value="low">
-                                        <span class="filter-radio-text">До 1000 ₽</span>
-                                    </label>
-                                </div>
-                                <div class="filter-option">
-                                    <label class="filter-radio-label">
-                                        <input type="radio" name="price-filter" class="filter-radio" value="medium">
-                                        <span class="filter-radio-text">1000 - 5000 ₽</span>
-                                    </label>
-                                </div>
-                                <div class="filter-option">
-                                    <label class="filter-radio-label">
-                                        <input type="radio" name="price-filter" class="filter-radio" value="high">
-                                        <span class="filter-radio-text">От 5000 ₽</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="filter-section">
-                                <div class="filter-section-title">Наличие</div>
-                                <div class="filter-option">
-                                    <label class="filter-checkbox-label">
-                                        <input type="checkbox" class="filter-checkbox" data-filter="in-stock">
-                                        <span class="filter-checkbox-text">В наличии</span>
-                                    </label>
-                                </div>
-                                <div class="filter-option">
-                                    <label class="filter-checkbox-label">
-                                        <input type="checkbox" class="filter-checkbox" data-filter="hot-offer">
-                                        <span class="filter-checkbox-text">🔥 Горящие предложения</span>
-                                    </label>
-                                </div>
-                                <div class="filter-option">
-                                    <label class="filter-checkbox-label">
-                                        <input type="checkbox" class="filter-checkbox" data-filter="with-discount">
-                                        <span class="filter-checkbox-text">Со скидкой</span>
-                                    </label>
-                                </div>
-                                <div class="filter-option">
-                                    <label class="filter-checkbox-label">
-                                        <input type="checkbox" class="filter-checkbox" data-filter="made-to-order">
-                                        <span class="filter-checkbox-text">Под заказ</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="filter-actions">
-                                <button class="filter-reset-btn" id="product-filter-reset">Сбросить</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
             <div id="categories-nav" class="scroll-x">
                 <!-- Категории будут здесь -->
             </div>
@@ -168,13 +72,90 @@
     
     <!-- Модальное окно для заказа товара -->
     <div id="order-modal" class="modal">
-        <div class="modal-content reservation-modal-content">
+        <div class="modal-content reservation-modal-content order-form-modal">
             <span class="modal-close order-close">&times;</span>
-            <h2 class="reservation-title">🛒 Заказать товар</h2>
-            <div class="order-form">
-                <label for="order-quantity">Количество:</label>
-                <input type="number" id="order-quantity" min="1" value="1" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                <button id="order-submit" class="reserve-btn" style="width: 100%; margin-top: 12px;">✅ Заказать</button>
+            <h2 class="reservation-title">🛒 Оформление заказа</h2>
+            
+            <!-- Шаг 1: Промокод и количество -->
+            <div id="order-step-1" class="order-step active">
+                <div class="order-product-summary" id="order-product-summary"></div>
+                <div class="order-form-field">
+                    <label for="order-promo-code">Промокод (если есть):</label>
+                    <input type="text" id="order-promo-code" placeholder="Введите промокод" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="order-quantity">Количество:</label>
+                    <input type="number" id="order-quantity" min="1" value="1" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    <div id="order-total" class="order-total"></div>
+                </div>
+                <button id="order-step-1-next" class="reserve-btn" style="width: 100%; margin-top: 12px;">Продолжить →</button>
+            </div>
+            
+            <!-- Шаг 2: Личные данные -->
+            <div id="order-step-2" class="order-step">
+                <div class="order-form-field">
+                    <label for="order-first-name">Имя <span style="color: red;">*</span>:</label>
+                    <input type="text" id="order-first-name" required placeholder="Введите имя" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="order-last-name">Фамилия <span style="color: red;">*</span>:</label>
+                    <input type="text" id="order-last-name" required placeholder="Введите фамилию" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="order-middle-name">Отчество:</label>
+                    <input type="text" id="order-middle-name" placeholder="Введите отчество" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="order-phone">Номер телефона <span style="color: red;">*</span>:</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="order-phone-country-code" style="flex: 0 0 100px; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                            <option value="+7">+7</option>
+                            <option value="+1">+1</option>
+                            <option value="+44">+44</option>
+                            <option value="+49">+49</option>
+                            <option value="+33">+33</option>
+                            <option value="+86">+86</option>
+                            <option value="+81">+81</option>
+                            <option value="+82">+82</option>
+                            <option value="+91">+91</option>
+                            <option value="+61">+61</option>
+                        </select>
+                        <input type="tel" id="order-phone-number" required placeholder="Введите номер телефона" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                </div>
+                <div class="order-form-field">
+                    <label for="order-email">Почта:</label>
+                    <input type="email" id="order-email" placeholder="Введите email" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="order-notes">Примечание:</label>
+                    <textarea id="order-notes" rows="3" placeholder="Дополнительная информация" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical;"></textarea>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 12px;">
+                    <button id="order-step-2-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
+                    <button id="order-step-2-next" class="reserve-btn" style="flex: 1;">Продолжить →</button>
+                </div>
+            </div>
+            
+            <!-- Шаг 3: Способ доставки -->
+            <div id="order-step-3" class="order-step">
+                <div class="order-form-field">
+                    <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ получения:</label>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <label class="delivery-option">
+                            <input type="radio" name="delivery-method" value="delivery" checked>
+                            <span>🚚 Доставка</span>
+                        </label>
+                        <label class="delivery-option">
+                            <input type="radio" name="delivery-method" value="pickup">
+                            <span>🏪 Самовывоз</span>
+                        </label>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 12px;">
+                    <button id="order-step-3-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
+                    <button id="order-step-3-submit" class="reserve-btn" style="flex: 1;">✅ Оформить заказ</button>
+                </div>
             </div>
         </div>
     </div>

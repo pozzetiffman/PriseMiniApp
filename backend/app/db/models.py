@@ -10,8 +10,10 @@ class Category(Base):
     name = Column(String, index=True)
     user_id = Column(BigInteger, index=True)  # ID пользователя Telegram
     bot_id = Column(Integer, ForeignKey("bots.id"), nullable=True, index=True)  # ID бота (для независимых магазинов)
+    parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)  # ID родительской категории (для подкатегорий)
     
     products = relationship("Product", back_populates="category", cascade="all, delete-orphan")
+    parent = relationship("Category", remote_side=[id], backref="subcategories")  # Связь с родительской категорией
 
 class Product(Base):
     __tablename__ = "products"
@@ -112,6 +114,17 @@ class Order(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время создания заказа
     is_completed = Column(Boolean, default=False)  # Выполнен ли заказ
     is_cancelled = Column(Boolean, default=False)  # Отменен ли заказ
+    # Поля формы оформления заказа
+    promo_code = Column(String, nullable=True)  # Промокод
+    first_name = Column(String, nullable=True)  # Имя
+    last_name = Column(String, nullable=True)  # Фамилия
+    middle_name = Column(String, nullable=True)  # Отчество
+    phone_country_code = Column(String, nullable=True)  # Код страны телефона
+    phone_number = Column(String, nullable=True)  # Номер телефона
+    email = Column(String, nullable=True)  # Почта
+    notes = Column(Text, nullable=True)  # Примечание
+    delivery_method = Column(String, nullable=True)  # Способ доставки (delivery/pickup)
+    status = Column(String, default='pending')  # Статус заказа (pending/completed/cancelled)
     
     product = relationship("Product", backref="orders")
 

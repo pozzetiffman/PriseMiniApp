@@ -1,5 +1,5 @@
 // Модуль корзины
-import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI } from './api.js';
+import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, cancelOrderAPI } from './api.js';
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -493,7 +493,7 @@ function switchCartTab(tabName) {
 }
 
 // Загрузка заказов
-async function loadOrders() {
+export async function loadOrders() {
     console.log('🛒 loadOrders: Starting...');
     const ordersItems = document.getElementById('orders-items');
     if (!ordersItems) {
@@ -622,12 +622,18 @@ async function loadOrders() {
                     statusColor = '#FFA500';
                 }
                 
+                // Показываем кнопку отмены только для активных заказов (не завершенных и не отмененных)
+                const cancelButton = (!order.is_completed && !order.is_cancelled) 
+                    ? `<button class="cancel-reservation-btn-small" onclick="window.cancelOrderFromCart(${order.id})" title="Отменить заказ">❌</button>`
+                    : '';
+                
                 orderItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
                         <p class="cart-item-price">${finalPrice} ₽ × ${order.quantity} шт.</p>
                         <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
                     </div>
+                    ${cancelButton}
                 `;
                 
                 orderItem.insertBefore(imageContainer, orderItem.firstChild);

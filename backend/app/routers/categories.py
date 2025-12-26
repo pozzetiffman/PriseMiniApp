@@ -33,10 +33,30 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                 
                 if not existing:
                     # Создаем копию категории для этого бота
+                    # Нужно найти родительскую категорию в целевом боте, если есть parent_id
+                    synced_parent_id = None
+                    if db_category.parent_id is not None:
+                        # Находим родительскую категорию в основном боте
+                        parent_in_main = db.query(models.Category).filter(
+                            models.Category.id == db_category.parent_id,
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == None
+                        ).first()
+                        if parent_in_main:
+                            # Ищем соответствующую категорию в целевом боте
+                            parent_in_target = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == parent_in_main.name
+                            ).first()
+                            if parent_in_target:
+                                synced_parent_id = parent_in_target.id
+                    
                     new_category = models.Category(
                         name=db_category.name,
                         user_id=user_id,
-                        bot_id=bot.id
+                        bot_id=bot.id,
+                        parent_id=synced_parent_id
                     )
                     db.add(new_category)
                     print(f"🔄 Synced category '{db_category.name}' to bot {bot.id} (CREATE)")
@@ -80,10 +100,30 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
             
             if not existing_main:
                 # Создаем копию категории в основном боте
+                # Нужно найти родительскую категорию в основном боте, если есть parent_id
+                synced_parent_id = None
+                if db_category.parent_id is not None:
+                    # Находим родительскую категорию в текущем боте
+                    parent_in_current = db.query(models.Category).filter(
+                        models.Category.id == db_category.parent_id,
+                        models.Category.user_id == user_id,
+                        models.Category.bot_id == db_category.bot_id
+                    ).first()
+                    if parent_in_current:
+                        # Ищем соответствующую категорию в основном боте
+                        parent_in_main = db.query(models.Category).filter(
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == None,
+                            models.Category.name == parent_in_current.name
+                        ).first()
+                        if parent_in_main:
+                            synced_parent_id = parent_in_main.id
+                
                 new_category = models.Category(
                     name=db_category.name,
                     user_id=user_id,
-                    bot_id=None
+                    bot_id=None,
+                    parent_id=synced_parent_id
                 )
                 db.add(new_category)
                 print(f"🔄 Synced category '{db_category.name}' to main bot (CREATE)")
@@ -105,10 +145,30 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                 ).first()
                 
                 if not existing:
+                    # Нужно найти родительскую категорию в целевом боте, если есть parent_id
+                    synced_parent_id = None
+                    if db_category.parent_id is not None:
+                        # Находим родительскую категорию в текущем боте
+                        parent_in_current = db.query(models.Category).filter(
+                            models.Category.id == db_category.parent_id,
+                            models.Category.user_id == user_id,
+                            models.Category.bot_id == db_category.bot_id
+                        ).first()
+                        if parent_in_current:
+                            # Ищем соответствующую категорию в целевом боте
+                            parent_in_target = db.query(models.Category).filter(
+                                models.Category.user_id == user_id,
+                                models.Category.bot_id == bot.id,
+                                models.Category.name == parent_in_current.name
+                            ).first()
+                            if parent_in_target:
+                                synced_parent_id = parent_in_target.id
+                    
                     new_category = models.Category(
                         name=db_category.name,
                         user_id=user_id,
-                        bot_id=bot.id
+                        bot_id=bot.id,
+                        parent_id=synced_parent_id
                     )
                     db.add(new_category)
                     print(f"🔄 Synced category '{db_category.name}' to bot {bot.id} (CREATE)")
@@ -174,9 +234,10 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
 def get_categories(
     user_id: int,
     bot_id: Optional[int] = Query(None, description="ID бота для независимых магазинов"),
+    flat: bool = Query(False, description="Вернуть все категории в плоском виде (включая подкатегории)"),
     db: Session = Depends(database.get_db)
 ):
-    print(f"DEBUG: get_categories called with user_id={user_id}, bot_id={bot_id}, type={type(user_id)}")
+    print(f"📂 [CATEGORIES API] get_categories called: user_id={user_id}, bot_id={bot_id}, flat={flat}")
     query = db.query(models.Category).filter(models.Category.user_id == user_id)
     # Если bot_id указан - фильтруем по bot_id (независимый магазин бота)
     # Если bot_id не указан - фильтруем по bot_id = None (основной бот)
@@ -186,8 +247,36 @@ def get_categories(
         query = query.filter(models.Category.bot_id == None)
     
     categories = query.all()
-    print(f"DEBUG: Found {len(categories)} categories")
-    return categories
+    print(f"📂 [CATEGORIES API] Found {len(categories)} total categories in DB")
+    
+    if flat:
+        # Возвращаем все категории в плоском виде (для выбора при создании товара)
+        print(f"📂 [CATEGORIES API] Returning {len(categories)} categories in flat format")
+        return categories
+    else:
+        # Группируем категории: основные (parent_id=None) и подкатегории
+        main_categories = [cat for cat in categories if cat.parent_id is None]
+        subcategories_dict = {}
+        for cat in categories:
+            if cat.parent_id is not None:
+                if cat.parent_id not in subcategories_dict:
+                    subcategories_dict[cat.parent_id] = []
+                subcategories_dict[cat.parent_id].append(cat)
+        
+        # Добавляем подкатегории к основным категориям
+        for main_cat in main_categories:
+            if main_cat.id in subcategories_dict:
+                main_cat.subcategories = subcategories_dict[main_cat.id]
+                print(f"📂 [CATEGORIES API] Main category '{main_cat.name}' (id={main_cat.id}) has {len(main_cat.subcategories)} subcategories")
+            else:
+                main_cat.subcategories = []
+                print(f"📂 [CATEGORIES API] Main category '{main_cat.name}' (id={main_cat.id}) has no subcategories")
+        
+        # Возвращаем только основные категории (с подкатегориями внутри)
+        print(f"📂 [CATEGORIES API] Returning {len(main_categories)} main categories with hierarchy")
+        for main_cat in main_categories:
+            print(f"   - {main_cat.name} (id={main_cat.id}): {len(main_cat.subcategories)} subcategories")
+        return main_categories
 
 @router.post("/", response_model=schemas.Category)
 async def create_category(
@@ -216,10 +305,23 @@ async def create_category(
             final_bot_id = None  # Основной бот
             print(f"ℹ️ Category creation from bot - using main bot (bot_id=None), will sync to all connected bots")
     
+    # Проверяем, что parent_id существует и принадлежит тому же пользователю, если указан
+    if category.parent_id is not None:
+        parent_category = db.query(models.Category).filter(
+            models.Category.id == category.parent_id,
+            models.Category.user_id == user_id,
+            models.Category.bot_id == final_bot_id
+        ).first()
+        if not parent_category:
+            raise HTTPException(status_code=404, detail="Parent category not found")
+        if parent_category.parent_id is not None:
+            raise HTTPException(status_code=400, detail="Cannot create subcategory of a subcategory (only 2 levels allowed)")
+    
     db_category = models.Category(
         name=category.name, 
         user_id=user_id,
-        bot_id=final_bot_id  # Если bot_id указан - создаем для независимого магазина бота
+        bot_id=final_bot_id,  # Если bot_id указан - создаем для независимого магазина бота
+        parent_id=category.parent_id  # ID родительской категории (None для основных категорий)
     )
     db.add(db_category)
     db.flush()  # Получаем ID категории, но не коммитим

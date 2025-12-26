@@ -112,6 +112,7 @@ async def send_shop_message(bot_or_message, chat_id_or_message, msg: str, reply_
 # Состояния для категорий и товаров
 class AddCategory(StatesGroup):
     name = State()
+    parent_choice = State()  # Выбор родительской категории (для подкатегорий)
 
 class AddProduct(StatesGroup):
     name = State()
@@ -952,19 +953,121 @@ async def process_category_name(message: Message, state: FSMContext):
     
     data = await state.get_data()
     user_id = data.get('user_id', message.from_user.id)
+    category_name = message.text.strip()
+    
+    # Сохраняем название категории
+    await state.update_data(category_name=category_name)
+    
+    # Получаем список основных категорий для выбора родительской
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "false"}) as resp:
+            if resp.status != 200:
+                return await message.answer("❌ Ошибка при получении списка категорий")
+            main_categories = await resp.json()
+    
+    if not main_categories:
+        # Нет категорий - создаем основную категорию
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{API_URL}/categories/",
+                json={"name": category_name, "parent_id": None},
+                params={"user_id": user_id}
+            ) as resp:
+                if resp.status == 200:
+                    await message.answer(f"✅ Категория '{category_name}' создана!")
+                else:
+                    await message.answer(f"❌ Ошибка: {await resp.text()}")
+        await state.clear()
+        await _cmd_manage_impl(message)
+        return
+    
+    # Есть категории - спрашиваем, основная это категория или подкатегория
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📁 Основная категория", callback_data="cat_main")
+    builder.button(text="📂 Подкатегория", callback_data="cat_sub")
+    builder.adjust(1)
+    
+    await state.set_state(AddCategory.parent_choice)
+    await message.answer(
+        f"Категория '{category_name}'\n\n"
+        "Выберите тип категории:",
+        reply_markup=builder.as_markup()
+    )
+
+@dp.callback_query(StateFilter(AddCategory.parent_choice), F.data == "cat_main")
+async def create_main_category(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    user_id = data.get('user_id', callback.from_user.id)
+    category_name = data.get('category_name')
     
     async with aiohttp.ClientSession() as session:
         async with session.post(
             f"{API_URL}/categories/",
-            json={"name": message.text},
+            json={"name": category_name, "parent_id": None},
             params={"user_id": user_id}
         ) as resp:
             if resp.status == 200:
-                await message.answer(f"✅ Категория '{message.text}' создана!")
+                await callback.message.answer(f"✅ Основная категория '{category_name}' создана!")
             else:
-                await message.answer(f"❌ Ошибка: {await resp.text()}")
+                error_text = await resp.text()
+                await callback.message.answer(f"❌ Ошибка: {error_text}")
+    
+    await callback.answer()
     await state.clear()
-    await _cmd_manage_impl(message)
+    await _cmd_manage_impl(callback.message)
+
+@dp.callback_query(StateFilter(AddCategory.parent_choice), F.data == "cat_sub")
+async def choose_parent_category(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    user_id = data.get('user_id', callback.from_user.id)
+    
+    # Получаем список основных категорий
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "false"}) as resp:
+            if resp.status != 200:
+                return await callback.message.answer("❌ Ошибка при получении списка категорий")
+            main_categories = await resp.json()
+    
+    if not main_categories:
+        await callback.answer("❌ Сначала создайте основную категорию!", show_alert=True)
+        await state.clear()
+        await _cmd_manage_impl(callback.message)
+        return
+    
+    # Показываем список основных категорий для выбора родительской
+    builder = InlineKeyboardBuilder()
+    for cat in main_categories:
+        builder.button(text=cat['name'], callback_data=f"parent_{cat['id']}")
+    builder.adjust(1)
+    
+    await callback.message.answer(
+        "Выберите основную категорию, к которой будет относиться подкатегория:",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+@dp.callback_query(StateFilter(AddCategory.parent_choice), F.data.startswith("parent_"))
+async def create_subcategory(callback: types.CallbackQuery, state: FSMContext):
+    parent_id = int(callback.data.split("_")[1])
+    data = await state.get_data()
+    user_id = data.get('user_id', callback.from_user.id)
+    category_name = data.get('category_name')
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{API_URL}/categories/",
+            json={"name": category_name, "parent_id": parent_id},
+            params={"user_id": user_id}
+        ) as resp:
+            if resp.status == 200:
+                await callback.message.answer(f"✅ Подкатегория '{category_name}' создана!")
+            else:
+                error_text = await resp.text()
+                await callback.message.answer(f"❌ Ошибка: {error_text}")
+    
+    await callback.answer()
+    await state.clear()
+    await _cmd_manage_impl(callback.message)
 
 @dp.message(F.text == "📋 Список категорий")
 async def list_categories(message: Message, state: FSMContext):
@@ -973,13 +1076,18 @@ async def list_categories(message: Message, state: FSMContext):
     user_id = message.from_user.id
     
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{API_URL}/categories/", params={"user_id": user_id}) as resp:
+        async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "false"}) as resp:
             if resp.status != 200:
                 return await message.answer("❌ Ошибка при получении списка категорий")
-            categories = await resp.json()
+            main_categories = await resp.json()
     
-    if not categories:
+    if not main_categories:
         return await message.answer("Список категорий пуст. Создайте первую категорию!")
+    
+    # Получаем все категории в плоском виде для подсчета товаров
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "true"}) as resp:
+            all_categories_flat = await resp.json() if resp.status == 200 else []
     
     # Получаем количество товаров в каждой категории для предупреждения
     async with aiohttp.ClientSession() as session:
@@ -995,18 +1103,35 @@ async def list_categories(message: Message, state: FSMContext):
     text = "📁 Ваши категории:\n\n"
     builder = InlineKeyboardBuilder()
     
-    for cat in categories:
-        products_count = products_by_category.get(cat['id'], 0)
-        text += f"• {cat['name']}"
+    for main_cat in main_categories:
+        products_count = products_by_category.get(main_cat['id'], 0)
+        text += f"📁 {main_cat['name']}"
         if products_count > 0:
             text += f" ({products_count} товар{'ов' if products_count > 1 else ''})"
         text += "\n"
         
-        # Кнопка для удаления
+        # Показываем подкатегории
+        if main_cat.get('subcategories'):
+            for subcat in main_cat['subcategories']:
+                sub_products_count = products_by_category.get(subcat['id'], 0)
+                text += f"  └─ 📂 {subcat['name']}"
+                if sub_products_count > 0:
+                    text += f" ({sub_products_count} товар{'ов' if sub_products_count > 1 else ''})"
+                text += "\n"
+        
+        # Кнопка для удаления основной категории
         builder.button(
-            text=f"❌ Удалить: {cat['name']}",
-            callback_data=f"del_category_{cat['id']}"
+            text=f"❌ Удалить: {main_cat['name']}",
+            callback_data=f"del_category_{main_cat['id']}"
         )
+        
+        # Кнопки для удаления подкатегорий
+        if main_cat.get('subcategories'):
+            for subcat in main_cat['subcategories']:
+                builder.button(
+                    text=f"❌ Удалить: {subcat['name']}",
+                    callback_data=f"del_category_{subcat['id']}"
+                )
     
     text += "\n⚠️ **Внимание:** При удалении категории все товары в ней также будут удалены!"
     text += "\n\nДля удаления используйте кнопки ниже:"
@@ -1708,13 +1833,43 @@ async def process_price(message: Message, state: FSMContext):
             await message.answer("Сначала создайте категорию! Используйте /manage")
             return await state.clear()
             
+        # Получаем все категории в плоском виде (включая подкатегории)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "true"}) as resp:
+                if resp.status != 200:
+                    return await message.answer("❌ Ошибка при получении списка категорий")
+                all_categories = await resp.json()
+        
+        if not all_categories:
+            return await message.answer("❌ Нет категорий. Сначала создайте категорию!")
+        
+        # Получаем иерархию для отображения
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "false"}) as resp:
+                if resp.status != 200:
+                    return await message.answer("❌ Ошибка при получении списка категорий")
+                main_categories = await resp.json()
+        
+        # Создаем словарь для быстрого поиска родительских категорий
+        parent_map = {}
+        for main_cat in main_categories:
+            if main_cat.get('subcategories'):
+                for subcat in main_cat['subcategories']:
+                    parent_map[subcat['id']] = main_cat['name']
+        
         builder = InlineKeyboardBuilder()
-        for cat in categories:
-            builder.button(text=cat['name'], callback_data=f"cat_{cat['id']}")
-        builder.adjust(2)
+        for cat in all_categories:
+            # Если это подкатегория, показываем с указанием родительской
+            if cat.get('parent_id'):
+                parent_name = parent_map.get(cat['id'], '')
+                display_name = f"{parent_name} → {cat['name']}"
+            else:
+                display_name = cat['name']
+            builder.button(text=display_name, callback_data=f"cat_{cat['id']}")
+        builder.adjust(1)
         
         await state.set_state(AddProduct.category)
-        await message.answer("Выберите категорию:", reply_markup=builder.as_markup())
+        await message.answer("Выберите категорию или подкатегорию:", reply_markup=builder.as_markup())
     except ValueError:
         await message.answer("Пожалуйста, введите число.")
 

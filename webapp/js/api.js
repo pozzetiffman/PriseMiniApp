@@ -83,12 +83,15 @@ export async function getContext(shopOwnerId = null) {
 }
 
 // Загрузка категорий (не требует авторизации - только просмотр)
-export async function fetchCategories(shopOwnerId, botId = null) {
+export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
     let url = `${API_BASE}/api/categories/?user_id=${shopOwnerId}`;
     if (botId !== null && botId !== undefined) {
         url += `&bot_id=${botId}`;
     }
-    console.log("📂 Fetching categories from:", url, "botId:", botId);
+    if (flat) {
+        url += `&flat=true`;
+    }
+    console.log("📂 Fetching categories from:", url, "botId:", botId, "flat:", flat);
     const response = await fetch(url, {
         headers: getBaseHeadersNoAuth()
     });
@@ -606,14 +609,34 @@ export async function deleteSoldProductsAPI(soldIds, shopOwnerId) {
 }
 
 // Создание заказа (ordered_by_user_id определяется на backend из initData)
-export async function createOrderAPI(productId, quantity) {
-    const url = `${API_BASE}/api/orders/?product_id=${productId}&quantity=${quantity}`;
-    console.log(`Order URL: ${url}`);
+export async function createOrderAPI(orderData) {
+    // Поддерживаем старый формат для обратной совместимости
+    let url, body;
+    if (typeof orderData === 'object' && orderData.product_id) {
+        // Новый формат: объект с данными формы
+        url = `${API_BASE}/api/orders/`;
+        body = JSON.stringify(orderData);
+    } else {
+        // Старый формат: productId, quantity
+        const productId = arguments[0];
+        const quantity = arguments[1] || 1;
+        url = `${API_BASE}/api/orders/?product_id=${productId}&quantity=${quantity}`;
+        body = null;
+    }
     
-    const response = await fetch(url, {
+    console.log(`Order URL: ${url}`);
+    console.log(`Order data:`, orderData);
+    
+    const fetchOptions = {
         method: 'POST',
         headers: getBaseHeaders()
-    });
+    };
+    
+    if (body) {
+        fetchOptions.body = body;
+    }
+    
+    const response = await fetch(url, fetchOptions);
     
     const responseText = await response.text();
     console.log(`Order response: status=${response.status}, body=${responseText}`);
@@ -648,6 +671,25 @@ export async function getShopOrdersAPI() {
     
     const data = await response.json();
     console.log(`✅ Shop orders fetched: ${data.length}`);
+    return data;
+}
+
+// Получить username пользователя по его ID
+export async function getUserUsernameAPI(userId) {
+    const url = `${API_BASE}/api/orders/user/${userId}/username`;
+    console.log(`Fetching username for user: ${userId}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`Failed to get username for user ${userId}: ${response.status} - ${errorText}`);
+        return { username: null, user_id: userId };
+    }
+    
+    const data = await response.json();
     return data;
 }
 

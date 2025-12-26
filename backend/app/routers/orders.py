@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, Body
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
 from typing import List, Optional
@@ -52,8 +52,9 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
 
 @router.post("/", response_model=schemas.Order)
 async def create_order(
-    product_id: int = Query(...),
-    quantity: int = Query(..., ge=1),  # Минимум 1
+    order_data: Optional[schemas.OrderCreate] = Body(None),
+    product_id: Optional[int] = Query(None),
+    quantity: Optional[int] = Query(None, ge=1),
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
@@ -71,6 +72,34 @@ async def create_order(
         raise
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Поддерживаем старый формат (query параметры) и новый формат (body)
+    if order_data and order_data.product_id:
+        # Новый формат: данные из формы
+        product_id = order_data.product_id
+        quantity = order_data.quantity
+        promo_code = order_data.promo_code
+        first_name = order_data.first_name
+        last_name = order_data.last_name
+        middle_name = order_data.middle_name
+        phone_country_code = order_data.phone_country_code
+        phone_number = order_data.phone_number
+        email = order_data.email
+        notes = order_data.notes
+        delivery_method = order_data.delivery_method
+    else:
+        # Старый формат: query параметры
+        if not product_id or not quantity:
+            raise HTTPException(status_code=400, detail="product_id and quantity are required")
+        promo_code = None
+        first_name = None
+        last_name = None
+        middle_name = None
+        phone_country_code = None
+        phone_number = None
+        email = None
+        notes = None
+        delivery_method = None
     
     print(f"DEBUG: create_order called - product_id={product_id}, ordered_by_user_id={ordered_by_user_id}, quantity={quantity}")
     
@@ -103,7 +132,17 @@ async def create_order(
         ordered_by_user_id=ordered_by_user_id,
         quantity=quantity,
         is_completed=False,
-        is_cancelled=False
+        is_cancelled=False,
+        promo_code=promo_code,
+        first_name=first_name,
+        last_name=last_name,
+        middle_name=middle_name,
+        phone_country_code=phone_country_code,
+        phone_number=phone_number,
+        email=email,
+        notes=notes,
+        delivery_method=delivery_method,
+        status='pending'
     )
     
     db.add(order)
@@ -183,6 +222,30 @@ async def create_order(
             message += f"👤 Заказал: {user_link}\n"
             message += f"🔢 Количество: {quantity} шт.\n"
             
+            # Добавляем информацию из формы, если она есть
+            if first_name or last_name:
+                full_name = f"{first_name or ''} {last_name or ''}".strip()
+                if middle_name:
+                    full_name += f" {middle_name}"
+                message += f"👤 Имя: {full_name}\n"
+            
+            if phone_number:
+                phone_display = f"{phone_country_code or ''}{phone_number}".strip()
+                message += f"📱 Телефон: {phone_display}\n"
+            
+            if email:
+                message += f"📧 Email: {email}\n"
+            
+            if delivery_method:
+                delivery_text = "🚚 Доставка" if delivery_method == "delivery" else "🏪 Самовывоз"
+                message += f"📦 Способ получения: {delivery_text}\n"
+            
+            if notes:
+                message += f"📝 Примечание: {notes}\n"
+            
+            if promo_code:
+                message += f"🎟️ Промокод: {promo_code}\n"
+            
             # Создаем кнопку для просмотра заказов
             orders_url = f"{WEBAPP_URL}?user_id={product.user_id}"
             
@@ -233,6 +296,51 @@ async def create_order(
         print(f"WARNING: Cannot send notification - bot_token={bool(bot_token_for_notifications)}, WEBAPP_URL={bool(WEBAPP_URL)}")
     
     return order
+
+@router.get("/user/{user_id}/username")
+async def get_user_username(
+    user_id: int,
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Получить username пользователя по его ID (для создания ссылки на чат)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        current_user_id, _, bot_id = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Получаем токен бота для запроса
+    bot_token_for_request = get_bot_token_for_notifications(current_user_id, db)
+    bot_api_url = f"https://api.telegram.org/bot{bot_token_for_request}"
+    
+    if not bot_token_for_request:
+        return {"username": None, "user_id": user_id}
+    
+    try:
+        # Получаем информацию о пользователе
+        user_info_url = f"{bot_api_url}/getChat"
+        resp = requests.post(user_info_url, json={"chat_id": user_id}, timeout=5)
+        
+        if resp.status_code == 200:
+            user_data = resp.json()
+            if user_data.get("ok"):
+                user = user_data.get("result", {})
+                username = user.get("username")
+                return {"username": username, "user_id": user_id}
+        
+        return {"username": None, "user_id": user_id}
+    except Exception as e:
+        print(f"ERROR: Exception getting user username: {e}")
+        return {"username": None, "user_id": user_id}
 
 @router.get("/shop", response_model=List[schemas.Order])
 async def get_shop_orders(

@@ -319,12 +319,14 @@ header h1 {
 }
 
 .scroll-x {
-    display: none; /* Скрываем горизонтальный список категорий, так как есть фильтр */
-    overflow-x: auto;
-    white-space: nowrap;
+    /* Убираем display: none, так как теперь используем выпадающие списки */
+    overflow-x: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
+    overflow-y: visible !important;
     padding: 8px 10px;
     gap: 8px;
     -webkit-overflow-scrolling: touch;
+    position: relative; /* Для правильного позиционирования выпадающих списков */
+    z-index: 10002; /* Выше чем products-grid */
 }
 
 .scroll-x::-webkit-scrollbar {
@@ -362,6 +364,244 @@ header h1 {
     transform: scale(1.01);
 }
 
+/* Контейнер для выпадающих списков категорий */
+#categories-nav {
+    display: block !important; /* Показываем контейнер категорий */
+    overflow: visible !important; /* Разрешаем выпадающие списки выходить за границы */
+    padding: 8px 16px; /* Отступы для выпадающих списков */
+    position: relative; /* Для правильного позиционирования выпадающих списков */
+    z-index: 10002; /* Выше чем products-grid, чтобы фильтр не перекрывался */
+    isolation: isolate; /* Создаем новый контекст наложения */
+}
+
+.category-dropdowns-container {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 12px;
+    padding: 0 16px; /* Отступы для Telegram WebView */
+    justify-content: space-between;
+    align-items: flex-start;
+    overflow: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
+    position: relative; /* Для правильного позиционирования */
+}
+
+.category-dropdowns-left {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    align-items: flex-start;
+    flex: 1;
+    overflow: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
+    position: relative; /* Для правильного позиционирования */
+}
+
+/* Выпадающий список категорий */
+.category-dropdown {
+    position: relative;
+    flex: 0 0 auto; /* Не растягивается, занимает только необходимое место */
+    min-width: 120px; /* Уменьшенная минимальная ширина */
+    max-width: 160px; /* Уменьшенная максимальная ширина */
+}
+
+.category-dropdown-button {
+    width: 100%;
+    padding: 6px 10px; /* Еще более уменьшенные отступы */
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px; /* Уменьшенный радиус */
+    font-size: 12px; /* Еще более уменьшенный размер шрифта */
+    font-weight: 500;
+    color: var(--tg-theme-text-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    white-space: nowrap; /* Не переносим текст */
+    overflow: hidden;
+    text-overflow: ellipsis; /* Многоточие для длинного текста */
+    min-height: 32px; /* Уменьшенная высота */
+}
+
+.category-dropdown-button:hover {
+    background: rgba(90, 200, 250, 0.1);
+    border-color: rgba(90, 200, 250, 0.3);
+}
+
+.category-dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: rgba(60, 60, 62, 0.75) !important; /* Более прозрачный фон */
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px; /* Уменьшенный радиус */
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 10000; /* Высокий z-index для Telegram WebView */
+    max-height: 250px; /* Уменьшенная высота */
+    overflow-y: auto;
+    animation: slideDown 0.3s ease-out;
+    display: none; /* По умолчанию скрыт */
+    -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
+    min-width: 120px; /* Уменьшенная минимальная ширина */
+}
+
+.category-dropdown-item {
+    padding: 6px 10px; /* Еще более уменьшенные отступы */
+    font-size: 12px; /* Еще более уменьшенный размер шрифта */
+    color: var(--tg-theme-text-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    white-space: nowrap; /* Не переносим текст */
+    overflow: hidden;
+    text-overflow: ellipsis; /* Многоточие для длинного текста */
+}
+
+/* Контейнер для кнопки фильтра */
+.category-filter-container {
+    position: relative;
+    flex: 0 0 auto;
+    flex-shrink: 0; /* Зафиксированная ширина, не сжимается */
+    z-index: 10003; /* Выше чем categories-nav, чтобы фильтр всегда был виден */
+    isolation: isolate; /* Создаем новый контекст наложения */
+}
+
+/* Кнопка фильтра со стрелками */
+.category-filter-button {
+    flex: 0 0 auto;
+    width: 32px; /* Уменьшенный размер */
+    height: 32px;
+    padding: 6px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    color: var(--tg-theme-text-color);
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.category-filter-button:hover {
+    background: rgba(90, 200, 250, 0.1);
+    border-color: rgba(90, 200, 250, 0.3);
+}
+
+.category-filter-button.active {
+    background: rgba(90, 200, 250, 0.15);
+    border-color: rgba(90, 200, 250, 0.4);
+}
+
+.category-filter-button svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Выпадающий список фильтра категорий */
+.category-filter-dropdown {
+    position: fixed !important; /* Используем fixed для избежания обрезания */
+    /* top и right будут установлены через JavaScript */
+    background: rgba(60, 60, 62, 0.75) !important; /* Более прозрачный фон */
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 99999 !important; /* Максимальный z-index */
+    min-width: 200px;
+    max-width: 280px;
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: visible; /* Не обрезаем по горизонтали */
+    animation: slideDown 0.3s ease-out;
+    -webkit-overflow-scrolling: touch;
+    pointer-events: auto; /* Разрешаем клики */
+    will-change: transform; /* Оптимизация для анимации */
+    margin: 0 !important; /* Убираем margin */
+}
+
+.category-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.category-dropdown-item:hover {
+    background: rgba(90, 200, 250, 0.1);
+}
+
+.category-dropdown-item.active {
+    background: rgba(90, 200, 250, 0.2);
+    color: var(--tg-theme-button-color);
+    font-weight: 600;
+}
+
+/* Выпадающий список подкатегорий */
+.subcategories-dropdown {
+    animation: slideDown 0.3s ease-out;
+    margin-top: 6px;
+    margin-left: 12px;
+    padding-left: 12px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    border-left: 2px solid rgba(90, 200, 250, 0.3);
+    background: rgba(90, 200, 250, 0.05);
+    border-radius: 8px;
+    margin-right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Стили для подкатегорий */
+.subcategory-badge {
+    font-size: 11px !important;
+    padding: 4px 12px !important;
+    margin-bottom: 4px;
+    opacity: 0.85;
+    transition: all 0.2s ease;
+}
+
+.subcategory-badge:hover {
+    opacity: 1;
+    transform: translateX(4px);
+}
+
+.subcategory-badge.active {
+    opacity: 1;
+    background: rgba(90, 200, 250, 0.2) !important;
+    border-color: rgba(90, 200, 250, 0.4);
+    transform: translateX(4px) scale(1.02);
+}
+
 #products-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -369,6 +609,16 @@ header h1 {
     padding: 10px;
     max-width: 100%;
     box-sizing: border-box;
+    position: relative;
+    z-index: 0 !important; /* Ниже чем фильтры, чтобы не перекрывать их */
+    pointer-events: none; /* Не блокируем клики на фильтры */
+    margin-top: 0; /* Убираем отступ сверху, чтобы не перекрывать фильтр */
+    min-height: 0; /* Убираем минимальную высоту, чтобы не перекрывать фильтр */
+}
+
+#products-grid > * {
+    pointer-events: auto; /* Восстанавливаем клики для содержимого */
+    z-index: 0; /* Ниже чем фильтры */
 }
 
 /* Адаптивность для больших экранов */
@@ -555,11 +805,14 @@ header h1 {
 }
 
 .loading {
-    grid-column: span 2;
+    grid-column: 1 / -1; /* Занимает все колонки */
     text-align: center;
     padding: 30px 20px;
     color: var(--text-secondary) !important;
     font-size: 15px;
+    position: relative;
+    z-index: 0; /* Ниже чем фильтры */
+    pointer-events: none; /* Не блокируем клики на фильтры */
 }
 
 .product-name {
@@ -956,6 +1209,7 @@ html, body {
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+    overflow-y: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
     box-sizing: border-box;
 }
 
@@ -967,6 +1221,7 @@ html, body {
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+    overflow-y: visible; /* Разрешаем выпадающим спискам выходить за границы */
     position: relative;
     z-index: 1;
 }
@@ -975,7 +1230,9 @@ main {
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+    overflow-y: visible; /* Разрешаем выпадающим спискам выходить за границы */
     padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)); /* Отступ для фиксированной шапки внизу + safe area + отступ */
+    position: relative;
 }
 
 /* Дополнительные стили для лучшей видимости на мобильных */
@@ -2067,4 +2324,106 @@ main {
 .edit-product-btn.cancel:active {
     opacity: 0.8;
     transform: scale(0.98);
+}
+
+/* Стили для формы оформления заказа */
+.order-form-modal {
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.order-step {
+    display: none;
+}
+
+.order-step.active {
+    display: block;
+}
+
+.order-product-summary {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.order-product-summary h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.order-product-summary .product-price {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--tg-theme-button-color, #5ac8fa);
+    margin: 8px 0;
+}
+
+.order-product-summary .product-quantity-info {
+    font-size: 14px;
+    color: var(--text-hint);
+    margin-top: 8px;
+}
+
+.order-total {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-glass);
+    border-radius: 8px;
+    border: 1px solid var(--border-glass);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--tg-theme-button-color, #5ac8fa);
+    text-align: center;
+}
+
+.order-form-field {
+    margin-bottom: 16px;
+}
+
+.order-form-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.delivery-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-glass);
+    border: 2px solid var(--border-glass);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.delivery-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--tg-theme-button-color, #5ac8fa);
+}
+
+.delivery-option input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--tg-theme-button-color, #5ac8fa);
+}
+
+.delivery-option input[type="radio"]:checked + span {
+    font-weight: 600;
+    color: var(--tg-theme-button-color, #5ac8fa);
+}
+
+.delivery-option span {
+    font-size: 16px;
+    color: var(--text-primary);
+    flex: 1;
 }

@@ -1,7 +1,7 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelReservationAPI, createOrderAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
-import { initCart, loadCart, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
+import { API_BASE, cancelOrderAPI, cancelReservationAPI, createOrderAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
+import { initCart, loadCart, loadOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
 // Глобальные переменные
@@ -1718,6 +1718,9 @@ function showReservationModal(productId) {
     console.log('🔒 Reservation modal setup complete');
 }
 
+// Текущий товар для заказа
+let currentOrderProduct = null;
+
 // Показ модального окна заказа
 function showOrderModal(productId) {
     if (!appContext) {
@@ -1730,42 +1733,185 @@ function showOrderModal(productId) {
         return;
     }
     
-    // Сбрасываем количество на 1
-    const quantityInput = document.getElementById('order-quantity');
-    if (quantityInput) {
-        quantityInput.value = 1;
+    // Находим товар
+    const product = allProducts.find(p => p.id === productId);
+    if (!product) {
+        alert('❌ Товар не найден');
+        return;
     }
     
-    // Устанавливаем обработчик кнопки заказа
-    const submitBtn = document.getElementById('order-submit');
-    if (submitBtn) {
-        submitBtn.onclick = async () => {
-            const quantity = parseInt(quantityInput.value) || 1;
-            if (quantity < 1) {
-                alert('❌ Количество должно быть не менее 1');
-                return;
-            }
-            orderModal.style.display = 'none';
-            await createOrder(productId, quantity);
-        };
-    }
+    currentOrderProduct = product;
+    
+    // Сбрасываем форму
+    resetOrderForm();
+    
+    // Показываем информацию о товаре
+    updateOrderProductSummary(product);
+    
+    // Показываем первый шаг
+    showOrderStep(1);
+    
+    // Устанавливаем обработчики
+    setupOrderFormHandlers(productId);
     
     orderModal.style.display = 'block';
 }
 
-// Создание заказа
-async function createOrder(productId, quantity) {
+// Сброс формы заказа
+function resetOrderForm() {
+    document.getElementById('order-promo-code').value = '';
+    document.getElementById('order-quantity').value = 1;
+    document.getElementById('order-first-name').value = '';
+    document.getElementById('order-last-name').value = '';
+    document.getElementById('order-middle-name').value = '';
+    document.getElementById('order-phone-country-code').value = '+7';
+    document.getElementById('order-phone-number').value = '';
+    document.getElementById('order-email').value = '';
+    document.getElementById('order-notes').value = '';
+    document.querySelector('input[name="delivery-method"][value="delivery"]').checked = true;
+}
+
+// Обновление информации о товаре в форме
+function updateOrderProductSummary(product) {
+    const summaryDiv = document.getElementById('order-product-summary');
+    const totalDiv = document.getElementById('order-total');
+    
+    if (!summaryDiv || !totalDiv) return;
+    
+    const finalPrice = product.discount > 0 
+        ? Math.round(product.price * (1 - product.discount / 100)) 
+        : product.price;
+    
+    summaryDiv.innerHTML = `
+        <h3>${product.name}</h3>
+        <div class="product-price">${finalPrice} ₽</div>
+    `;
+    
+    // Обновляем итого при изменении количества
+    const quantityInput = document.getElementById('order-quantity');
+    const updateTotal = () => {
+        const quantity = parseInt(quantityInput.value) || 1;
+        const total = finalPrice * quantity;
+        totalDiv.textContent = `Итого: ${total} ₽`;
+    };
+    
+    quantityInput.oninput = updateTotal;
+    updateTotal();
+}
+
+// Показ шага формы заказа
+function showOrderStep(step) {
+    // Скрываем все шаги
+    for (let i = 1; i <= 3; i++) {
+        const stepDiv = document.getElementById(`order-step-${i}`);
+        if (stepDiv) {
+            stepDiv.classList.remove('active');
+        }
+    }
+    
+    // Показываем нужный шаг
+    const stepDiv = document.getElementById(`order-step-${step}`);
+    if (stepDiv) {
+        stepDiv.classList.add('active');
+    }
+}
+
+// Настройка обработчиков формы заказа
+function setupOrderFormHandlers(productId) {
+    // Шаг 1: Продолжить
+    const step1Next = document.getElementById('order-step-1-next');
+    if (step1Next) {
+        step1Next.onclick = () => {
+            const quantity = parseInt(document.getElementById('order-quantity').value) || 1;
+            if (quantity < 1) {
+                alert('❌ Количество должно быть не менее 1');
+                return;
+            }
+            showOrderStep(2);
+        };
+    }
+    
+    // Шаг 2: Назад
+    const step2Back = document.getElementById('order-step-2-back');
+    if (step2Back) {
+        step2Back.onclick = () => showOrderStep(1);
+    }
+    
+    // Шаг 2: Продолжить
+    const step2Next = document.getElementById('order-step-2-next');
+    if (step2Next) {
+        step2Next.onclick = () => {
+            const firstName = document.getElementById('order-first-name').value.trim();
+            const lastName = document.getElementById('order-last-name').value.trim();
+            const phoneNumber = document.getElementById('order-phone-number').value.trim();
+            
+            if (!firstName) {
+                alert('❌ Пожалуйста, введите имя');
+                return;
+            }
+            if (!lastName) {
+                alert('❌ Пожалуйста, введите фамилию');
+                return;
+            }
+            if (!phoneNumber) {
+                alert('❌ Пожалуйста, введите номер телефона');
+                return;
+            }
+            
+            showOrderStep(3);
+        };
+    }
+    
+    // Шаг 3: Назад
+    const step3Back = document.getElementById('order-step-3-back');
+    if (step3Back) {
+        step3Back.onclick = () => showOrderStep(2);
+    }
+    
+    // Шаг 3: Оформить заказ
+    const step3Submit = document.getElementById('order-step-3-submit');
+    if (step3Submit) {
+        step3Submit.onclick = async () => {
+            await submitOrder(productId);
+        };
+    }
+}
+
+// Отправка заказа
+async function submitOrder(productId) {
     try {
         if (!appContext) {
             alert('❌ Ошибка: контекст не загружен');
             return;
         }
         
-        // ordered_by_user_id определяется на backend из initData
-        const order = await createOrderAPI(productId, quantity);
+        // Собираем данные формы
+        const orderData = {
+            product_id: productId,
+            quantity: parseInt(document.getElementById('order-quantity').value) || 1,
+            promo_code: document.getElementById('order-promo-code').value.trim() || null,
+            first_name: document.getElementById('order-first-name').value.trim(),
+            last_name: document.getElementById('order-last-name').value.trim(),
+            middle_name: document.getElementById('order-middle-name').value.trim() || null,
+            phone_country_code: document.getElementById('order-phone-country-code').value,
+            phone_number: document.getElementById('order-phone-number').value.trim(),
+            email: document.getElementById('order-email').value.trim() || null,
+            notes: document.getElementById('order-notes').value.trim() || null,
+            delivery_method: document.querySelector('input[name="delivery-method"]:checked').value
+        };
         
-        alert(`✅ Заказ создан! Количество: ${quantity} шт.`);
+        // Проверяем обязательные поля
+        if (!orderData.first_name || !orderData.last_name || !orderData.phone_number) {
+            alert('❌ Пожалуйста, заполните все обязательные поля');
+            return;
+        }
         
+        // Отправляем заказ
+        const order = await createOrderAPI(orderData);
+        
+        alert(`✅ Заказ оформлен! Статус: ожидание`);
+        
+        orderModal.style.display = 'none';
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
         
@@ -1776,8 +1922,14 @@ async function createOrder(productId, quantity) {
         }, 500);
     } catch (e) {
         console.error('Order error:', e);
-        alert(`❌ Ошибка при создании заказа: ${e.message}`);
+        alert(`❌ Ошибка при оформлении заказа: ${e.message}`);
     }
+}
+
+// Создание заказа (старая функция для обратной совместимости)
+async function createOrder(productId, quantity) {
+    // Эта функция больше не используется, но оставляем для совместимости
+    await submitOrder(productId);
 }
 
 // Создание резервации
@@ -1836,6 +1988,32 @@ async function cancelReservation(reservationId, productId) {
         }, 500);
     } catch (e) {
         console.error('Cancel reservation error:', e);
+        alert(`❌ Ошибка: ${e.message}`);
+    }
+}
+
+// Отмена заказа
+async function cancelOrder(orderId) {
+    if (!confirm('Вы уверены, что хотите отменить этот заказ?')) {
+        return;
+    }
+    
+    try {
+        if (!appContext) {
+            alert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        // user_id определяется на backend из initData
+        await cancelOrderAPI(orderId);
+        alert('✅ Заказ отменен');
+        
+        setTimeout(async () => {
+            await loadData();
+            await updateCartUI();
+        }, 500);
+    } catch (e) {
+        console.error('Cancel order error:', e);
         alert(`❌ Ошибка: ${e.message}`);
     }
 }
@@ -2409,6 +2587,9 @@ function setupModals() {
     if (orderClose) {
         orderClose.onclick = () => {
             orderModal.style.display = 'none';
+            resetOrderForm();
+            showOrderStep(1);
+            orderModal.style.display = 'none';
         };
     }
     
@@ -2416,6 +2597,8 @@ function setupModals() {
         orderModal.onclick = (e) => {
             if (e.target === orderModal) {
                 orderModal.style.display = 'none';
+                resetOrderForm();
+                showOrderStep(1);
             }
         };
     }
@@ -2501,6 +2684,14 @@ function setupAdminButton() {
 window.cancelReservationFromCart = async function(reservationId, productId) {
     await cancelReservation(reservationId, productId);
     loadCart();
+    await updateCartUI();
+};
+
+// Глобальная функция для отмены заказа из корзины
+window.cancelOrderFromCart = async function(orderId) {
+    await cancelOrder(orderId);
+    // Перезагружаем заказы в корзине
+    await loadOrders();
     await updateCartUI();
 };
 

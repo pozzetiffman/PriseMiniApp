@@ -8,7 +8,15 @@ class OrderBase(BaseModel):
     quantity: int = 1
 
 class OrderCreate(OrderBase):
-    pass
+    promo_code: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    phone_country_code: Optional[str] = None
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    notes: Optional[str] = None
+    delivery_method: Optional[str] = None  # delivery или pickup
 
 class ProductInfo(BaseModel):
     id: int
@@ -43,6 +51,16 @@ class Order(OrderBase):
     created_at: datetime
     is_completed: bool
     is_cancelled: bool
+    promo_code: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    phone_country_code: Optional[str] = None
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    notes: Optional[str] = None
+    delivery_method: Optional[str] = None
+    status: Optional[str] = 'pending'
     product: Optional[ProductInfo] = None  # Информация о товаре
 
     class Config:

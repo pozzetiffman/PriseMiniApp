@@ -586,6 +586,21 @@ async function loadOrders() {
         }
         
         orders.forEach(order => {
+            // Логируем данные заказа для отладки
+            console.log('📦 Order data:', {
+                id: order.id,
+                product_id: order.product_id,
+                ordered_by_user_id: order.ordered_by_user_id,
+                quantity: order.quantity,
+                first_name: order.first_name,
+                last_name: order.last_name,
+                phone_number: order.phone_number,
+                email: order.email,
+                delivery_method: order.delivery_method,
+                notes: order.notes,
+                promo_code: order.promo_code
+            });
+            
             const orderItem = document.createElement('div');
             orderItem.className = 'order-item';
             orderItem.style.cssText = `
@@ -678,7 +693,7 @@ async function loadOrders() {
             
             // Информация о заказе
             const infoDiv = document.createElement('div');
-            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px; flex: 1;';
             
             // Количество
             const quantityDiv = document.createElement('div');
@@ -705,14 +720,136 @@ async function loadOrders() {
             if (order.is_completed) {
                 statusDiv.textContent = '✅ Выполнен';
                 statusDiv.style.color = '#4CAF50';
+            } else if (order.is_cancelled) {
+                statusDiv.textContent = '❌ Отменен';
+                statusDiv.style.color = '#F44336';
             } else {
-                statusDiv.textContent = '⏳ В обработке';
+                statusDiv.textContent = '⏳ Ожидание';
                 statusDiv.style.color = '#FFA500';
             }
             
+            // Добавляем основные элементы в правильном порядке
             infoDiv.appendChild(quantityDiv);
             infoDiv.appendChild(dateDiv);
             infoDiv.appendChild(statusDiv);
+            
+            // Ссылка на Telegram пользователя
+            if (order.ordered_by_user_id) {
+                const userId = order.ordered_by_user_id;
+                const telegramLink = document.createElement('button');
+                telegramLink.type = 'button';
+                telegramLink.style.cssText = 'font-size: 14px; color: var(--tg-theme-button-color, #5ac8fa); text-decoration: none; margin-top: 8px; display: inline-block; font-weight: 500; padding: 8px 16px; background: rgba(90, 200, 250, 0.15); border-radius: 8px; border: 1px solid rgba(90, 200, 250, 0.3); cursor: pointer; width: 100%; text-align: center; box-sizing: border-box;';
+                telegramLink.textContent = `👤 Написать в Telegram`;
+                
+                // Обработчик клика - получаем username и открываем через https://t.me/username
+                telegramLink.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    console.log('📱 Opening Telegram chat for user:', userId);
+                    
+                    // Показываем индикатор загрузки
+                    telegramLink.disabled = true;
+                    telegramLink.style.opacity = '0.6';
+                    telegramLink.textContent = '⏳ Загрузка...';
+                    
+                    try {
+                        // Получаем username через API
+                        const { getUserUsernameAPI } = await import('./api.js');
+                        const userData = await getUserUsernameAPI(userId);
+                        const username = userData.username;
+                        
+                        let telegramUrl;
+                        if (username) {
+                            // Если есть username, используем https://t.me/username - это работает через браузер
+                            telegramUrl = `https://t.me/${username}`;
+                            console.log('📱 Using username link:', telegramUrl);
+                        } else {
+                            // Если username нет, используем tg://user?id=...
+                            telegramUrl = `tg://user?id=${userId}`;
+                            console.log('📱 Using user ID link:', telegramUrl);
+                        }
+                        
+                        // В Telegram WebView используем openLink для открытия ссылки
+                        if (window.Telegram && window.Telegram.WebApp) {
+                            const webApp = window.Telegram.WebApp;
+                            
+                            // Метод openLink открывает ссылку через браузер/Telegram
+                            if (typeof webApp.openLink === 'function') {
+                                console.log('📱 Using Telegram.WebApp.openLink');
+                                webApp.openLink(telegramUrl);
+                                
+                                // Восстанавливаем кнопку через небольшую задержку
+                                setTimeout(() => {
+                                    telegramLink.disabled = false;
+                                    telegramLink.style.opacity = '1';
+                                    telegramLink.textContent = '👤 Написать в Telegram';
+                                }, 1000);
+                                return;
+                            }
+                        }
+                        
+                        // Если API недоступен, открываем через window.open
+                        console.log('📱 Fallback: Using window.open');
+                        window.open(telegramUrl, '_blank');
+                        
+                        setTimeout(() => {
+                            telegramLink.disabled = false;
+                            telegramLink.style.opacity = '1';
+                            telegramLink.textContent = '👤 Написать в Telegram';
+                        }, 1000);
+                    } catch (error) {
+                        console.error('❌ Error opening Telegram chat:', error);
+                        telegramLink.disabled = false;
+                        telegramLink.style.opacity = '1';
+                        telegramLink.textContent = '👤 Написать в Telegram';
+                        alert('Ошибка при открытии чата. ID пользователя: ' + userId);
+                    }
+                }, { passive: false });
+                
+                infoDiv.appendChild(telegramLink);
+            }
+            
+            // Расширенная информация о заказе
+            const detailsList = [];
+            
+            if (order.first_name || order.last_name) {
+                const fullName = `${order.first_name || ''} ${order.last_name || ''} ${order.middle_name || ''}`.trim();
+                if (fullName) {
+                    detailsList.push(`<div style="margin-bottom: 6px;"><strong>👤 Имя:</strong> ${fullName}</div>`);
+                }
+            }
+            
+            if (order.phone_number) {
+                const phone = `${order.phone_country_code || ''}${order.phone_number}`.trim();
+                if (phone) {
+                    detailsList.push(`<div style="margin-bottom: 6px;"><strong>📱 Телефон:</strong> ${phone}</div>`);
+                }
+            }
+            
+            if (order.email) {
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📧 Email:</strong> ${order.email}</div>`);
+            }
+            
+            if (order.delivery_method) {
+                const deliveryText = order.delivery_method === 'delivery' ? '🚚 Доставка' : '🏪 Самовывоз';
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📦 Способ получения:</strong> ${deliveryText}</div>`);
+            }
+            
+            if (order.notes) {
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📝 Примечание:</strong> ${order.notes}</div>`);
+            }
+            
+            if (order.promo_code) {
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>🎟️ Промокод:</strong> ${order.promo_code}</div>`);
+            }
+            
+            if (detailsList.length > 0) {
+                const detailsDiv = document.createElement('div');
+                detailsDiv.style.cssText = 'margin-top: 12px; padding: 12px; background: rgba(90, 200, 250, 0.1); border-radius: 8px; font-size: 13px; color: var(--tg-theme-text-color); border: 1px solid rgba(90, 200, 250, 0.2);';
+                detailsDiv.innerHTML = '<div style="font-weight: 600; margin-bottom: 8px; color: var(--tg-theme-button-color, #5ac8fa);">📋 Детали заказа:</div>' + detailsList.join('');
+                infoDiv.appendChild(detailsDiv);
+            }
             
             // Кнопки действий (только для невыполненных заказов)
             const actionsDiv = document.createElement('div');
