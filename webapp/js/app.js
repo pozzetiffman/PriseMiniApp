@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelOrderAPI, cancelReservationAPI, createOrderAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
+import { API_BASE, cancelOrderAPI, cancelReservationAPI, createOrderAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductForSaleAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
 import { initCart, loadCart, loadOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -818,8 +818,6 @@ function renderProducts(products) {
     }
 
     products.forEach(prod => {
-        const finalPrice = prod.discount > 0 ? Math.round(prod.price * (1 - prod.discount / 100)) : prod.price;
-        
         // Получаем изображения - backend теперь возвращает полные HTTPS URL
         let imagesList = [];
         if (prod.images_urls && Array.isArray(prod.images_urls) && prod.images_urls.length > 0) {
@@ -931,6 +929,13 @@ function renderProducts(products) {
             });
         }
         
+        // Проверяем функцию "покупка" - приоритет выше, чем "под заказ" или количество
+        const isForSale = prod.is_for_sale === true || 
+                         prod.is_for_sale === 1 || 
+                         prod.is_for_sale === '1' ||
+                         prod.is_for_sale === 'true' ||
+                         String(prod.is_for_sale).toLowerCase() === 'true';
+        
         // Если товар под заказ, показываем "Под заказ"
         // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
         const isMadeToOrder = prod.is_made_to_order === true || 
@@ -938,9 +943,26 @@ function renderProducts(products) {
                               prod.is_made_to_order === '1' ||
                               prod.is_made_to_order === 'true' ||
                               String(prod.is_made_to_order).toLowerCase() === 'true';
+        console.log(`[BADGE DEBUG] Product ${prod.id} isForSale check: raw=${prod.is_for_sale} (${typeof prod.is_for_sale}), converted=${isForSale}`);
         console.log(`[BADGE DEBUG] Product ${prod.id} isMadeToOrder check: raw=${prod.is_made_to_order} (${typeof prod.is_made_to_order}), converted=${isMadeToOrder}`);
         
-        if (isMadeToOrder) {
+        // Приоритет: 1) Покупка, 2) Под заказ, 3) Количество
+        if (isForSale) {
+            quantityBadge = document.createElement('div');
+            quantityBadge.className = 'product-quantity-badge';
+            // Формируем текст с количеством от и единицей измерения
+            let badgeText = 'Покупка';
+            const quantityFrom = prod.quantity_from !== null && prod.quantity_from !== undefined ? prod.quantity_from : null;
+            const quantityUnit = prod.quantity_unit || 'шт';
+            if (quantityFrom !== null && quantityFrom !== undefined) {
+                badgeText = `От ${quantityFrom} ${quantityUnit}`;
+            } else {
+                badgeText = 'Покупка';
+            }
+            quantityBadge.textContent = badgeText;
+            quantityBadge.style.background = 'rgba(255, 149, 0, 0.95)'; // Оранжевый для покупки
+            quantityBadge.style.color = '#ffffff';
+        } else if (isMadeToOrder) {
             quantityBadge = document.createElement('div');
             quantityBadge.className = 'product-quantity-badge';
             quantityBadge.textContent = 'Под заказ';
@@ -1231,20 +1253,53 @@ function renderProducts(products) {
         nameDiv.className = 'product-name';
         nameDiv.textContent = prod.name;
         
-        // Цена
+        // Цена - определяем что показывать
         const priceContainer = document.createElement('div');
         priceContainer.className = 'product-price-container';
         const priceSpan = document.createElement('span');
         priceSpan.className = 'product-price';
-        priceSpan.textContent = `${finalPrice} ₽`;
-        priceContainer.appendChild(priceSpan);
         
-        if (prod.discount > 0) {
-            const oldPriceSpan = document.createElement('span');
-            oldPriceSpan.className = 'old-price';
-            oldPriceSpan.textContent = `${prod.price} ₽`;
-            priceContainer.appendChild(oldPriceSpan);
+        const isForSaleCard = prod.is_for_sale === true || 
+                         prod.is_for_sale === 1 || 
+                         prod.is_for_sale === '1' ||
+                         prod.is_for_sale === 'true' ||
+                         String(prod.is_for_sale).toLowerCase() === 'true';
+        
+        if (isForSaleCard) {
+            // Если включена функция покупка, показываем цену покупки
+            const priceType = prod.price_type || 'range';
+            if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
+                priceSpan.textContent = `${prod.price_fixed} ₽`;
+            } else if (priceType === 'range') {
+                const priceFrom = prod.price_from !== null && prod.price_from !== undefined ? prod.price_from : '';
+                const priceTo = prod.price_to !== null && prod.price_to !== undefined ? prod.price_to : '';
+                if (priceFrom && priceTo) {
+                    priceSpan.textContent = `${priceFrom} - ${priceTo} ₽`;
+                } else if (priceFrom) {
+                    priceSpan.textContent = `от ${priceFrom} ₽`;
+                } else if (priceTo) {
+                    priceSpan.textContent = `до ${priceTo} ₽`;
+                } else {
+                    priceSpan.textContent = 'Цена по запросу';
+                }
+            } else {
+                priceSpan.textContent = 'Цена по запросу';
+            }
+        } else {
+            // Обычная цена со скидкой
+            const finalPrice = prod.discount > 0 ? Math.round(prod.price * (1 - prod.discount / 100)) : prod.price;
+            priceSpan.textContent = `${finalPrice} ₽`;
+            
+            // Старая цена при скидке
+            if (prod.discount > 0) {
+                const oldPriceSpan = document.createElement('span');
+                oldPriceSpan.className = 'old-price';
+                oldPriceSpan.textContent = `${prod.price} ₽`;
+                priceContainer.appendChild(oldPriceSpan);
+            }
         }
+        
+        priceContainer.appendChild(priceSpan);
         card.appendChild(nameDiv);
         card.appendChild(priceContainer);
         
@@ -1259,7 +1314,7 @@ function renderProducts(products) {
             card.appendChild(quantityBadge);
         }
         
-        card.onclick = () => showProductModal(prod, finalPrice, fullImages);
+        card.onclick = () => showProductModal(prod, null, fullImages);
         
         // card уже добавлен в DOM выше (перед установкой img.src)
     });
@@ -1390,21 +1445,62 @@ function showProductModal(prod, finalPrice, fullImages) {
     modalPriceContainer.innerHTML = '';
     const priceSpan = document.createElement('span');
     priceSpan.className = 'product-price';
-    priceSpan.textContent = `${finalPrice} ₽`;
-    modalPriceContainer.appendChild(priceSpan);
     
-    if (prod.discount > 0) {
-        const oldPriceSpan = document.createElement('span');
-        oldPriceSpan.className = 'old-price';
-        oldPriceSpan.textContent = `${prod.price} ₽`;
-        modalPriceContainer.appendChild(oldPriceSpan);
+        // Определяем цену для отображения в модальном окне
+        const isForSaleModal = prod.is_for_sale === true || 
+                         prod.is_for_sale === 1 || 
+                         prod.is_for_sale === '1' ||
+                         prod.is_for_sale === 'true' ||
+                         String(prod.is_for_sale).toLowerCase() === 'true';
+        
+        if (isForSaleModal) {
+        // Если включена функция покупка, показываем цену покупки
+        const priceType = prod.price_type || 'range';
+        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
+            priceSpan.textContent = `${prod.price_fixed} ₽`;
+        } else if (priceType === 'range') {
+            const priceFrom = prod.price_from !== null && prod.price_from !== undefined ? prod.price_from : '';
+            const priceTo = prod.price_to !== null && prod.price_to !== undefined ? prod.price_to : '';
+            if (priceFrom && priceTo) {
+                priceSpan.textContent = `${priceFrom} - ${priceTo} ₽`;
+            } else if (priceFrom) {
+                priceSpan.textContent = `от ${priceFrom} ₽`;
+            } else if (priceTo) {
+                priceSpan.textContent = `до ${priceTo} ₽`;
+            } else {
+                priceSpan.textContent = 'Цена по запросу';
+            }
+        } else {
+            priceSpan.textContent = 'Цена по запросу';
+        }
+    } else {
+        // Обычная цена со скидкой
+        const finalPrice = prod.discount > 0 ? Math.round(prod.price * (1 - prod.discount / 100)) : prod.price;
+        priceSpan.textContent = `${finalPrice} ₽`;
+        
+        // Старая цена при скидке
+        if (prod.discount > 0) {
+            const oldPriceSpan = document.createElement('span');
+            oldPriceSpan.className = 'old-price';
+            oldPriceSpan.textContent = `${prod.price} ₽`;
+            modalPriceContainer.appendChild(oldPriceSpan);
+        }
     }
+    
+    modalPriceContainer.appendChild(priceSpan);
     
     // Количество товара в модальном окне
     const modalQuantityDiv = document.getElementById('modal-quantity');
     if (modalQuantityDiv) {
         const shopSettingsForModal = getCurrentShopSettings();
         const quantityEnabledForModal = shopSettingsForModal ? (shopSettingsForModal.quantity_enabled !== false) : true;
+        
+        // Проверяем функцию "покупка" - приоритет выше, чем "под заказ" или количество
+        const isForSale = prod.is_for_sale === true || 
+                         prod.is_for_sale === 1 || 
+                         prod.is_for_sale === '1' ||
+                         prod.is_for_sale === 'true' ||
+                         String(prod.is_for_sale).toLowerCase() === 'true';
         
         // Если товар под заказ, показываем "Под заказ"
         // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
@@ -1413,9 +1509,21 @@ function showProductModal(prod, finalPrice, fullImages) {
                               prod.is_made_to_order === '1' ||
                               prod.is_made_to_order === 'true' ||
                               String(prod.is_made_to_order).toLowerCase() === 'true';
+        console.log(`[MODAL DEBUG] Product ${prod.id} isForSale check: raw=${prod.is_for_sale} (${typeof prod.is_for_sale}), converted=${isForSale}`);
         console.log(`[MODAL DEBUG] Product ${prod.id} isMadeToOrder check: raw=${prod.is_made_to_order} (${typeof prod.is_made_to_order}), converted=${isMadeToOrder}`);
         
-        if (isMadeToOrder) {
+        // Приоритет: 1) Покупка, 2) Под заказ, 3) Количество
+        if (isForSale) {
+            modalQuantityDiv.style.display = 'block';
+            // Формируем текст с количеством от и единицей измерения
+            const quantityFrom = prod.quantity_from !== null && prod.quantity_from !== undefined ? prod.quantity_from : null;
+            const quantityUnit = prod.quantity_unit || 'шт';
+            if (quantityFrom !== null && quantityFrom !== undefined) {
+                modalQuantityDiv.textContent = `🛒 От ${quantityFrom} ${quantityUnit}`;
+            } else {
+                modalQuantityDiv.textContent = '🛒 Покупка';
+            }
+        } else if (isMadeToOrder) {
             modalQuantityDiv.style.display = 'block';
             modalQuantityDiv.textContent = '📦 Под заказ';
         } else if (prod.quantity !== undefined && prod.quantity !== null) {
@@ -2027,6 +2135,17 @@ function showEditProductModal(prod) {
     const editDiscountInput = document.getElementById('edit-discount');
     const editQuantityInput = document.getElementById('edit-quantity');
     const editMadeToOrderInput = document.getElementById('edit-made-to-order');
+    const editForSaleInput = document.getElementById('edit-for-sale');
+    const editPriceFromInput = document.getElementById('edit-price-from');
+    const editPriceToInput = document.getElementById('edit-price-to');
+    const editPriceFixedInput = document.getElementById('edit-price-fixed');
+    const editPriceTypeRangeRadio = document.getElementById('edit-price-type-range');
+    const editPriceTypeFixedRadio = document.getElementById('edit-price-type-fixed');
+    const priceRangeFields = document.getElementById('price-range-fields');
+    const priceFixedField = document.getElementById('price-fixed-field');
+    const editQuantityFromInput = document.getElementById('edit-quantity-from');
+    const editQuantityUnitInput = document.getElementById('edit-quantity-unit');
+    const forSaleFields = document.getElementById('for-sale-fields');
     
     // Заполняем поля текущими значениями
     editNameInput.value = prod.name || '';
@@ -2034,6 +2153,7 @@ function showEditProductModal(prod) {
     editPriceInput.value = prod.price || '';
     editDiscountInput.value = prod.discount || 0;
     editQuantityInput.value = prod.quantity !== undefined && prod.quantity !== null ? prod.quantity : 0;
+    
     // Проверяем is_made_to_order - может быть true, false, 1, 0, "true", "false", или undefined
     // Преобразуем в boolean для надежности
     const isMadeToOrder = prod.is_made_to_order === true || 
@@ -2043,8 +2163,71 @@ function showEditProductModal(prod) {
                           String(prod.is_made_to_order).toLowerCase() === 'true';
     editMadeToOrderInput.checked = isMadeToOrder;
     
+    // Проверяем is_for_sale
+    const isForSale = prod.is_for_sale === true || 
+                      prod.is_for_sale === 1 || 
+                      prod.is_for_sale === '1' ||
+                      prod.is_for_sale === 'true' ||
+                      String(prod.is_for_sale).toLowerCase() === 'true';
+    editForSaleInput.checked = isForSale;
+    
+    // Заполняем поля для функции покупка
+    const priceType = prod.price_type || 'range';
+    editPriceFromInput.value = prod.price_from || '';
+    editPriceToInput.value = prod.price_to || '';
+    editPriceFixedInput.value = prod.price_fixed || '';
+    editQuantityFromInput.value = prod.quantity_from !== undefined && prod.quantity_from !== null ? prod.quantity_from : '';
+    editQuantityUnitInput.value = prod.quantity_unit || 'шт';
+    
+    // Устанавливаем тип цены
+    if (editPriceTypeRangeRadio && editPriceTypeFixedRadio) {
+        editPriceTypeRangeRadio.checked = priceType === 'range';
+        editPriceTypeFixedRadio.checked = priceType === 'fixed';
+    }
+    
+    // Показываем/скрываем дополнительные поля в зависимости от состояния тумблера "покупка"
+    if (forSaleFields) {
+        forSaleFields.style.display = isForSale ? 'block' : 'none';
+    }
+    
+    // Показываем/скрываем поля в зависимости от типа цены
+    if (priceRangeFields && priceFixedField) {
+        priceRangeFields.style.display = priceType === 'range' ? 'block' : 'none';
+        priceFixedField.style.display = priceType === 'fixed' ? 'block' : 'none';
+    }
+    
+    // Делаем поле цены неактивным, если включена функция покупка
+    editPriceInput.disabled = isForSale;
+    
+    // Обработчик изменения тумблера "покупка"
+    editForSaleInput.onchange = () => {
+        const forSaleEnabled = editForSaleInput.checked;
+        if (forSaleFields) {
+            forSaleFields.style.display = forSaleEnabled ? 'block' : 'none';
+        }
+        editPriceInput.disabled = forSaleEnabled;
+    };
+    
+    // Обработчики изменения типа цены
+    if (editPriceTypeRangeRadio && editPriceTypeFixedRadio && priceRangeFields && priceFixedField) {
+        editPriceTypeRangeRadio.onchange = () => {
+            if (editPriceTypeRangeRadio.checked) {
+                priceRangeFields.style.display = 'block';
+                priceFixedField.style.display = 'none';
+            }
+        };
+        
+        editPriceTypeFixedRadio.onchange = () => {
+            if (editPriceTypeFixedRadio.checked) {
+                priceRangeFields.style.display = 'none';
+                priceFixedField.style.display = 'block';
+            }
+        };
+    }
+    
     console.log('🔧 Edit product modal - full product object:', JSON.stringify(prod, null, 2));
     console.log('🔧 Edit product modal - is_made_to_order raw:', prod.is_made_to_order, 'type:', typeof prod.is_made_to_order, 'checked:', isMadeToOrder);
+    console.log('🔧 Edit product modal - is_for_sale raw:', prod.is_for_sale, 'type:', typeof prod.is_for_sale, 'checked:', isForSale);
     
     // Показываем модальное окно
     editProductModal.style.display = 'block';
@@ -2078,6 +2261,13 @@ async function saveProductEdit(productId) {
     const editDiscountInput = document.getElementById('edit-discount');
     const editQuantityInput = document.getElementById('edit-quantity');
     const editMadeToOrderInput = document.getElementById('edit-made-to-order');
+    const editForSaleInput = document.getElementById('edit-for-sale');
+    const editPriceFromInput = document.getElementById('edit-price-from');
+    const editPriceToInput = document.getElementById('edit-price-to');
+    const editPriceFixedInput = document.getElementById('edit-price-fixed');
+    const editPriceTypeRangeRadio = document.getElementById('edit-price-type-range');
+    const editQuantityFromInput = document.getElementById('edit-quantity-from');
+    const editQuantityUnitInput = document.getElementById('edit-quantity-unit');
     
     const newName = editNameInput.value.trim();
     const newDescription = editDescriptionInput.value.trim();
@@ -2085,6 +2275,13 @@ async function saveProductEdit(productId) {
     const newDiscount = parseFloat(editDiscountInput.value);
     const newQuantity = parseInt(editQuantityInput.value, 10);
     const newMadeToOrder = editMadeToOrderInput.checked;
+    const newForSale = editForSaleInput.checked;
+    const newPriceType = editPriceTypeRangeRadio && editPriceTypeRangeRadio.checked ? 'range' : 'fixed';
+    const newPriceFrom = editPriceFromInput.value ? parseFloat(editPriceFromInput.value) : null;
+    const newPriceTo = editPriceToInput.value ? parseFloat(editPriceToInput.value) : null;
+    const newPriceFixed = editPriceFixedInput.value ? parseFloat(editPriceFixedInput.value) : null;
+    const newQuantityFrom = editQuantityFromInput.value ? parseInt(editQuantityFromInput.value, 10) : null;
+    const newQuantityUnit = editQuantityUnitInput.value || null;
     
     // Валидация
     if (!newName || newName.length === 0) {
@@ -2107,6 +2304,33 @@ async function saveProductEdit(productId) {
         return;
     }
     
+    // Валидация полей функции покупка
+    if (newForSale) {
+        if (newPriceType === 'range') {
+            if (newPriceFrom !== null && (isNaN(newPriceFrom) || newPriceFrom < 0)) {
+                alert('❌ Введите корректную цену от (0 или больше)');
+                return;
+            }
+            if (newPriceTo !== null && (isNaN(newPriceTo) || newPriceTo < 0)) {
+                alert('❌ Введите корректную цену до (0 или больше)');
+                return;
+            }
+            if (newPriceFrom !== null && newPriceTo !== null && newPriceFrom > newPriceTo) {
+                alert('❌ Цена от не может быть больше цены до');
+                return;
+            }
+        } else if (newPriceType === 'fixed') {
+            if (newPriceFixed === null || isNaN(newPriceFixed) || newPriceFixed < 0) {
+                alert('❌ Введите корректную фиксированную цену (0 или больше)');
+                return;
+            }
+        }
+        if (newQuantityFrom !== null && (isNaN(newQuantityFrom) || newQuantityFrom < 0)) {
+            alert('❌ Введите корректное количество от (0 или больше)');
+            return;
+        }
+    }
+    
     try {
         if (!appContext) {
             alert('❌ Ошибка: контекст не загружен');
@@ -2116,8 +2340,10 @@ async function saveProductEdit(productId) {
         // Обновляем название и описание (без уведомлений)
         await updateProductNameDescriptionAPI(productId, appContext.shop_owner_id, newName, newDescription || null);
         
-        // Обновляем цену и скидку (с уведомлениями)
-        await updateProductAPI(productId, appContext.shop_owner_id, newPrice, newDiscount);
+        // Обновляем цену и скидку (с уведомлениями) - только если функция покупка не включена
+        if (!newForSale) {
+            await updateProductAPI(productId, appContext.shop_owner_id, newPrice, newDiscount);
+        }
         
         // Обновляем количество (без уведомлений)
         await updateProductQuantityAPI(productId, appContext.shop_owner_id, newQuantity);
@@ -2126,6 +2352,19 @@ async function saveProductEdit(productId) {
         console.log(`💾 Saving made-to-order: productId=${productId}, isMadeToOrder=${newMadeToOrder}`);
         const madeToOrderResult = await updateProductMadeToOrderAPI(productId, appContext.shop_owner_id, newMadeToOrder);
         console.log(`✅ Made-to-order saved:`, madeToOrderResult);
+        
+        // Обновляем функцию 'покупка' (без уведомлений)
+        console.log(`💾 Saving for-sale: productId=${productId}`, { is_for_sale: newForSale, price_type: newPriceType, price_from: newPriceFrom, price_to: newPriceTo, price_fixed: newPriceFixed, quantity_from: newQuantityFrom, quantity_unit: newQuantityUnit });
+        const forSaleResult = await updateProductForSaleAPI(productId, appContext.shop_owner_id, {
+            is_for_sale: newForSale,
+            price_type: newPriceType,
+            price_from: newPriceFrom,
+            price_to: newPriceTo,
+            price_fixed: newPriceFixed,
+            quantity_from: newQuantityFrom,
+            quantity_unit: newQuantityUnit
+        });
+        console.log(`✅ For-sale saved:`, forSaleResult);
         
         // Закрываем модальное окно редактирования
         const editProductModal = document.getElementById('edit-product-modal');

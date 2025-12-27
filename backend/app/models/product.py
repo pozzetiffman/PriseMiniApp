@@ -12,6 +12,13 @@ class ProductBase(BaseModel):
     is_hot_offer: bool = False  # Горящее предложение
     quantity: int = 0  # Количество товара на складе
     is_made_to_order: bool = False  # Товар под заказ
+    is_for_sale: bool = False  # Товар для покупки (с диапазоном цен)
+    price_from: Optional[float] = None  # Цена от (для товаров для покупки с диапазоном)
+    price_to: Optional[float] = None  # Цена до (для товаров для покупки с диапазоном)
+    price_fixed: Optional[float] = None  # Фиксированная цена покупки (для товаров для покупки с фиксированной ценой)
+    price_type: str = 'range'  # Тип цены: 'range' (от-до) или 'fixed' (фиксированная)
+    quantity_from: Optional[int] = None  # Количество от (для товаров для покупки)
+    quantity_unit: Optional[str] = None  # Единица измерения количества (шт или кг)
 
 class ProductCreate(ProductBase):
     pass
@@ -43,6 +50,15 @@ class MadeToOrderUpdate(BaseModel):
 
 class BulkMadeToOrderUpdate(BaseModel):
     is_made_to_order: bool
+
+class ForSaleUpdate(BaseModel):
+    is_for_sale: bool
+    price_from: Optional[float] = None
+    price_to: Optional[float] = None
+    price_fixed: Optional[float] = None
+    price_type: str = 'range'  # 'range' или 'fixed'
+    quantity_from: Optional[int] = None
+    quantity_unit: Optional[str] = None
 
 
 

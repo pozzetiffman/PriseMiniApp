@@ -434,6 +434,47 @@ export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMade
     return JSON.parse(responseText);
 }
 
+// Обновление функции 'покупка' товара (без уведомлений)
+export async function updateProductForSaleAPI(productId, shopOwnerId, forSaleData) {
+    const url = `${API_BASE}/api/products/${productId}/update-for-sale?user_id=${shopOwnerId}`;
+    console.log(`Updating product for-sale: productId=${productId}`, forSaleData);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            is_for_sale: forSaleData.is_for_sale,
+            price_type: forSaleData.price_type,
+            price_from: forSaleData.price_from,
+            price_to: forSaleData.price_to,
+            price_fixed: forSaleData.price_fixed,
+            quantity_from: forSaleData.quantity_from,
+            quantity_unit: forSaleData.quantity_unit
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update product for-sale response: status=${response.status}, body=${responseText}`);
+    
+    if (response.ok) {
+        const result = JSON.parse(responseText);
+        console.log(`✅ For-sale updated successfully:`, result);
+    }
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить функцию "покупка"';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
 // Массовое обновление статуса 'под заказ' для всех товаров
 export async function bulkUpdateAllProductsMadeToOrderAPI(isMadeToOrder) {
     const url = `${API_BASE}/api/products/bulk-update-made-to-order`;

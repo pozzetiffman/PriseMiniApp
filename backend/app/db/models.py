@@ -32,6 +32,13 @@ class Product(Base):
     quantity = Column(Integer, default=0)  # Количество товара на складе
     is_sold = Column(Boolean, default=False)  # Продан ли товар (скрыт с витрины)
     is_made_to_order = Column(Boolean, default=False)  # Товар под заказ
+    is_for_sale = Column(Boolean, default=False)  # Товар для покупки (с диапазоном цен)
+    price_from = Column(Float, nullable=True)  # Цена от (для товаров для покупки с диапазоном)
+    price_to = Column(Float, nullable=True)  # Цена до (для товаров для покупки с диапазоном)
+    price_fixed = Column(Float, nullable=True)  # Фиксированная цена покупки (для товаров для покупки с фиксированной ценой)
+    price_type = Column(String, default='range')  # Тип цены: 'range' (от-до) или 'fixed' (фиксированная)
+    quantity_from = Column(Integer, nullable=True)  # Количество от (для товаров для покупки)
+    quantity_unit = Column(String, nullable=True)  # Единица измерения количества (шт или кг)
     
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship("Category", back_populates="products")

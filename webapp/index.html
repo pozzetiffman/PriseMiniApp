@@ -236,6 +236,66 @@
                         </label>
                     </div>
                 </div>
+                <div class="edit-product-field">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label for="edit-for-sale" style="margin-bottom: 0;">Покупка</label>
+                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Если включено, вместо "под заказ" или количества будет показано "Покупка"</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="edit-for-sale">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div id="for-sale-fields" style="display: none;">
+                    <div class="edit-product-field">
+                        <label style="margin-bottom: 8px; display: block;">Тип цены</label>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="price-type" id="edit-price-type-range" value="range" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <div>
+                                    <div style="font-weight: 500;">Цена от и до</div>
+                                    <div style="font-size: 12px; color: var(--text-hint);">Диапазон цен</div>
+                                </div>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="price-type" id="edit-price-type-fixed" value="fixed" style="width: 18px; height: 18px; cursor: pointer;">
+                                <div>
+                                    <div style="font-weight: 500;">Фиксированная цена</div>
+                                    <div style="font-size: 12px; color: var(--text-hint);">Одна цена покупки</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="price-range-fields">
+                        <div class="edit-product-field">
+                            <label for="edit-price-from">Цена от (₽)</label>
+                            <input type="number" id="edit-price-from" step="0.01" min="0" placeholder="Введите цену от">
+                        </div>
+                        <div class="edit-product-field">
+                            <label for="edit-price-to">Цена до (₽)</label>
+                            <input type="number" id="edit-price-to" step="0.01" min="0" placeholder="Введите цену до">
+                        </div>
+                    </div>
+                    <div id="price-fixed-field" style="display: none;">
+                        <div class="edit-product-field">
+                            <label for="edit-price-fixed">Цена покупки (₽)</label>
+                            <input type="number" id="edit-price-fixed" step="0.01" min="0" placeholder="Введите фиксированную цену">
+                        </div>
+                    </div>
+                    <div class="edit-product-field">
+                        <label for="edit-quantity-from">Количество от</label>
+                        <input type="number" id="edit-quantity-from" step="1" min="0" placeholder="Введите количество от">
+                    </div>
+                    <div class="edit-product-field">
+                        <label for="edit-quantity-unit">Единица измерения</label>
+                        <select id="edit-quantity-unit">
+                            <option value="шт">шт</option>
+                            <option value="кг">кг</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="edit-product-actions">
                     <button id="edit-product-save" class="edit-product-btn save">💾 Сохранить</button>
                     <button id="edit-product-cancel" class="edit-product-btn cancel">❌ Отменить</button>

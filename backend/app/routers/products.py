@@ -143,6 +143,13 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.quantity = db_product.quantity
                 matching.is_sold = db_product.is_sold
                 matching.is_made_to_order = db_product.is_made_to_order
+                matching.is_for_sale = db_product.is_for_sale
+                matching.price_from = db_product.price_from
+                matching.price_to = db_product.price_to
+                matching.price_fixed = db_product.price_fixed
+                matching.price_type = db_product.price_type
+                matching.quantity_from = db_product.quantity_from
+                matching.quantity_unit = db_product.quantity_unit
                 matching.category_id = category_id_for_bot
                 # Обновляем sync_product_id если он не был установлен
                 if not matching.sync_product_id:
@@ -197,6 +204,13 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                         quantity=db_product.quantity,
                         is_sold=db_product.is_sold,
                         is_made_to_order=db_product.is_made_to_order,
+                        is_for_sale=db_product.is_for_sale,
+                        price_from=db_product.price_from,
+                        price_to=db_product.price_to,
+                        price_fixed=db_product.price_fixed,
+                        price_type=db_product.price_type,
+                        quantity_from=db_product.quantity_from,
+                        quantity_unit=db_product.quantity_unit,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -312,6 +326,13 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.quantity = db_product.quantity
                 matching.is_sold = db_product.is_sold
                 matching.is_made_to_order = db_product.is_made_to_order
+                matching.is_for_sale = db_product.is_for_sale
+                matching.price_from = db_product.price_from
+                matching.price_to = db_product.price_to
+                matching.price_fixed = db_product.price_fixed
+                matching.price_type = db_product.price_type
+                matching.quantity_from = db_product.quantity_from
+                matching.quantity_unit = db_product.quantity_unit
                 matching.category_id = category_id_for_bot
                 # Обновляем sync_product_id если он не был установлен
                 if sync_id and not matching.sync_product_id:
@@ -389,6 +410,13 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         quantity=db_product.quantity,
                         is_sold=db_product.is_sold,
                         is_made_to_order=db_product.is_made_to_order,
+                        is_for_sale=db_product.is_for_sale,
+                        price_from=db_product.price_from,
+                        price_to=db_product.price_to,
+                        price_fixed=db_product.price_fixed,
+                        price_type=db_product.price_type,
+                        quantity_from=db_product.quantity_from,
+                        quantity_unit=db_product.quantity_unit,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -511,6 +539,11 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 existing_main.quantity = db_product.quantity
                 existing_main.is_sold = db_product.is_sold
                 existing_main.is_made_to_order = db_product.is_made_to_order
+                existing_main.is_for_sale = db_product.is_for_sale
+                existing_main.price_from = db_product.price_from
+                existing_main.price_to = db_product.price_to
+                existing_main.quantity_from = db_product.quantity_from
+                existing_main.quantity_unit = db_product.quantity_unit
                 existing_main.category_id = category_id_for_main
                 # Устанавливаем sync_product_id если он не был установлен
                 if not existing_main.sync_product_id:
@@ -551,6 +584,13 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     quantity=db_product.quantity,
                     is_sold=db_product.is_sold,
                     is_made_to_order=db_product.is_made_to_order,
+                    is_for_sale=db_product.is_for_sale,
+                    price_from=db_product.price_from,
+                    price_to=db_product.price_to,
+                    price_fixed=db_product.price_fixed,
+                    price_type=db_product.price_type,
+                    quantity_from=db_product.quantity_from,
+                    quantity_unit=db_product.quantity_unit,
                     category_id=category_id_for_main
                 )
                 db.add(new_product)
@@ -615,6 +655,13 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     existing.quantity = db_product.quantity
                     existing.is_sold = db_product.is_sold
                     existing.is_made_to_order = db_product.is_made_to_order
+                    existing.is_for_sale = db_product.is_for_sale
+                    existing.price_from = db_product.price_from
+                    existing.price_to = db_product.price_to
+                    existing.price_fixed = db_product.price_fixed
+                    existing.price_type = db_product.price_type
+                    existing.quantity_from = db_product.quantity_from
+                    existing.quantity_unit = db_product.quantity_unit
                     existing.category_id = category_id_for_bot
                     # Обновляем sync_product_id если он не был установлен
                     if sync_id and not existing.sync_product_id:
@@ -650,6 +697,13 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         quantity=db_product.quantity,
                         is_sold=db_product.is_sold,
                         is_made_to_order=db_product.is_made_to_order,
+                        is_for_sale=db_product.is_for_sale,
+                        price_from=db_product.price_from,
+                        price_to=db_product.price_to,
+                        price_fixed=db_product.price_fixed,
+                        price_type=db_product.price_type,
+                        quantity_from=db_product.quantity_from,
+                        quantity_unit=db_product.quantity_unit,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -710,6 +764,13 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 matching_main.quantity = db_product.quantity
                 matching_main.is_sold = db_product.is_sold
                 matching_main.is_made_to_order = db_product.is_made_to_order
+                matching_main.is_for_sale = db_product.is_for_sale
+                matching_main.price_from = db_product.price_from
+                matching_main.price_to = db_product.price_to
+                matching_main.price_fixed = db_product.price_fixed
+                matching_main.price_type = db_product.price_type
+                matching_main.quantity_from = db_product.quantity_from
+                matching_main.quantity_unit = db_product.quantity_unit
                 matching_main.category_id = category_id_for_main
                 print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
             
@@ -946,6 +1007,11 @@ async def sync_all_products(
                     quantity=main_product.quantity,
                     is_sold=main_product.is_sold,
                     is_made_to_order=main_product.is_made_to_order,
+                    is_for_sale=main_product.is_for_sale,
+                    price_from=main_product.price_from,
+                    price_to=main_product.price_to,
+                    quantity_from=main_product.quantity_from,
+                    quantity_unit=main_product.quantity_unit,
                     category_id=category_id_for_bot
                 )
                 db.add(new_product)
@@ -1012,6 +1078,11 @@ async def sync_all_products(
                     quantity=bot_product.quantity,
                     is_sold=bot_product.is_sold,
                     is_made_to_order=bot_product.is_made_to_order,
+                    is_for_sale=bot_product.is_for_sale,
+                    price_from=bot_product.price_from,
+                    price_to=bot_product.price_to,
+                    quantity_from=bot_product.quantity_from,
+                    quantity_unit=bot_product.quantity_unit,
                     category_id=category_id_for_main
                 )
                 db.add(new_product)
@@ -1094,6 +1165,13 @@ async def sync_all_products(
                         quantity=bot_product.quantity,
                         is_sold=bot_product.is_sold,
                         is_made_to_order=bot_product.is_made_to_order,
+                        is_for_sale=bot_product.is_for_sale,
+                        price_from=bot_product.price_from,
+                        price_to=bot_product.price_to,
+                        price_fixed=bot_product.price_fixed,
+                        price_type=bot_product.price_type,
+                        quantity_from=bot_product.quantity_from,
+                        quantity_unit=bot_product.quantity_unit,
                         category_id=category_id_for_main
                     )
                     db.add(new_main_product)
@@ -1338,6 +1416,13 @@ def get_product_by_id(
         "quantity": product.quantity,
         "is_sold": product.is_sold,
         "is_made_to_order": product.is_made_to_order,
+        "is_for_sale": getattr(product, 'is_for_sale', False),
+        "price_from": getattr(product, 'price_from', None),
+        "price_to": getattr(product, 'price_to', None),
+        "price_fixed": getattr(product, 'price_fixed', None),
+        "price_type": getattr(product, 'price_type', 'range'),
+        "quantity_from": getattr(product, 'quantity_from', None),
+        "quantity_unit": getattr(product, 'quantity_unit', None),
         "has_active_reservation": active_reservation is not None
     }
 
@@ -1424,6 +1509,13 @@ def get_products(
                         quantity=bot_product.quantity,
                         is_sold=bot_product.is_sold,
                         is_made_to_order=bot_product.is_made_to_order,
+                        is_for_sale=bot_product.is_for_sale,
+                        price_from=bot_product.price_from,
+                        price_to=bot_product.price_to,
+                        price_fixed=bot_product.price_fixed,
+                        price_type=bot_product.price_type,
+                        quantity_from=bot_product.quantity_from,
+                        quantity_unit=bot_product.quantity_unit,
                         category_id=category_id_for_main
                     )
                     db.add(new_main_product)
@@ -1492,6 +1584,11 @@ def get_products(
                         quantity=main_product.quantity,
                         is_sold=main_product.is_sold,
                         is_made_to_order=main_product.is_made_to_order,
+                        is_for_sale=main_product.is_for_sale,
+                        price_from=main_product.price_from,
+                        price_to=main_product.price_to,
+                        quantity_from=main_product.quantity_from,
+                        quantity_unit=main_product.quantity_unit,
                         category_id=category_id_for_bot
                     )
                     db.add(new_bot_product)
@@ -1610,6 +1707,13 @@ def get_products(
             "quantity": getattr(prod, 'quantity', 0),
             "is_reserved": has_reservation,
             "is_made_to_order": is_made_to_order,
+            "is_for_sale": getattr(prod, 'is_for_sale', False),
+            "price_from": getattr(prod, 'price_from', None),
+            "price_to": getattr(prod, 'price_to', None),
+            "price_fixed": getattr(prod, 'price_fixed', None),
+            "price_type": getattr(prod, 'price_type', 'range'),
+            "quantity_from": getattr(prod, 'quantity_from', None),
+            "quantity_unit": getattr(prod, 'quantity_unit', None),
             "reservation": reservation_data
         })
     
@@ -2099,6 +2203,49 @@ def update_made_to_order(
         "id": db_product.id,
         "is_made_to_order": bool(db_product.is_made_to_order),  # Явное преобразование в bool
         "message": "Статус 'под заказ' обновлен"
+    }
+
+@router.patch("/{product_id}/update-for-sale")
+def update_for_sale(
+    product_id: int,
+    for_sale_update: schemas.ForSaleUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление функции 'покупка' для товара (без уведомлений)"""
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Обновляем функцию 'покупка'
+    db_product.is_for_sale = bool(for_sale_update.is_for_sale)
+    db_product.price_from = for_sale_update.price_from
+    db_product.price_to = for_sale_update.price_to
+    db_product.price_fixed = for_sale_update.price_fixed
+    db_product.price_type = for_sale_update.price_type if for_sale_update.price_type in ['range', 'fixed'] else 'range'
+    db_product.quantity_from = for_sale_update.quantity_from
+    db_product.quantity_unit = for_sale_update.quantity_unit
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
+    db.commit()
+    db.refresh(db_product)
+    
+    return {
+        "id": db_product.id,
+        "is_for_sale": bool(db_product.is_for_sale),
+        "price_from": db_product.price_from,
+        "price_to": db_product.price_to,
+        "price_fixed": db_product.price_fixed,
+        "price_type": db_product.price_type,
+        "quantity_from": db_product.quantity_from,
+        "quantity_unit": db_product.quantity_unit,
+        "message": "Функция 'покупка' обновлена"
     }
 
 @router.patch("/bulk-update-made-to-order")
