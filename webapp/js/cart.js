@@ -624,7 +624,9 @@ export async function loadOrders() {
                 
                 // Показываем кнопку отмены только для активных заказов (не завершенных и не отмененных)
                 const cancelButton = (!order.is_completed && !order.is_cancelled) 
-                    ? `<button class="cancel-reservation-btn-small" onclick="window.cancelOrderFromCart(${order.id})" title="Отменить заказ">❌</button>`
+                    ? `<div class="cart-item-actions">
+                        <button class="cancel-order-btn" onclick="window.cancelOrderFromCart(${order.id})" title="Отменить заказ">Отмена</button>
+                       </div>`
                     : '';
                 
                 orderItem.innerHTML = `

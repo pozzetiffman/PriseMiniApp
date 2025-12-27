@@ -232,7 +232,7 @@ header h1 {
 .cart-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: stretch;
     padding: 15px;
     margin-bottom: 10px;
     background: var(--bg-glass);
@@ -316,6 +316,38 @@ header h1 {
     background: rgba(255, 59, 48, 0.3);
     border-color: rgba(255, 59, 48, 0.6);
     transform: scale(1.1);
+}
+
+/* Контейнер для действий с заказом (кнопка отмены) */
+.cart-item-actions {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+
+/* Кнопка отмены заказа - компактная, в нижней части справа */
+.cancel-order-btn {
+    padding: 4px 10px;
+    background: rgba(255, 59, 48, 0.15);
+    border: 1px solid rgba(255, 59, 48, 0.3);
+    border-radius: 6px;
+    color: #ff3b30;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.cancel-order-btn:hover {
+    background: rgba(255, 59, 48, 0.25);
+    border-color: rgba(255, 59, 48, 0.5);
+}
+
+.cancel-order-btn:active {
+    transform: scale(0.95);
+    background: rgba(255, 59, 48, 0.3);
 }
 
 .scroll-x {

@@ -27,7 +27,10 @@ if webapp_dir.exists():
     # Раздаем статические файлы webapp (CSS, JS, изображения)
     app.mount("/css", StaticFiles(directory=str(webapp_dir / "css")), name="css")
     app.mount("/js", StaticFiles(directory=str(webapp_dir / "js")), name="js")
-    app.mount("/assets", StaticFiles(directory=str(webapp_dir / "assets")), name="assets")
+    # Монтируем assets только если директория существует
+    assets_dir = webapp_dir / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
     
     # Главная страница WebApp
     @app.get("/")
