@@ -44,6 +44,7 @@ class NameDescriptionUpdate(BaseModel):
 
 class QuantityUpdate(BaseModel):
     quantity: int
+    quantity_unit: Optional[str] = None
 
 class MadeToOrderUpdate(BaseModel):
     is_made_to_order: bool

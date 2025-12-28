@@ -1,5 +1,5 @@
 // Модуль админки магазина
-import { getShopSettings, updateShopSettings, getSoldProductsAPI, getShopOrdersAPI, completeOrderAPI, cancelOrderAPI, deleteOrderAPI, deleteOrdersAPI, getVisitStatsAPI, getVisitsListAPI, getProductViewStatsAPI, deleteSoldProductAPI, deleteSoldProductsAPI, bulkUpdateAllProductsMadeToOrderAPI, fetchProducts } from './api.js';
+import { API_BASE, getShopSettings, updateShopSettings, getSoldProductsAPI, getShopOrdersAPI, completeOrderAPI, cancelOrderAPI, deleteOrderAPI, deleteOrdersAPI, getVisitStatsAPI, getVisitsListAPI, getProductViewStatsAPI, deleteSoldProductAPI, deleteSoldProductsAPI, bulkUpdateAllProductsMadeToOrderAPI, fetchProducts, getAllPurchasesAPI, updatePurchaseStatusAPI } from './api.js';
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -99,6 +99,10 @@ function createAdminModal() {
                     <span style="font-size: 18px;">📊</span>
                     <span>Статистика</span>
                 </button>
+                <button class="admin-tab" data-tab="purchases">
+                    <span style="font-size: 18px;">💰</span>
+                    <span>Покупки</span>
+                </button>
             </div>
             <div class="admin-modal-body">
                 <div id="admin-tab-settings" class="admin-tab-content active">
@@ -151,6 +155,11 @@ function createAdminModal() {
                 <div id="admin-tab-stats" class="admin-tab-content">
                     <div id="stats-content" class="stats-content">
                         <p class="loading">Загрузка статистики...</p>
+                    </div>
+                </div>
+                <div id="admin-tab-purchases" class="admin-tab-content">
+                    <div id="purchases-list" class="purchases-list">
+                        <p class="loading">Загрузка заявок на покупку...</p>
                     </div>
                 </div>
             </div>
@@ -473,6 +482,11 @@ function switchAdminTab(tabName) {
     // Если переключились на вкладку "Статистика", загружаем данные
     if (tabName === 'stats') {
         loadStats();
+    }
+    
+    // Если переключились на вкладку "Покупки", загружаем данные
+    if (tabName === 'purchases') {
+        loadPurchases();
     }
 }
 
@@ -1432,6 +1446,287 @@ async function loadStats() {
             errorMessage = error.message;
         }
         statsContent.innerHTML = `<p class="loading">Ошибка загрузки: ${errorMessage}</p>`;
+    }
+}
+
+// Загрузка покупок
+async function loadPurchases() {
+    const purchasesList = document.getElementById('purchases-list');
+    if (!purchasesList) return;
+    
+    purchasesList.innerHTML = '<p class="loading">Загрузка заявок на покупку...</p>';
+    
+    try {
+        // Получаем shop_owner_id из глобального appContext
+        let shopOwnerId = null;
+        
+        if (typeof window.getAppContext === 'function') {
+            const context = window.getAppContext();
+            if (context && context.shop_owner_id) {
+                shopOwnerId = context.shop_owner_id;
+            }
+        }
+        
+        if (!shopOwnerId) {
+            purchasesList.innerHTML = '<p class="loading">Ошибка: не удалось определить владельца магазина</p>';
+            return;
+        }
+        
+        const purchases = await getAllPurchasesAPI(shopOwnerId);
+        
+        if (!purchases || purchases.length === 0) {
+            purchasesList.innerHTML = '<p class="loading">Заявок на покупку пока нет</p>';
+            return;
+        }
+        
+        // Рендерим список покупок
+        purchasesList.innerHTML = '';
+        
+        purchases.forEach(purchase => {
+            const product = purchase.product;
+            if (!product) {
+                console.warn('⚠️ Purchase missing product:', purchase.id);
+                return;
+            }
+            
+            const purchaseItem = document.createElement('div');
+            purchaseItem.className = 'order-item';
+            purchaseItem.style.cssText = `
+                background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+                backdrop-filter: blur(20px);
+                border-radius: 12px;
+                padding: 14px 16px;
+                margin-bottom: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            `;
+            
+            // Заголовок с названием товара
+            const headerDiv = document.createElement('div');
+            headerDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px;';
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1;';
+            nameDiv.textContent = product.name || `Товар #${purchase.product_id}`;
+            
+            headerDiv.appendChild(nameDiv);
+            
+            // Информация о покупке
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px; flex: 1;';
+            
+            // Статус
+            const statusDiv = document.createElement('div');
+            statusDiv.style.cssText = 'font-size: 14px; font-weight: 600;';
+            if (purchase.is_completed) {
+                statusDiv.textContent = '✅ Выполнена';
+                statusDiv.style.color = '#4CAF50';
+            } else if (purchase.is_cancelled) {
+                statusDiv.textContent = '❌ Отменена';
+                statusDiv.style.color = '#F44336';
+            } else {
+                statusDiv.textContent = '⏳ Ожидание';
+                statusDiv.style.color = '#FFA500';
+            }
+            
+            // Дата создания
+            const dateDiv = document.createElement('div');
+            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color);';
+            if (purchase.created_at) {
+                const purchaseDate = new Date(purchase.created_at);
+                dateDiv.textContent = `Дата заявки: ${purchaseDate.toLocaleDateString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}`;
+            }
+            
+            infoDiv.appendChild(statusDiv);
+            infoDiv.appendChild(dateDiv);
+            
+            // Детали заявки
+            const detailsList = [];
+            
+            if (purchase.last_name || purchase.first_name || purchase.middle_name) {
+                const fullName = `${purchase.last_name || ''} ${purchase.first_name || ''} ${purchase.middle_name || ''}`.trim();
+                if (fullName) {
+                    detailsList.push(`<div style="margin-bottom: 6px;"><strong>👤 Имя:</strong> ${fullName}</div>`);
+                }
+            }
+            
+            if (purchase.phone_number) {
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📱 Телефон:</strong> ${purchase.phone_number}</div>`);
+            }
+            
+            if (purchase.city) {
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📍 Город:</strong> ${purchase.city}</div>`);
+            }
+            
+            if (purchase.address) {
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>🏠 Адрес:</strong> ${purchase.address}</div>`);
+            }
+            
+            if (purchase.payment_method) {
+                const paymentText = purchase.payment_method === 'cash' ? '💵 Наличные' : '🏦 Банковский перевод';
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>💰 Форма оплаты:</strong> ${paymentText}</div>`);
+            }
+            
+            if (purchase.organization) {
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>🏢 Организация:</strong> ${purchase.organization}</div>`);
+            }
+            
+            if (purchase.notes) {
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📝 Примечание:</strong> ${purchase.notes}</div>`);
+            }
+            
+            // Превью фото
+            if (purchase.images_urls && purchase.images_urls.length > 0) {
+                const imagesHtml = purchase.images_urls.map(imgUrl => {
+                    const fullUrl = imgUrl.startsWith('http') ? imgUrl : `${API_BASE}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`;
+                    return `<img src="${fullUrl}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; margin: 4px;" onerror="this.style.display='none'">`;
+                }).join('');
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📷 Фото:</strong><div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">${imagesHtml}</div></div>`);
+            }
+            
+            // Превью видео
+            if (purchase.video_url) {
+                const videoUrl = purchase.video_url.startsWith('http') ? purchase.video_url : `${API_BASE}${purchase.video_url.startsWith('/') ? '' : '/'}${purchase.video_url}`;
+                detailsList.push(`<div style="margin-bottom: 6px;"><strong>🎥 Видео:</strong><br><video src="${videoUrl}" controls style="max-width: 200px; max-height: 150px; border-radius: 8px; margin-top: 4px;"></video></div>`);
+            }
+            
+            if (detailsList.length > 0) {
+                const detailsDiv = document.createElement('div');
+                detailsDiv.style.cssText = 'margin-top: 12px; padding: 12px; background: rgba(90, 200, 250, 0.1); border-radius: 8px; font-size: 13px; color: var(--tg-theme-text-color); border: 1px solid rgba(90, 200, 250, 0.2);';
+                detailsDiv.innerHTML = '<div style="font-weight: 600; margin-bottom: 8px; color: var(--tg-theme-button-color, #5ac8fa);">📋 Детали заявки:</div>' + detailsList.join('');
+                infoDiv.appendChild(detailsDiv);
+            }
+            
+            // Кнопки действий (только для невыполненных покупок)
+            const actionsDiv = document.createElement('div');
+            actionsDiv.style.cssText = 'display: flex; gap: 6px; margin-top: 6px; justify-content: flex-start; flex-wrap: wrap; max-width: 100%;';
+            
+            if (!purchase.is_completed && !purchase.is_cancelled) {
+                // Кнопка "Выполнить"
+                const completeBtn = document.createElement('button');
+                completeBtn.className = 'reserve-btn';
+                completeBtn.style.cssText = `
+                    background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(76, 175, 80, 0.1) 100%);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    color: rgba(255, 255, 255, 0.95);
+                    padding: 5px 10px;
+                    font-size: 11px;
+                    font-weight: 600;
+                    border-radius: 8px;
+                    white-space: nowrap;
+                    flex: none;
+                    line-height: 1.2;
+                    max-width: fit-content;
+                    box-sizing: border-box;
+                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                                0 2px 8px rgba(76, 175, 80, 0.2);
+                    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    cursor: pointer;
+                `;
+                completeBtn.textContent = '✅ Выполнить';
+                completeBtn.onmouseenter = function() {
+                    this.style.transform = 'translateY(-1px)';
+                    this.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 3px 10px rgba(76, 175, 80, 0.3)';
+                };
+                completeBtn.onmouseleave = function() {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 2px 8px rgba(76, 175, 80, 0.2)';
+                };
+                completeBtn.onclick = async () => {
+                    if (confirm('Выполнить эту заявку на покупку?')) {
+                        try {
+                            await updatePurchaseStatusAPI(purchase.id, shopOwnerId, {
+                                is_completed: true,
+                                status: 'completed'
+                            });
+                            showNotification('Заявка на покупку выполнена');
+                            loadPurchases(); // Перезагружаем список
+                        } catch (error) {
+                            alert('Ошибка: ' + error.message);
+                        }
+                    }
+                };
+                
+                // Кнопка "Отменить"
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'reserve-btn';
+                cancelBtn.style.cssText = `
+                    background: linear-gradient(135deg, rgba(244, 67, 54, 0.2) 0%, rgba(244, 67, 54, 0.1) 100%);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    color: rgba(255, 255, 255, 0.95);
+                    padding: 5px 10px;
+                    font-size: 11px;
+                    font-weight: 600;
+                    border-radius: 8px;
+                    white-space: nowrap;
+                    flex: none;
+                    line-height: 1.2;
+                    max-width: fit-content;
+                    box-sizing: border-box;
+                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
+                                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                                0 2px 8px rgba(244, 67, 54, 0.2);
+                    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    cursor: pointer;
+                `;
+                cancelBtn.textContent = '❌ Отменить';
+                cancelBtn.onmouseenter = function() {
+                    this.style.transform = 'translateY(-1px)';
+                    this.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 3px 10px rgba(244, 67, 54, 0.3)';
+                };
+                cancelBtn.onmouseleave = function() {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 2px 8px rgba(244, 67, 54, 0.2)';
+                };
+                cancelBtn.onclick = async () => {
+                    if (confirm('Отменить эту заявку на покупку?')) {
+                        try {
+                            await updatePurchaseStatusAPI(purchase.id, shopOwnerId, {
+                                is_cancelled: true,
+                                status: 'cancelled'
+                            });
+                            showNotification('Заявка на покупку отменена');
+                            loadPurchases(); // Перезагружаем список
+                        } catch (error) {
+                            alert('Ошибка: ' + error.message);
+                        }
+                    }
+                };
+                
+                actionsDiv.appendChild(completeBtn);
+                actionsDiv.appendChild(cancelBtn);
+            }
+            
+            purchaseItem.appendChild(headerDiv);
+            purchaseItem.appendChild(infoDiv);
+            if (actionsDiv.children.length > 0) {
+                purchaseItem.appendChild(actionsDiv);
+            }
+            
+            purchasesList.appendChild(purchaseItem);
+        });
+    } catch (error) {
+        console.error('❌ Error loading purchases:', error);
+        let errorMessage = 'Ошибка загрузки заявок на покупку';
+        if (error.message) {
+            errorMessage = error.message;
+        }
+        purchasesList.innerHTML = `<p class="loading">Ошибка загрузки: ${errorMessage}</p>`;
     }
 }
 

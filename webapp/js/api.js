@@ -370,16 +370,19 @@ export async function updateProductNameDescriptionAPI(productId, shopOwnerId, na
 }
 
 // Обновление количества товара (без уведомлений)
-export async function updateProductQuantityAPI(productId, shopOwnerId, quantity) {
+export async function updateProductQuantityAPI(productId, shopOwnerId, quantity, quantityUnit = null) {
     const url = `${API_BASE}/api/products/${productId}/update-quantity?user_id=${shopOwnerId}`;
-    console.log(`Updating product quantity: productId=${productId}, quantity=${quantity}`);
+    console.log(`Updating product quantity: productId=${productId}, quantity=${quantity}, quantityUnit=${quantityUnit}`);
+    
+    const body = { quantity: quantity };
+    if (quantityUnit !== null) {
+        body.quantity_unit = quantityUnit;
+    }
     
     const response = await fetch(url, {
         method: 'PATCH',
         headers: getBaseHeaders(),
-        body: JSON.stringify({
-            quantity: quantity
-        })
+        body: JSON.stringify(body)
     });
     
     const responseText = await response.text();
@@ -910,6 +913,125 @@ export async function deleteOrdersAPI(orderIds) {
     
     if (!response.ok) {
         let errorMessage = 'Не удалось удалить заказы';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Создание заявки на покупку
+export async function createPurchaseAPI(productId, formData) {
+    const url = `${API_BASE}/api/purchases/`;
+    console.log(`Creating purchase for product ${productId}`);
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-Telegram-Init-Data': getInitData(),
+            'ngrok-skip-browser-warning': '69420'
+        },
+        body: formData
+    });
+    
+    const responseText = await response.text();
+    console.log(`Create purchase response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось создать заявку на покупку';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Получение моих покупок
+export async function getMyPurchasesAPI() {
+    const url = `${API_BASE}/api/purchases/my`;
+    console.log(`Getting my purchases`);
+    
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'X-Telegram-Init-Data': getInitData(),
+            'ngrok-skip-browser-warning': '69420'
+        }
+    });
+    
+    const responseText = await response.text();
+    console.log(`Get my purchases response: status=${response.status}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось загрузить покупки';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Получение всех покупок для админа
+export async function getAllPurchasesAPI(shopOwnerId) {
+    const url = `${API_BASE}/api/purchases/all?user_id=${shopOwnerId}`;
+    console.log(`Getting all purchases for shop owner ${shopOwnerId}`);
+    
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'X-Telegram-Init-Data': getInitData(),
+            'ngrok-skip-browser-warning': '69420'
+        }
+    });
+    
+    const responseText = await response.text();
+    console.log(`Get all purchases response: status=${response.status}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось загрузить покупки';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Обновление статуса покупки (для владельца магазина)
+export async function updatePurchaseStatusAPI(purchaseId, shopOwnerId, statusData) {
+    const url = `${API_BASE}/api/purchases/${purchaseId}?user_id=${shopOwnerId}`;
+    console.log(`Updating purchase status: purchaseId=${purchaseId}, shopOwnerId=${shopOwnerId}`, statusData);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify(statusData)
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update purchase status response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить статус покупки';
         try {
             const errorData = JSON.parse(responseText);
             errorMessage = errorData.detail || errorMessage;

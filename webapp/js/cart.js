@@ -1,5 +1,5 @@
 // Модуль корзины
-import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, cancelOrderAPI } from './api.js';
+import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, cancelOrderAPI, getMyPurchasesAPI } from './api.js';
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -51,9 +51,19 @@ export async function updateCartUI() {
             activeOrders = [];
         }
         
-        // Общее количество элементов в корзине (резервации + заказы)
-        const totalItems = activeReservations.length + (activeOrders ? activeOrders.length : 0);
-        console.log(`🛒 Total cart items: ${totalItems} (${activeReservations.length} reservations + ${activeOrders ? activeOrders.length : 0} orders)`);
+        // Также проверяем покупки
+        let activePurchases = [];
+        try {
+            activePurchases = await getMyPurchasesAPI();
+            console.log(`🛒 Got ${activePurchases ? activePurchases.length : 0} purchases from server`);
+        } catch (e) {
+            console.warn('⚠️ Failed to fetch purchases for cart UI:', e);
+            activePurchases = [];
+        }
+        
+        // Общее количество элементов в корзине (резервации + заказы + покупки)
+        const totalItems = activeReservations.length + (activeOrders ? activeOrders.length : 0) + (activePurchases ? activePurchases.length : 0);
+        console.log(`🛒 Total cart items: ${totalItems} (${activeReservations.length} reservations + ${activeOrders ? activeOrders.length : 0} orders + ${activePurchases ? activePurchases.length : 0} purchases)`);
         
         // Удаляем дебаг-индикатор, если он был создан ранее
         const existingDebugIndicator = document.getElementById('cart-debug-indicator');
@@ -61,9 +71,9 @@ export async function updateCartUI() {
             existingDebugIndicator.remove();
         }
         
-        // Показываем кнопку корзины, если есть резервации ИЛИ заказы
+        // Показываем кнопку корзины, если есть резервации ИЛИ заказы ИЛИ покупки
         if (totalItems > 0) {
-            console.log(`🛒🛒🛒 ПОКАЗЫВАЕМ КОРЗИНУ! Найдено ${activeReservations.length} активных резерваций и ${activeOrders ? activeOrders.length : 0} заказов`);
+            console.log(`🛒🛒🛒 ПОКАЗЫВАЕМ КОРЗИНУ! Найдено ${activeReservations.length} активных резерваций, ${activeOrders ? activeOrders.length : 0} заказов и ${activePurchases ? activePurchases.length : 0} покупок`);
             console.log(`🛒🛒🛒 Резервации:`, activeReservations.map(r => ({
                 id: r.id,
                 product_id: r.product_id,
@@ -128,7 +138,7 @@ export async function updateCartUI() {
                 }
             }, 100);
         } else {
-            console.log(`❌ Cart button hidden - no active reservations or orders (found ${activeReservations.length} reservations, ${activeOrders ? activeOrders.length : 0} orders)`);
+            console.log(`❌ Cart button hidden - no active reservations, orders or purchases (found ${activeReservations.length} reservations, ${activeOrders ? activeOrders.length : 0} orders, ${activePurchases ? activePurchases.length : 0} purchases)`);
             cartButton.style.display = 'none';
         }
     } catch (e) {
@@ -460,13 +470,14 @@ function switchCartTab(tabName) {
     const tabs = document.querySelectorAll('.cart-tab');
     const cartItems = document.getElementById('cart-items');
     const ordersItems = document.getElementById('orders-items');
+    const purchasesItems = document.getElementById('purchases-items');
     
     if (!tabs || tabs.length === 0) {
         console.warn('⚠️ Cart tabs not found');
         return;
     }
     
-    if (!cartItems || !ordersItems) {
+    if (!cartItems || !ordersItems || !purchasesItems) {
         console.warn('⚠️ Cart items containers not found');
         return;
     }
@@ -482,13 +493,21 @@ function switchCartTab(tabName) {
     if (tabName === 'reservations') {
         cartItems.style.display = 'block';
         ordersItems.style.display = 'none';
+        purchasesItems.style.display = 'none';
         console.log('🛒 Loading reservations...');
         loadCart();
     } else if (tabName === 'orders') {
         cartItems.style.display = 'none';
         ordersItems.style.display = 'block';
+        purchasesItems.style.display = 'none';
         console.log('🛒 Loading orders...');
         loadOrders();
+    } else if (tabName === 'purchases') {
+        cartItems.style.display = 'none';
+        ordersItems.style.display = 'none';
+        purchasesItems.style.display = 'block';
+        console.log('🛒 Loading purchases...');
+        loadPurchases();
     }
 }
 
@@ -651,6 +670,179 @@ export async function loadOrders() {
     } catch (error) {
         console.error('❌ Error loading orders:', error);
         ordersItems.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
+    }
+}
+
+// Загрузка покупок
+export async function loadPurchases() {
+    console.log('🛒 loadPurchases: Starting...');
+    const purchasesItems = document.getElementById('purchases-items');
+    if (!purchasesItems) {
+        console.error('❌ loadPurchases: purchases-items element not found');
+        return;
+    }
+    
+    purchasesItems.innerHTML = '<p class="loading">Загрузка заявок на покупку...</p>';
+    
+    try {
+        console.log('🛒 loadPurchases: Fetching purchases from API...');
+        const purchases = await getMyPurchasesAPI();
+        console.log('🛒 loadPurchases: Got purchases:', purchases ? purchases.length : 0, purchases);
+        
+        if (!purchases || purchases.length === 0) {
+            purchasesItems.innerHTML = '<p class="loading">У вас нет заявок на покупку</p>';
+            return;
+        }
+        
+        // Рендерим список покупок
+        purchasesItems.innerHTML = '';
+        for (const purchase of purchases) {
+            try {
+                // Используем информацию о товаре из purchase.product (если есть)
+                const product = purchase.product;
+                if (!product) {
+                    console.warn('🛒 loadPurchases: Purchase missing product:', purchase.id);
+                    continue;
+                }
+                
+                // Определяем URL изображения
+                let imageUrl = null;
+                if (product.images_urls && product.images_urls.length > 0) {
+                    const firstImage = product.images_urls[0];
+                    imageUrl = firstImage.startsWith('http') 
+                        ? firstImage 
+                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
+                } else if (product.image_url) {
+                    imageUrl = product.image_url.startsWith('http') 
+                        ? product.image_url 
+                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
+                }
+                
+                const finalPrice = product.discount > 0 
+                    ? Math.round(product.price * (1 - product.discount / 100)) 
+                    : product.price;
+                
+                const purchaseItem = document.createElement('div');
+                purchaseItem.className = 'cart-item';
+                
+                // Создаем контейнер для изображения
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'cart-item-image-container';
+                
+                if (imageUrl) {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '⏳';
+                    imageContainer.appendChild(placeholder);
+                    
+                    fetch(imageUrl, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        const img = document.createElement('img');
+                        img.src = blobUrl;
+                        img.alt = product.name;
+                        img.className = 'cart-item-image';
+                        img.onerror = () => {
+                            URL.revokeObjectURL(blobUrl);
+                            placeholder.textContent = '📦';
+                            placeholder.style.display = 'flex';
+                            if (img.parentNode) {
+                                img.remove();
+                            }
+                        };
+                        img.onload = () => {
+                            if (placeholder.parentNode) {
+                                placeholder.remove();
+                            }
+                        };
+                        imageContainer.appendChild(img);
+                    })
+                    .catch(error => {
+                        console.error('[PURCHASES IMG] Fetch error:', error);
+                        placeholder.textContent = '📦';
+                    });
+                } else {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '📦';
+                    imageContainer.appendChild(placeholder);
+                }
+                
+                // Статус покупки
+                let statusText = '';
+                let statusColor = '';
+                if (purchase.is_completed) {
+                    statusText = '✅ Выполнена';
+                    statusColor = '#4CAF50';
+                } else if (purchase.is_cancelled) {
+                    statusText = '❌ Отменена';
+                    statusColor = '#F44336';
+                } else {
+                    statusText = '⏳ Ожидание';
+                    statusColor = '#FFA500';
+                }
+                
+                // Формируем информацию о заявке
+                let purchaseInfo = '';
+                if (purchase.last_name || purchase.first_name || purchase.middle_name) {
+                    const nameParts = [purchase.last_name, purchase.first_name, purchase.middle_name].filter(Boolean);
+                    if (nameParts.length > 0) {
+                        purchaseInfo += `<p style="font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px;">👤 ${nameParts.join(' ')}</p>`;
+                    }
+                }
+                if (purchase.phone_number) {
+                    purchaseInfo += `<p style="font-size: 13px; color: var(--tg-theme-hint-color);">📱 ${purchase.phone_number}</p>`;
+                }
+                if (purchase.city) {
+                    purchaseInfo += `<p style="font-size: 13px; color: var(--tg-theme-hint-color);">📍 ${purchase.city}</p>`;
+                }
+                
+                // Дата создания
+                let dateText = '';
+                if (purchase.created_at) {
+                    const purchaseDate = new Date(purchase.created_at);
+                    dateText = purchaseDate.toLocaleDateString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+                
+                purchaseItem.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3>${product.name}</h3>
+                        <p class="cart-item-price">${finalPrice} ₽</p>
+                        <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
+                        ${purchaseInfo}
+                        ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
+                    </div>
+                `;
+                
+                purchaseItem.insertBefore(imageContainer, purchaseItem.firstChild);
+                purchasesItems.appendChild(purchaseItem);
+            } catch (e) {
+                console.error('❌ Error loading purchase item:', e);
+            }
+        }
+        
+        if (purchasesItems.children.length === 0) {
+            purchasesItems.innerHTML = '<p class="loading">Не удалось загрузить заявки на покупку</p>';
+        }
+    } catch (error) {
+        console.error('❌ Error loading purchases:', error);
+        purchasesItems.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
     }
 }
 

@@ -160,22 +160,68 @@
         </div>
     </div>
     
-    <!-- Модальное окно для продажи товара -->
-    <div id="sell-modal" class="modal">
+    <!-- Модальное окно для покупки товара -->
+    <div id="purchase-modal" class="modal">
         <div class="modal-content reservation-modal-content">
-            <span class="modal-close sell-close">&times;</span>
-            <h2 class="reservation-title">✅ Продать товар</h2>
-            <div class="order-form">
-                <div style="margin-bottom: 12px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="sell-all-checkbox" style="width: 18px; height: 18px; cursor: pointer;">
-                        <span style="font-size: 16px; color: var(--tg-theme-text-color);">Продать все</span>
-                    </label>
+            <span class="modal-close purchase-close">&times;</span>
+            <h2 class="reservation-title">🛒 Продать товар</h2>
+            <div class="order-form" style="max-height: 80vh; overflow-y: auto;">
+                <div class="order-form-field">
+                    <label for="purchase-last-name">Фамилия *</label>
+                    <input type="text" id="purchase-last-name" placeholder="Введите фамилию" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
                 </div>
-                <label for="sell-quantity">Количество:</label>
-                <input type="number" id="sell-quantity" min="1" value="1" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                <div id="sell-quantity-info" style="margin-top: 8px; font-size: 14px; color: var(--tg-theme-hint-color, #999);"></div>
-                <button id="sell-submit" class="reserve-btn" style="width: 100%; margin-top: 12px;">✅ Продать</button>
+                <div class="order-form-field">
+                    <label for="purchase-first-name">Имя *</label>
+                    <input type="text" id="purchase-first-name" placeholder="Введите имя" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="purchase-middle-name">Отчество</label>
+                    <input type="text" id="purchase-middle-name" placeholder="Введите отчество" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="purchase-phone">Номер телефона *</label>
+                    <input type="tel" id="purchase-phone" placeholder="+7 (999) 999-99-99" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="purchase-city">Город *</label>
+                    <input type="text" id="purchase-city" placeholder="Введите город" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="purchase-address">Адрес *</label>
+                    <textarea id="purchase-address" rows="3" placeholder="Введите адрес" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical;"></textarea>
+                </div>
+                <div class="order-form-field">
+                    <label for="purchase-notes">Примечание к покупке</label>
+                    <textarea id="purchase-notes" rows="3" placeholder="Дополнительная информация о товаре" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical;"></textarea>
+                </div>
+                <div class="order-form-field">
+                    <label>Форма оплаты *</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 8px; background: var(--bg-glass);">
+                            <input type="radio" name="purchase-payment" value="cash" required style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>Наличными</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 8px; background: var(--bg-glass);">
+                            <input type="radio" name="purchase-payment" value="bank_transfer" required style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>Безналичными</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="order-form-field">
+                    <label for="purchase-organization">Организация (если есть)</label>
+                    <input type="text" id="purchase-organization" placeholder="Название организации" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label>Фото (до 5 шт)</label>
+                    <input type="file" id="purchase-images" accept="image/*" multiple style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    <div id="purchase-images-preview" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                </div>
+                <div class="order-form-field">
+                    <label>Видео (1 шт)</label>
+                    <input type="file" id="purchase-video" accept="video/*" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    <div id="purchase-video-preview" style="margin-top: 8px;"></div>
+                </div>
+                <button id="purchase-submit" class="reserve-btn" style="width: 100%; margin-top: 12px; background: rgba(255, 149, 0, 0.95);">✅ Отправить заявку</button>
             </div>
         </div>
     </div>
@@ -188,12 +234,16 @@
             <div class="cart-tabs">
                 <button class="cart-tab active" data-tab="reservations">🔒 Резервации</button>
                 <button class="cart-tab" data-tab="orders">🛒 Заказы</button>
+                <button class="cart-tab" data-tab="purchases">💰 Покупки</button>
             </div>
             <div id="cart-items" class="cart-items">
                 <!-- Зарезервированные товары будут здесь -->
             </div>
             <div id="orders-items" class="cart-items" style="display: none;">
                 <!-- Заказанные товары будут здесь -->
+            </div>
+            <div id="purchases-items" class="cart-items" style="display: none;">
+                <!-- Заявки на покупку будут здесь -->
             </div>
         </div>
     </div>
@@ -221,8 +271,23 @@
                     <input type="number" id="edit-discount" step="0.1" min="0" max="100" placeholder="Введите скидку">
                 </div>
                 <div class="edit-product-field">
-                    <label for="edit-quantity">Количество товара (шт.)</label>
+                    <label for="edit-quantity">Количество товара</label>
                     <input type="number" id="edit-quantity" step="1" min="0" placeholder="Введите количество">
+                </div>
+                <div class="edit-product-field">
+                    <label for="edit-quantity-unit-general">Единица измерения</label>
+                    <select id="edit-quantity-unit-general">
+                        <option value="шт">шт (штуки)</option>
+                        <option value="кг">кг (килограммы)</option>
+                        <option value="г">г (граммы)</option>
+                        <option value="л">л (литры)</option>
+                        <option value="мл">мл (миллилитры)</option>
+                        <option value="м">м (метры)</option>
+                        <option value="см">см (сантиметры)</option>
+                        <option value="м²">м² (квадратные метры)</option>
+                        <option value="м³">м³ (кубические метры)</option>
+                        <option value="упак">упак (упаковки)</option>
+                    </select>
                 </div>
                 <div class="edit-product-field">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -253,14 +318,14 @@
                         <label style="margin-bottom: 8px; display: block;">Тип цены</label>
                         <div style="display: flex; flex-direction: column; gap: 8px;">
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="radio" name="price-type" id="edit-price-type-range" value="range" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <input type="radio" name="price-type" id="edit-price-type-range" value="range" checked style="display: none;">
                                 <div>
                                     <div style="font-weight: 500;">Цена от и до</div>
                                     <div style="font-size: 12px; color: var(--text-hint);">Диапазон цен</div>
                                 </div>
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="radio" name="price-type" id="edit-price-type-fixed" value="fixed" style="width: 18px; height: 18px; cursor: pointer;">
+                                <input type="radio" name="price-type" id="edit-price-type-fixed" value="fixed" style="display: none;">
                                 <div>
                                     <div style="font-weight: 500;">Фиксированная цена</div>
                                     <div style="font-size: 12px; color: var(--text-hint);">Одна цена покупки</div>
@@ -291,8 +356,16 @@
                     <div class="edit-product-field">
                         <label for="edit-quantity-unit">Единица измерения</label>
                         <select id="edit-quantity-unit">
-                            <option value="шт">шт</option>
-                            <option value="кг">кг</option>
+                            <option value="шт">шт (штуки)</option>
+                            <option value="кг">кг (килограммы)</option>
+                            <option value="г">г (граммы)</option>
+                            <option value="л">л (литры)</option>
+                            <option value="мл">мл (миллилитры)</option>
+                            <option value="м">м (метры)</option>
+                            <option value="см">см (сантиметры)</option>
+                            <option value="м²">м² (квадратные метры)</option>
+                            <option value="м³">м³ (кубические метры)</option>
+                            <option value="упак">упак (упаковки)</option>
                         </select>
                     </div>
                 </div>

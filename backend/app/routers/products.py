@@ -2155,8 +2155,10 @@ def update_quantity(
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Обновляем количество
+    # Обновляем количество и единицу измерения
     db_product.quantity = quantity_update.quantity
+    if quantity_update.quantity_unit is not None:
+        db_product.quantity_unit = quantity_update.quantity_unit
     db.flush()
     
     # Синхронизируем обновление товара во все боты

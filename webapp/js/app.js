@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelOrderAPI, cancelReservationAPI, createOrderAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductForSaleAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
+import { API_BASE, cancelOrderAPI, cancelReservationAPI, createOrderAPI, createPurchaseAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductForSaleAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
 import { initCart, loadCart, loadOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -972,6 +972,7 @@ function renderProducts(products) {
             quantityBadge = document.createElement('div');
             quantityBadge.className = 'product-quantity-badge';
             const quantity = prod.quantity;
+            const quantityUnit = prod.quantity_unit || 'шт';
             if (quantity > 0) {
                 // Проверяем активные резервации
                 const activeReservationsCount = prod.reservation && prod.reservation.active_count ? prod.reservation.active_count : 0;
@@ -980,11 +981,11 @@ function renderProducts(products) {
                 // Если quantity_enabled включен, показываем количество с учетом резерваций
                 if (quantityEnabled) {
                     if (activeReservationsCount > 0) {
-                        // Если есть резервации, показываем "Доступно: X из Y"
-                        quantityBadge.textContent = `Доступно: ${availableCount} из ${quantity}`;
+                        // Если есть резервации, показываем "Доступно: X из Y единица"
+                        quantityBadge.textContent = `Доступно: ${availableCount} из ${quantity} ${quantityUnit}`;
                     } else {
-                        // Если резерваций нет, показываем просто "В наличии: Y"
-                        quantityBadge.textContent = `В наличии: ${quantity}`;
+                        // Если резерваций нет, показываем просто "В наличии: Y единица"
+                        quantityBadge.textContent = `В наличии: ${quantity} ${quantityUnit}`;
                     }
                 } else {
                     // Если quantity_enabled выключен, показываем просто "В наличии"
@@ -1528,6 +1529,8 @@ function showProductModal(prod, finalPrice, fullImages) {
             modalQuantityDiv.textContent = '📦 Под заказ';
         } else if (prod.quantity !== undefined && prod.quantity !== null) {
             modalQuantityDiv.style.display = 'block';
+            // Получаем единицу измерения
+            const quantityUnit = prod.quantity_unit || 'шт';
             // Проверяем активные резервации
             const activeReservationsCount = prod.reservation && prod.reservation.active_count ? prod.reservation.active_count : 0;
             const availableCount = prod.quantity - activeReservationsCount;
@@ -1535,11 +1538,11 @@ function showProductModal(prod, finalPrice, fullImages) {
             // Если quantity_enabled включен, показываем количество с учетом резерваций
             if (quantityEnabledForModal) {
                 if (activeReservationsCount > 0) {
-                    // Если есть резервации, показываем "Доступно: X из Y шт."
-                    modalQuantityDiv.textContent = `📦 Доступно: ${availableCount} из ${prod.quantity} шт.`;
+                    // Если есть резервации, показываем "Доступно: X из Y единица"
+                    modalQuantityDiv.textContent = `📦 Доступно: ${availableCount} из ${prod.quantity} ${quantityUnit}`;
                 } else {
-                    // Если резерваций нет, показываем просто "В наличии: Y шт."
-                    modalQuantityDiv.textContent = `📦 В наличии: ${prod.quantity} шт.`;
+                    // Если резерваций нет, показываем просто "В наличии: Y единица"
+                    modalQuantityDiv.textContent = `📦 В наличии: ${prod.quantity} ${quantityUnit}`;
                 }
             } else {
                 // Если quantity_enabled выключен, показываем просто "В наличии"
@@ -1619,7 +1622,8 @@ function showProductModal(prod, finalPrice, fullImages) {
         // Показываем информацию о резервации с учетом количества (только если quantity_enabled включен)
         if (quantityEnabledForReservation && productQuantity > 1 && activeReservationsCount > 0) {
             const availableCount = productQuantity - activeReservationsCount;
-            modalReservationStatus.textContent = `⏰ Зарезервировано: ${activeReservationsCount} из ${productQuantity} шт. (доступно: ${availableCount} шт.) до ${timeText}`;
+            const quantityUnit = prod.quantity_unit || 'шт';
+            modalReservationStatus.textContent = `⏰ Зарезервировано: ${activeReservationsCount} из ${productQuantity} ${quantityUnit} (доступно: ${availableCount} ${quantityUnit}) до ${timeText}`;
         } else {
             modalReservationStatus.textContent = `⏰ Товар зарезервирован на ${timeText}`;
         }
@@ -1668,36 +1672,53 @@ function showProductModal(prod, finalPrice, fullImages) {
         isMadeToOrder: isMadeToOrder
     });
     
-    // Показываем кнопку резервации, если:
-    // - Нет активной резервации ИЛИ
-    // - Есть активная резервация, но можно еще резервировать (quantity > active_count) - только если quantity_enabled включен
-    // - И резервация включена
-    // - И товар НЕ под заказ (товары под заказ нельзя резервировать)
-    // ВАЖНО: Если quantity_enabled = false, резервация работает, но без показа количества
-    const shouldShowReserveButton = appContext.role === 'client' && 
-                                     appContext.permissions.can_reserve && 
-                                     reservationsEnabled &&
-                                     !isMadeToOrder && // Товары под заказ нельзя резервировать
-                                     (quantityEnabled ? (!hasActiveReservation || canStillReserve) : !hasActiveReservation); // Если quantity_enabled выключен, просто проверяем отсутствие резервации
+    // Проверяем, является ли товар для покупки (is_for_sale)
+    const isForSale = prod.is_for_sale === true || 
+                     prod.is_for_sale === 1 || 
+                     prod.is_for_sale === '1' ||
+                     prod.is_for_sale === 'true' ||
+                     String(prod.is_for_sale).toLowerCase() === 'true';
     
-    if (shouldShowReserveButton) {
-        const reserveBtn = document.createElement('button');
-        reserveBtn.className = 'reserve-btn';
-        reserveBtn.textContent = '🔒 Зарезервировать';
-        reserveBtn.onclick = () => showReservationModal(prod.id);
-        modalReservationButton.appendChild(reserveBtn);
-    } else if (!reservationsEnabled) {
-        console.log('🔒 Reservations disabled - button not shown');
-    }
-    
-    // Показываем кнопку "Заказать" для товаров под заказ (только для клиентов)
-    if (isMadeToOrder && appContext.role === 'client') {
-        const orderBtn = document.createElement('button');
-        orderBtn.className = 'reserve-btn';
-        orderBtn.style.background = 'rgba(90, 200, 250, 0.95)';
-        orderBtn.textContent = '🛒 Заказать';
-        orderBtn.onclick = () => showOrderModal(prod.id);
-        modalReservationButton.appendChild(orderBtn);
+    // Для товаров с is_for_sale показываем кнопку "Продать" вместо резервации/заказа
+    if (isForSale && appContext.role === 'client') {
+        const sellBtn = document.createElement('button');
+        sellBtn.className = 'reserve-btn';
+        sellBtn.style.background = 'rgba(255, 149, 0, 0.95)';
+        sellBtn.textContent = '🛒 Продать';
+        sellBtn.onclick = () => showPurchaseModal(prod);
+        modalReservationButton.appendChild(sellBtn);
+    } else {
+        // Показываем кнопку резервации, если:
+        // - Нет активной резервации ИЛИ
+        // - Есть активная резервация, но можно еще резервировать (quantity > active_count) - только если quantity_enabled включен
+        // - И резервация включена
+        // - И товар НЕ под заказ (товары под заказ нельзя резервировать)
+        // ВАЖНО: Если quantity_enabled = false, резервация работает, но без показа количества
+        const shouldShowReserveButton = appContext.role === 'client' && 
+                                         appContext.permissions.can_reserve && 
+                                         reservationsEnabled &&
+                                         !isMadeToOrder && // Товары под заказ нельзя резервировать
+                                         (quantityEnabled ? (!hasActiveReservation || canStillReserve) : !hasActiveReservation); // Если quantity_enabled выключен, просто проверяем отсутствие резервации
+        
+        if (shouldShowReserveButton) {
+            const reserveBtn = document.createElement('button');
+            reserveBtn.className = 'reserve-btn';
+            reserveBtn.textContent = '🔒 Зарезервировать';
+            reserveBtn.onclick = () => showReservationModal(prod.id);
+            modalReservationButton.appendChild(reserveBtn);
+        } else if (!reservationsEnabled) {
+            console.log('🔒 Reservations disabled - button not shown');
+        }
+        
+        // Показываем кнопку "Заказать" для товаров под заказ (только для клиентов)
+        if (isMadeToOrder && appContext.role === 'client') {
+            const orderBtn = document.createElement('button');
+            orderBtn.className = 'reserve-btn';
+            orderBtn.style.background = 'rgba(90, 200, 250, 0.95)';
+            orderBtn.textContent = '🛒 Заказать';
+            orderBtn.onclick = () => showOrderModal(prod.id);
+            modalReservationButton.appendChild(orderBtn);
+        }
     }
     
     showModalImage(0);
@@ -1751,7 +1772,8 @@ function showReservationModal(productId) {
         // Показываем информацию о доступном количестве
         const activeReservationsCount = product.reservation ? 1 : 0;
         const availableCount = productQuantity - activeReservationsCount;
-        quantityInfo.textContent = `Доступно для резервации: ${availableCount} из ${productQuantity} шт.`;
+        const quantityUnit = product.quantity_unit || 'шт';
+        quantityInfo.textContent = `Доступно для резервации: ${availableCount} из ${productQuantity} ${quantityUnit}`;
         
         // Обновляем max при изменении
         quantityInput.oninput = () => {
@@ -1804,9 +1826,10 @@ function showReservationModal(productId) {
                 quantity = parseInt(quantityInput.value) || 1;
                 const activeReservationsCount = product.reservation ? 1 : 0;
                 const availableCount = Math.max(0, productQuantity - activeReservationsCount);
+                const quantityUnit = product.quantity_unit || 'шт';
                 console.log('🔒 Quantity check:', { quantity, availableCount, productQuantity, activeReservationsCount });
                 if (quantity > availableCount) {
-                    alert(`❌ Недостаточно товара. Доступно для резервации: ${availableCount} шт.`);
+                    alert(`❌ Недостаточно товара. Доступно для резервации: ${availableCount} ${quantityUnit}`);
                     return;
                 }
                 if (quantity < 1) {
@@ -2134,6 +2157,7 @@ function showEditProductModal(prod) {
     const editPriceInput = document.getElementById('edit-price');
     const editDiscountInput = document.getElementById('edit-discount');
     const editQuantityInput = document.getElementById('edit-quantity');
+    const editQuantityUnitGeneralInput = document.getElementById('edit-quantity-unit-general');
     const editMadeToOrderInput = document.getElementById('edit-made-to-order');
     const editForSaleInput = document.getElementById('edit-for-sale');
     const editPriceFromInput = document.getElementById('edit-price-from');
@@ -2153,6 +2177,19 @@ function showEditProductModal(prod) {
     editPriceInput.value = prod.price || '';
     editDiscountInput.value = prod.discount || 0;
     editQuantityInput.value = prod.quantity !== undefined && prod.quantity !== null ? prod.quantity : 0;
+    
+    // Устанавливаем единицу измерения для обычных товаров
+    if (editQuantityUnitGeneralInput) {
+        const quantityUnit = prod.quantity_unit || 'шт';
+        const selectElement = editQuantityUnitGeneralInput;
+        const options = Array.from(selectElement.options);
+        const matchingOption = options.find(opt => opt.value === quantityUnit);
+        if (matchingOption) {
+            editQuantityUnitGeneralInput.value = matchingOption.value;
+        } else {
+            editQuantityUnitGeneralInput.value = 'шт';
+        }
+    }
     
     // Проверяем is_made_to_order - может быть true, false, 1, 0, "true", "false", или undefined
     // Преобразуем в boolean для надежности
@@ -2177,7 +2214,17 @@ function showEditProductModal(prod) {
     editPriceToInput.value = prod.price_to || '';
     editPriceFixedInput.value = prod.price_fixed || '';
     editQuantityFromInput.value = prod.quantity_from !== undefined && prod.quantity_from !== null ? prod.quantity_from : '';
-    editQuantityUnitInput.value = prod.quantity_unit || 'шт';
+    // Устанавливаем единицу измерения, находим соответствующую опцию в select по value
+    const quantityUnit = prod.quantity_unit || 'шт';
+    const selectElement = editQuantityUnitInput;
+    const options = Array.from(selectElement.options);
+    // Ищем опцию с нужным value
+    const matchingOption = options.find(opt => opt.value === quantityUnit);
+    if (matchingOption) {
+        editQuantityUnitInput.value = matchingOption.value;
+    } else {
+        editQuantityUnitInput.value = 'шт';
+    }
     
     // Устанавливаем тип цены
     if (editPriceTypeRangeRadio && editPriceTypeFixedRadio) {
@@ -2196,8 +2243,73 @@ function showEditProductModal(prod) {
         priceFixedField.style.display = priceType === 'fixed' ? 'block' : 'none';
     }
     
-    // Делаем поле цены неактивным, если включена функция покупка
+    // Делаем поля цены, скидки и количества неактивными, если включена функция покупка
     editPriceInput.disabled = isForSale;
+    editDiscountInput.disabled = isForSale;
+    editQuantityInput.disabled = isForSale;
+    if (editQuantityUnitGeneralInput) {
+        editQuantityUnitGeneralInput.disabled = isForSale;
+    }
+    
+    // Функция для обновления визуального состояния типа цены
+    const updatePriceTypeVisual = () => {
+        if (!editPriceTypeRangeRadio || !editPriceTypeFixedRadio) return;
+        
+        const rangeLabel = editPriceTypeRangeRadio.closest('label');
+        const fixedLabel = editPriceTypeFixedRadio.closest('label');
+        
+        if (rangeLabel && fixedLabel) {
+            if (editPriceTypeRangeRadio.checked) {
+                // Выделяем активный тип "от-до"
+                rangeLabel.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    cursor: pointer;
+                    padding: 12px;
+                    border-radius: 8px;
+                    background: rgba(90, 200, 250, 0.2);
+                    border: 2px solid rgba(90, 200, 250, 0.5);
+                    transition: all 0.3s ease;
+                `;
+                fixedLabel.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    cursor: pointer;
+                    padding: 12px;
+                    border-radius: 8px;
+                    background: transparent;
+                    border: 2px solid transparent;
+                    transition: all 0.3s ease;
+                `;
+            } else if (editPriceTypeFixedRadio.checked) {
+                // Выделяем активный тип "фиксированная"
+                fixedLabel.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    cursor: pointer;
+                    padding: 12px;
+                    border-radius: 8px;
+                    background: rgba(90, 200, 250, 0.2);
+                    border: 2px solid rgba(90, 200, 250, 0.5);
+                    transition: all 0.3s ease;
+                `;
+                rangeLabel.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    cursor: pointer;
+                    padding: 12px;
+                    border-radius: 8px;
+                    background: transparent;
+                    border: 2px solid transparent;
+                    transition: all 0.3s ease;
+                `;
+            }
+        }
+    };
     
     // Обработчик изменения тумблера "покупка"
     editForSaleInput.onchange = () => {
@@ -2206,14 +2318,34 @@ function showEditProductModal(prod) {
             forSaleFields.style.display = forSaleEnabled ? 'block' : 'none';
         }
         editPriceInput.disabled = forSaleEnabled;
+        editDiscountInput.disabled = forSaleEnabled;
+        editQuantityInput.disabled = forSaleEnabled;
+        if (editQuantityUnitGeneralInput) {
+            editQuantityUnitGeneralInput.disabled = forSaleEnabled;
+        }
+        
+        // Обновляем визуальное состояние типа цены при включении тумблера
+        if (forSaleEnabled) {
+            setTimeout(() => {
+                updatePriceTypeVisual();
+            }, 50);
+        }
     };
     
     // Обработчики изменения типа цены
     if (editPriceTypeRangeRadio && editPriceTypeFixedRadio && priceRangeFields && priceFixedField) {
+        // Инициализируем визуальное состояние при загрузке (если тумблер покупки включен)
+        if (isForSale) {
+            setTimeout(() => {
+                updatePriceTypeVisual();
+            }, 50);
+        }
+        
         editPriceTypeRangeRadio.onchange = () => {
             if (editPriceTypeRangeRadio.checked) {
                 priceRangeFields.style.display = 'block';
                 priceFixedField.style.display = 'none';
+                updatePriceTypeVisual();
             }
         };
         
@@ -2221,6 +2353,7 @@ function showEditProductModal(prod) {
             if (editPriceTypeFixedRadio.checked) {
                 priceRangeFields.style.display = 'none';
                 priceFixedField.style.display = 'block';
+                updatePriceTypeVisual();
             }
         };
     }
@@ -2268,12 +2401,15 @@ async function saveProductEdit(productId) {
     const editPriceTypeRangeRadio = document.getElementById('edit-price-type-range');
     const editQuantityFromInput = document.getElementById('edit-quantity-from');
     const editQuantityUnitInput = document.getElementById('edit-quantity-unit');
+    const editQuantityUnitGeneralInput = document.getElementById('edit-quantity-unit-general');
     
     const newName = editNameInput.value.trim();
     const newDescription = editDescriptionInput.value.trim();
     const newPrice = parseFloat(editPriceInput.value);
     const newDiscount = parseFloat(editDiscountInput.value);
     const newQuantity = parseInt(editQuantityInput.value, 10);
+    // Получаем единицу измерения для обычных товаров
+    const newQuantityUnitGeneral = editQuantityUnitGeneralInput ? editQuantityUnitGeneralInput.value || null : null;
     const newMadeToOrder = editMadeToOrderInput.checked;
     const newForSale = editForSaleInput.checked;
     const newPriceType = editPriceTypeRangeRadio && editPriceTypeRangeRadio.checked ? 'range' : 'fixed';
@@ -2281,6 +2417,7 @@ async function saveProductEdit(productId) {
     const newPriceTo = editPriceToInput.value ? parseFloat(editPriceToInput.value) : null;
     const newPriceFixed = editPriceFixedInput.value ? parseFloat(editPriceFixedInput.value) : null;
     const newQuantityFrom = editQuantityFromInput.value ? parseInt(editQuantityFromInput.value, 10) : null;
+    // Получаем единицу измерения (value уже содержит только код без описания)
     const newQuantityUnit = editQuantityUnitInput.value || null;
     
     // Валидация
@@ -2345,8 +2482,8 @@ async function saveProductEdit(productId) {
             await updateProductAPI(productId, appContext.shop_owner_id, newPrice, newDiscount);
         }
         
-        // Обновляем количество (без уведомлений)
-        await updateProductQuantityAPI(productId, appContext.shop_owner_id, newQuantity);
+        // Обновляем количество и единицу измерения (без уведомлений)
+        await updateProductQuantityAPI(productId, appContext.shop_owner_id, newQuantity, newQuantityUnitGeneral);
         
         // Обновляем статус 'под заказ' (без уведомлений)
         console.log(`💾 Saving made-to-order: productId=${productId}, isMadeToOrder=${newMadeToOrder}`);
@@ -3482,3 +3619,176 @@ function applyFilters() {
     // Рендерим отфильтрованные товары
     renderProducts(filteredProducts);
 }
+
+
+// Показ модального окна покупки
+function showPurchaseModal(prod) {
+    if (!appContext) {
+        alert('❌ Ошибка: контекст не загружен');
+        return;
+    }
+    
+    const purchaseModal = document.getElementById('purchase-modal');
+    if (!purchaseModal) {
+        alert('❌ Модальное окно покупки не найдено');
+        return;
+    }
+    
+    // Очищаем форму
+    document.getElementById('purchase-last-name').value = '';
+    document.getElementById('purchase-first-name').value = '';
+    document.getElementById('purchase-middle-name').value = '';
+    document.getElementById('purchase-phone').value = '';
+    document.getElementById('purchase-city').value = '';
+    document.getElementById('purchase-address').value = '';
+    document.getElementById('purchase-notes').value = '';
+    document.getElementById('purchase-organization').value = '';
+    document.getElementById('purchase-images').value = '';
+    document.getElementById('purchase-video').value = '';
+    document.getElementById('purchase-images-preview').innerHTML = '';
+    document.getElementById('purchase-video-preview').innerHTML = '';
+    
+    // Сбрасываем radio кнопки оплаты
+    const paymentRadios = document.querySelectorAll('input[name="purchase-payment"]');
+    paymentRadios.forEach(radio => radio.checked = false);
+    
+    // Обработчик предпросмотра изображений
+    const imagesInput = document.getElementById('purchase-images');
+    const imagesPreview = document.getElementById('purchase-images-preview');
+    imagesInput.onchange = (e) => {
+        imagesPreview.innerHTML = '';
+        const files = Array.from(e.target.files).slice(0, 5); // Ограничиваем до 5
+        files.forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                img.style.width = '80px';
+                img.style.height = '80px';
+                img.style.objectFit = 'cover';
+                img.style.borderRadius = '8px';
+                img.style.margin = '4px';
+                imagesPreview.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+    
+    // Обработчик предпросмотра видео
+    const videoInput = document.getElementById('purchase-video');
+    const videoPreview = document.getElementById('purchase-video-preview');
+    videoInput.onchange = (e) => {
+        videoPreview.innerHTML = '';
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const video = document.createElement('video');
+                video.src = event.target.result;
+                video.style.width = '100%';
+                video.style.maxWidth = '300px';
+                video.style.borderRadius = '8px';
+                video.controls = true;
+                videoPreview.appendChild(video);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+    
+    // Обработчик закрытия
+    const closeBtn = document.querySelector('.purchase-close');
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            purchaseModal.style.display = 'none';
+        };
+    }
+    
+    purchaseModal.onclick = (e) => {
+        if (e.target === purchaseModal) {
+            purchaseModal.style.display = 'none';
+        }
+    };
+    
+    // Обработчик отправки формы
+    const submitBtn = document.getElementById('purchase-submit');
+    const newSubmitBtn = submitBtn.cloneNode(true);
+    submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
+    
+    newSubmitBtn.onclick = async () => {
+        await submitPurchaseForm(prod.id);
+    };
+    
+    purchaseModal.style.display = 'block';
+}
+
+// Отправка формы покупки
+async function submitPurchaseForm(productId) {
+    const lastName = document.getElementById('purchase-last-name').value.trim();
+    const firstName = document.getElementById('purchase-first-name').value.trim();
+    const middleName = document.getElementById('purchase-middle-name').value.trim();
+    const phone = document.getElementById('purchase-phone').value.trim();
+    const city = document.getElementById('purchase-city').value.trim();
+    const address = document.getElementById('purchase-address').value.trim();
+    const notes = document.getElementById('purchase-notes').value.trim();
+    const organization = document.getElementById('purchase-organization').value.trim();
+    const paymentMethod = document.querySelector('input[name="purchase-payment"]:checked')?.value;
+    
+    // Валидация
+    if (!lastName || !firstName || !phone || !city || !address || !paymentMethod) {
+        alert('❌ Заполните все обязательные поля (отмечены *)');
+        return;
+    }
+    
+    // Создаем FormData
+    const formData = new FormData();
+    formData.append('product_id', productId);
+    formData.append('last_name', lastName);
+    formData.append('first_name', firstName);
+    if (middleName) formData.append('middle_name', middleName);
+    formData.append('phone_number', phone);
+    formData.append('city', city);
+    formData.append('address', address);
+    if (notes) formData.append('notes', notes);
+    formData.append('payment_method', paymentMethod);
+    if (organization) formData.append('organization', organization);
+    
+    // Добавляем изображения (до 5 шт)
+    const imagesInput = document.getElementById('purchase-images');
+    const images = Array.from(imagesInput.files).slice(0, 5);
+    images.forEach(image => {
+        formData.append('images', image);
+    });
+    
+    // Добавляем видео (1 шт)
+    const videoInput = document.getElementById('purchase-video');
+    if (videoInput.files[0]) {
+        formData.append('video', videoInput.files[0]);
+    }
+    
+    try {
+        const submitBtn = document.getElementById('purchase-submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = '⏳ Отправка...';
+        
+        await createPurchaseAPI(productId, formData);
+        
+        alert('✅ Заявка на покупку успешно отправлена!');
+        document.getElementById('purchase-modal').style.display = 'none';
+        
+        // Обновляем корзину
+        if (window.loadCart) {
+            await window.loadCart();
+        }
+        if (window.updateCartUI) {
+            await window.updateCartUI();
+        }
+    } catch (error) {
+        console.error('Error creating purchase:', error);
+        alert(`❌ Ошибка: ${error.message}`);
+    } finally {
+        const submitBtn = document.getElementById('purchase-submit');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '✅ Отправить заявку';
+    }
+}
+

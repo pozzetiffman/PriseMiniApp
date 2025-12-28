@@ -135,6 +135,32 @@ class Order(Base):
     
     product = relationship("Product", backref="orders")
 
+class Purchase(Base):
+    __tablename__ = "purchases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)  # ID товара
+    user_id = Column(BigInteger, index=True)  # ID владельца магазина (создателя товара)
+    purchased_by_user_id = Column(BigInteger, index=True)  # ID пользователя, который хочет продать товар
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время создания заявки на покупку
+    is_completed = Column(Boolean, default=False)  # Выполнена ли покупка
+    is_cancelled = Column(Boolean, default=False)  # Отменена ли покупка
+    # Поля формы заявки на покупку
+    first_name = Column(String, nullable=True)  # Имя
+    last_name = Column(String, nullable=True)  # Фамилия
+    middle_name = Column(String, nullable=True)  # Отчество
+    phone_number = Column(String, nullable=True)  # Номер телефона
+    city = Column(String, nullable=True)  # Город
+    address = Column(Text, nullable=True)  # Адрес
+    notes = Column(Text, nullable=True)  # Примечание к покупке
+    payment_method = Column(String, nullable=True)  # Форма оплаты (cash/bank_transfer)
+    organization = Column(String, nullable=True)  # Организация (если есть)
+    images_urls = Column(Text, nullable=True)  # JSON массив URL изображений (до 5 фото)
+    video_url = Column(String, nullable=True)  # URL видео (1 видео)
+    status = Column(String, default='pending')  # Статус покупки (pending/completed/cancelled)
+    
+    product = relationship("Product", backref="purchases")
+
 class WebAppContext(Base):
     __tablename__ = "webapp_contexts"
 
