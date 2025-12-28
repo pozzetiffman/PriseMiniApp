@@ -116,11 +116,19 @@ class AddCategory(StatesGroup):
 
 class AddProduct(StatesGroup):
     name = State()
+    product_type = State()  # Тип товара: обычный, под заказ, для покупки
     price = State()
+    price_from = State()  # Цена от (для товаров для покупки)
+    price_to = State()  # Цена до (для товаров для покупки)
+    price_fixed = State()  # Фиксированная цена (для товаров для покупки)
+    price_type = State()  # Тип цены: range или fixed (для товаров для покупки)
+    quantity_from = State()  # Количество от (для товаров для покупки)
+    quantity_unit = State()  # Единица измерения (шт или кг)
     category = State()
     discount = State()
     description = State()
     quantity = State()  # Количество товара
+    is_hot_offer = State()  # Горящее предложение
     photos = State()  # Состояние для загрузки нескольких фото
 
 class AddChannel(StatesGroup):
@@ -1808,8 +1816,252 @@ async def process_name(message: Message, state: FSMContext):
         return
     
     await state.update_data(name=message.text)
-    await state.set_state(AddProduct.price)
-    await message.answer("Введите цену товара (число):")
+    await state.set_state(AddProduct.product_type)
+    
+    # Создаем кнопки для выбора типа товара
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📦 Обычный товар", callback_data="product_type_regular")
+    builder.button(text="📝 Под заказ", callback_data="product_type_made_to_order")
+    builder.button(text="💰 Для покупки", callback_data="product_type_for_sale")
+    builder.adjust(1)
+    
+    await message.answer(
+        "Выберите тип товара:\n\n"
+        "📦 <b>Обычный товар</b> - товар с фиксированной ценой\n"
+        "📝 <b>Под заказ</b> - товар, который изготавливается по заказу\n"
+        "💰 <b>Для покупки</b> - товар, который вы хотите купить (с диапазоном цен)",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+
+@dp.callback_query(StateFilter(AddProduct.product_type), F.data.startswith("product_type_"))
+async def process_product_type(callback: types.CallbackQuery, state: FSMContext):
+    product_type = callback.data.replace("product_type_", "")
+    
+    if product_type == "regular":
+        await state.update_data(
+            is_made_to_order=False,
+            is_for_sale=False
+        )
+        await state.set_state(AddProduct.price)
+        await callback.message.answer("Введите цену товара (число):")
+    elif product_type == "made_to_order":
+        await state.update_data(
+            is_made_to_order=True,
+            is_for_sale=False
+        )
+        await state.set_state(AddProduct.price)
+        await callback.message.answer("Введите цену товара (число):")
+    elif product_type == "for_sale":
+        await state.update_data(
+            is_made_to_order=False,
+            is_for_sale=True
+        )
+        await state.set_state(AddProduct.price_type)
+        
+        # Создаем кнопки для выбора типа цены
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📊 Диапазон цен (от-до)", callback_data="price_type_range")
+        builder.button(text="💰 Фиксированная цена", callback_data="price_type_fixed")
+        builder.adjust(1)
+        
+        await callback.message.answer(
+            "Выберите тип цены для товара:\n\n"
+            "📊 <b>Диапазон цен</b> - укажите цену от и до\n"
+            "💰 <b>Фиксированная цена</b> - укажите одну цену",
+            reply_markup=builder.as_markup(),
+            parse_mode="HTML"
+        )
+    
+    await callback.answer()
+
+@dp.callback_query(StateFilter(AddProduct.price_type), F.data.startswith("price_type_"))
+async def process_price_type(callback: types.CallbackQuery, state: FSMContext):
+    price_type = callback.data.replace("price_type_", "")
+    await state.update_data(price_type=price_type)
+    
+    if price_type == "range":
+        await state.set_state(AddProduct.price_from)
+        await callback.message.answer("Введите цену ОТ (число):")
+    elif price_type == "fixed":
+        await state.set_state(AddProduct.price_fixed)
+        await callback.message.answer("Введите фиксированную цену (число):")
+    
+    await callback.answer()
+
+@dp.message(AddProduct.price_from)
+async def process_price_from(message: Message, state: FSMContext):
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
+    try:
+        price_from = float(message.text)
+        await state.update_data(price_from=price_from)
+        await state.set_state(AddProduct.price_to)
+        await message.answer("Введите цену ДО (число):")
+    except ValueError:
+        await message.answer("Пожалуйста, введите число.")
+
+@dp.message(AddProduct.price_to)
+async def process_price_to(message: Message, state: FSMContext):
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
+    try:
+        price_to = float(message.text)
+        data = await state.get_data()
+        price_from = data.get('price_from')
+        
+        if price_to <= price_from:
+            await message.answer("Цена ДО должна быть больше цены ОТ. Попробуйте снова:")
+            return
+        
+        await state.update_data(price_to=price_to)
+        await state.set_state(AddProduct.quantity_unit)
+        
+        # Создаем кнопки для выбора единицы измерения (все доступные единицы)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="шт", callback_data="unit_pcs")
+        builder.button(text="кг", callback_data="unit_kg")
+        builder.button(text="г", callback_data="unit_g")
+        builder.button(text="л", callback_data="unit_l")
+        builder.button(text="мл", callback_data="unit_ml")
+        builder.button(text="м", callback_data="unit_m")
+        builder.button(text="см", callback_data="unit_cm")
+        builder.button(text="м²", callback_data="unit_m2")
+        builder.button(text="м³", callback_data="unit_m3")
+        builder.button(text="упак", callback_data="unit_pack")
+        builder.button(text="набор", callback_data="unit_set")
+        builder.button(text="пара", callback_data="unit_pair")
+        builder.adjust(3)  # По 3 кнопки в ряд
+        
+        await message.answer("Выберите единицу измерения:", reply_markup=builder.as_markup())
+    except ValueError:
+        await message.answer("Пожалуйста, введите число.")
+
+@dp.message(AddProduct.price_fixed)
+async def process_price_fixed(message: Message, state: FSMContext):
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
+    try:
+        price_fixed = float(message.text)
+        await state.update_data(price_fixed=price_fixed)
+        await state.set_state(AddProduct.quantity_unit)
+        
+        # Создаем кнопки для выбора единицы измерения (все доступные единицы)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="шт", callback_data="unit_pcs")
+        builder.button(text="кг", callback_data="unit_kg")
+        builder.button(text="г", callback_data="unit_g")
+        builder.button(text="л", callback_data="unit_l")
+        builder.button(text="мл", callback_data="unit_ml")
+        builder.button(text="м", callback_data="unit_m")
+        builder.button(text="см", callback_data="unit_cm")
+        builder.button(text="м²", callback_data="unit_m2")
+        builder.button(text="м³", callback_data="unit_m3")
+        builder.button(text="упак", callback_data="unit_pack")
+        builder.button(text="набор", callback_data="unit_set")
+        builder.button(text="пара", callback_data="unit_pair")
+        builder.adjust(3)  # По 3 кнопки в ряд
+        
+        await message.answer("Выберите единицу измерения:", reply_markup=builder.as_markup())
+    except ValueError:
+        await message.answer("Пожалуйста, введите число.")
+
+@dp.message(AddProduct.quantity_from)
+async def process_quantity_from(message: Message, state: FSMContext):
+    if is_command(message.text or "") or is_menu_button(message.text or ""):
+        return
+    
+    try:
+        quantity_from = int(message.text)
+        if quantity_from < 1:
+            await message.answer("Количество должно быть больше 0. Попробуйте снова:")
+            return
+        
+        await state.update_data(quantity_from=quantity_from)
+        
+        # Переходим к выбору категории
+        data = await state.get_data()
+        user_id = data.get('user_id', message.from_user.id)
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "true"}) as resp:
+                if resp.status != 200:
+                    return await message.answer("❌ Ошибка при получении списка категорий")
+                all_categories = await resp.json()
+        
+        if not all_categories:
+            return await message.answer("❌ Нет категорий. Сначала создайте категорию!")
+        
+        # Получаем иерархию для отображения
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "false"}) as resp:
+                if resp.status != 200:
+                    return await message.answer("❌ Ошибка при получении списка категорий")
+                main_categories = await resp.json()
+        
+        # Создаем словарь для быстрого поиска родительских категорий
+        parent_map = {}
+        for main_cat in main_categories:
+            if main_cat.get('subcategories'):
+                for subcat in main_cat['subcategories']:
+                    parent_map[subcat['id']] = main_cat['name']
+        
+        builder = InlineKeyboardBuilder()
+        for cat in all_categories:
+            # Если это подкатегория, показываем с указанием родительской
+            if cat.get('parent_id'):
+                parent_name = parent_map.get(cat['id'], '')
+                display_name = f"{parent_name} → {cat['name']}"
+            else:
+                display_name = cat['name']
+            builder.button(text=display_name, callback_data=f"cat_{cat['id']}")
+        builder.adjust(1)
+        
+        await state.set_state(AddProduct.category)
+        await message.answer("Выберите категорию или подкатегорию:", reply_markup=builder.as_markup())
+    except ValueError:
+        await message.answer("Пожалуйста, введите целое число.")
+
+@dp.callback_query(StateFilter(AddProduct.quantity_unit), F.data.startswith("unit_"))
+async def process_quantity_unit(callback: types.CallbackQuery, state: FSMContext):
+    unit = callback.data.replace("unit_", "")
+    
+    # Маппинг единиц измерения
+    unit_map = {
+        "pcs": "шт",
+        "kg": "кг",
+        "g": "г",
+        "l": "л",
+        "ml": "мл",
+        "m": "м",
+        "cm": "см",
+        "m2": "м²",
+        "m3": "м³",
+        "pack": "упак",
+        "set": "набор",
+        "pair": "пара"
+    }
+    
+    quantity_unit = unit_map.get(unit, "шт")  # По умолчанию "шт"
+    await state.update_data(quantity_unit=quantity_unit)
+    
+    # Проверяем тип товара
+    data = await state.get_data()
+    is_for_sale = data.get('is_for_sale', False)
+    
+    if is_for_sale:
+        # Для товара для покупки переходим к вводу количества ОТ
+        await state.set_state(AddProduct.quantity_from)
+        await callback.message.answer("Введите количество ОТ (число, например: 1):")
+    else:
+        # Для обычного товара переходим к вводу количества на складе
+        await state.set_state(AddProduct.quantity)
+        await callback.message.answer("Введите количество товара на складе:")
+    
+    await callback.answer()
 
 @dp.message(AddProduct.price)
 async def process_price(message: Message, state: FSMContext):
@@ -1877,8 +2129,39 @@ async def process_price(message: Message, state: FSMContext):
 async def process_category(callback: types.CallbackQuery, state: FSMContext):
     cat_id = int(callback.data.split("_")[1])
     await state.update_data(category_id=cat_id)
-    await state.set_state(AddProduct.discount)
-    await callback.message.answer("Введите скидку на товар в % (если нет, введите 0):")
+    await state.set_state(AddProduct.is_hot_offer)
+    
+    # Создаем кнопки для выбора горящего предложения
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Да", callback_data="hot_offer_yes")
+    builder.button(text="❌ Нет", callback_data="hot_offer_no")
+    builder.adjust(2)
+    
+    await callback.message.answer(
+        "🔥 Это горящее предложение?",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+@dp.callback_query(StateFilter(AddProduct.is_hot_offer), F.data.startswith("hot_offer_"))
+async def process_hot_offer(callback: types.CallbackQuery, state: FSMContext):
+    is_hot_offer = callback.data == "hot_offer_yes"
+    await state.update_data(is_hot_offer=is_hot_offer)
+    
+    # Проверяем, является ли товар для покупки
+    data = await state.get_data()
+    is_for_sale = data.get('is_for_sale', False)
+    
+    if is_for_sale:
+        # Для товаров для покупки пропускаем вопрос о скидке
+        await state.update_data(discount=0.0)  # Устанавливаем 0 по умолчанию
+        await state.set_state(AddProduct.description)
+        await callback.message.answer("Введите описание товара (или отправьте /skip чтобы пропустить):")
+    else:
+        # Для обычных товаров и товаров под заказ спрашиваем скидку
+        await state.set_state(AddProduct.discount)
+        await callback.message.answer("Введите скидку на товар в % (если нет, введите 0):")
+    
     await callback.answer()
 
 @dp.message(AddProduct.discount)
@@ -1903,8 +2186,47 @@ async def process_description(message: Message, state: FSMContext):
     
     description = message.text if message.text != "/skip" else None
     await state.update_data(description=description)
-    await state.set_state(AddProduct.quantity)
-    await message.answer("Введите количество товара на складе (число, или 0 если неограниченно):")
+    
+    # Проверяем, является ли товар для покупки
+    data = await state.get_data()
+    is_for_sale = data.get('is_for_sale', False)
+    
+    if is_for_sale:
+        # Для товаров для покупки пропускаем вопрос о количестве на складе
+        await state.update_data(quantity=0)  # Устанавливаем 0 по умолчанию
+        await state.set_state(AddProduct.photos)
+        await message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
+    else:
+        # Для обычных товаров и товаров под заказ
+        data = await state.get_data()
+        is_made_to_order = data.get('is_made_to_order', False)
+        
+        if is_made_to_order:
+            # Для товара под заказ пропускаем вопрос о количестве на складе
+            await state.update_data(quantity=0, quantity_unit="шт")  # Устанавливаем 0 и "шт" по умолчанию
+            await state.set_state(AddProduct.photos)
+            await message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
+        else:
+            # Для обычного товара сначала выбираем единицу измерения
+            await state.set_state(AddProduct.quantity_unit)
+            
+            # Создаем кнопки для выбора единицы измерения (все доступные единицы)
+            builder = InlineKeyboardBuilder()
+            builder.button(text="шт", callback_data="unit_pcs")
+            builder.button(text="кг", callback_data="unit_kg")
+            builder.button(text="г", callback_data="unit_g")
+            builder.button(text="л", callback_data="unit_l")
+            builder.button(text="мл", callback_data="unit_ml")
+            builder.button(text="м", callback_data="unit_m")
+            builder.button(text="см", callback_data="unit_cm")
+            builder.button(text="м²", callback_data="unit_m2")
+            builder.button(text="м³", callback_data="unit_m3")
+            builder.button(text="упак", callback_data="unit_pack")
+            builder.button(text="набор", callback_data="unit_set")
+            builder.button(text="пара", callback_data="unit_pair")
+            builder.adjust(3)  # По 3 кнопки в ряд
+            
+            await message.answer("Выберите единицу измерения:", reply_markup=builder.as_markup())
 
 @dp.message(AddProduct.quantity)
 async def process_quantity(message: Message, state: FSMContext):
@@ -1917,6 +2239,13 @@ async def process_quantity(message: Message, state: FSMContext):
         if quantity < 0:
             await message.answer("Количество не может быть отрицательным. Введите число (0 или больше):")
             return
+        
+        # Проверяем, есть ли уже единица измерения (для обычного товара)
+        data = await state.get_data()
+        if not data.get('quantity_unit'):
+            # Если единица измерения не установлена (для товара под заказ), устанавливаем по умолчанию
+            await state.update_data(quantity_unit="шт")
+        
         await state.update_data(quantity=quantity, photos=[])  # Инициализируем массив фото
         await state.set_state(AddProduct.photos)
         await message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
@@ -1978,13 +2307,45 @@ async def process_photos_done(message: Message, state: FSMContext):
             # Отправляем данные на бэкенд
             payload = aiohttp.FormData()
             payload.add_field('name', data['name'])
-            payload.add_field('price', str(data['price']))
+            
+            # Для товаров для покупки price может быть не установлен
+            # Используем price_from или price_fixed как базовую цену для отображения
+            if data.get('is_for_sale'):
+                if data.get('price_type') == 'fixed' and data.get('price_fixed'):
+                    payload.add_field('price', str(data['price_fixed']))
+                elif data.get('price_from'):
+                    payload.add_field('price', str(data['price_from']))
+                else:
+                    payload.add_field('price', '0')
+            else:
+                payload.add_field('price', str(data.get('price', 0)))
+            
             payload.add_field('category_id', str(data['category_id']))
             payload.add_field('user_id', str(user_id))
             payload.add_field('discount', str(data.get('discount', 0)))
             payload.add_field('quantity', str(data.get('quantity', 0)))
+            payload.add_field('is_hot_offer', str(data.get('is_hot_offer', False)).lower())
+            payload.add_field('is_made_to_order', str(data.get('is_made_to_order', False)).lower())
+            payload.add_field('is_for_sale', str(data.get('is_for_sale', False)).lower())
+            
             if data.get('description'):
                 payload.add_field('description', data['description'])
+            
+            # Поля для товаров для покупки
+            if data.get('is_for_sale'):
+                if data.get('price_type'):
+                    payload.add_field('price_type', data['price_type'])
+                
+                if data.get('price_from') is not None:
+                    payload.add_field('price_from', str(data['price_from']))
+                if data.get('price_to') is not None:
+                    payload.add_field('price_to', str(data['price_to']))
+                if data.get('price_fixed') is not None:
+                    payload.add_field('price_fixed', str(data['price_fixed']))
+                if data.get('quantity_from') is not None:
+                    payload.add_field('quantity_from', str(data['quantity_from']))
+                if data.get('quantity_unit'):
+                    payload.add_field('quantity_unit', data['quantity_unit'])
             
             # Добавляем все фото (FastAPI ожидает список файлов с одним именем поля)
             # ВАЖНО: для нескольких файлов нужно использовать одно имя поля 'images'

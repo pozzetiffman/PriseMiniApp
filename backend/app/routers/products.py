@@ -1719,6 +1719,12 @@ def get_products(
     
     return result
 
+def str_to_bool(value: str) -> bool:
+    """Конвертирует строку в boolean"""
+    if isinstance(value, bool):
+        return value
+    return value.lower() in ('true', '1', 'yes', 'on')
+
 @router.post("/", response_model=schemas.Product)
 async def create_product(
     name: str = Form(...),
@@ -1727,13 +1733,25 @@ async def create_product(
     user_id: int = Form(...),
     description: Optional[str] = Form(None),
     discount: float = Form(0.0),
-    is_hot_offer: bool = Form(False),
+    is_hot_offer: str = Form("false"),
     quantity: int = Form(0),
+    is_made_to_order: str = Form("false"),
+    is_for_sale: str = Form("false"),
+    price_from: Optional[float] = Form(None),
+    price_to: Optional[float] = Form(None),
+    price_fixed: Optional[float] = Form(None),
+    price_type: str = Form('range'),
+    quantity_from: Optional[int] = Form(None),
+    quantity_unit: Optional[str] = Form(None),
     bot_id: Optional[int] = Form(None, description="ID бота для независимых магазинов"),
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     images: List[UploadFile] = File(None),
     db: Session = Depends(database.get_db)
 ):
+    # Конвертируем строки в boolean
+    is_hot_offer_bool = str_to_bool(is_hot_offer)
+    is_made_to_order_bool = str_to_bool(is_made_to_order)
+    is_for_sale_bool = str_to_bool(is_for_sale)
     images_urls = []
     image_url = None  # Для обратной совместимости (первое фото)
     
@@ -1823,8 +1841,16 @@ async def create_product(
         bot_id=final_bot_id,  # Если bot_id указан - создаем для независимого магазина бота
         description=description,
         discount=discount,
-        is_hot_offer=is_hot_offer,
+        is_hot_offer=is_hot_offer_bool,
         quantity=quantity,
+        is_made_to_order=is_made_to_order_bool,
+        is_for_sale=is_for_sale_bool,
+        price_from=price_from,
+        price_to=price_to,
+        price_fixed=price_fixed,
+        price_type=price_type,
+        quantity_from=quantity_from,
+        quantity_unit=quantity_unit,
         image_url=image_url,
         images_urls=images_urls_json,
         sync_product_id=None  # Будет установлен после получения ID
