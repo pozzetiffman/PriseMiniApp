@@ -129,6 +129,7 @@ class AddProduct(StatesGroup):
     description = State()
     quantity = State()  # Количество товара
     is_hot_offer = State()  # Горящее предложение
+    quantity_show_enabled = State()  # Показ количества товара
     photos = State()  # Состояние для загрузки нескольких фото
 
 class AddChannel(StatesGroup):
@@ -1982,46 +1983,24 @@ async def process_quantity_from(message: Message, state: FSMContext):
         
         await state.update_data(quantity_from=quantity_from)
         
-        # Переходим к выбору категории
-        data = await state.get_data()
-        user_id = data.get('user_id', message.from_user.id)
+        # Для товара для покупки спрашиваем о показе количества
+        await state.set_state(AddProduct.quantity_show_enabled)
         
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "true"}) as resp:
-                if resp.status != 200:
-                    return await message.answer("❌ Ошибка при получении списка категорий")
-                all_categories = await resp.json()
-        
-        if not all_categories:
-            return await message.answer("❌ Нет категорий. Сначала создайте категорию!")
-        
-        # Получаем иерархию для отображения
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "false"}) as resp:
-                if resp.status != 200:
-                    return await message.answer("❌ Ошибка при получении списка категорий")
-                main_categories = await resp.json()
-        
-        # Создаем словарь для быстрого поиска родительских категорий
-        parent_map = {}
-        for main_cat in main_categories:
-            if main_cat.get('subcategories'):
-                for subcat in main_cat['subcategories']:
-                    parent_map[subcat['id']] = main_cat['name']
-        
+        # Создаем кнопки для выбора показа количества
         builder = InlineKeyboardBuilder()
-        for cat in all_categories:
-            # Если это подкатегория, показываем с указанием родительской
-            if cat.get('parent_id'):
-                parent_name = parent_map.get(cat['id'], '')
-                display_name = f"{parent_name} → {cat['name']}"
-            else:
-                display_name = cat['name']
-            builder.button(text=display_name, callback_data=f"cat_{cat['id']}")
+        builder.button(text="✅ Показывать", callback_data="quantity_show_yes")
+        builder.button(text="❌ Не показывать", callback_data="quantity_show_no")
+        builder.button(text="⚙️ Использовать настройку магазина", callback_data="quantity_show_default")
         builder.adjust(1)
         
-        await state.set_state(AddProduct.category)
-        await message.answer("Выберите категорию или подкатегорию:", reply_markup=builder.as_markup())
+        await message.answer(
+            "Показывать количество товара на витрине?\n\n"
+            "• <b>Показывать</b> - всегда показывать количество\n"
+            "• <b>Не показывать</b> - скрыть количество\n"
+            "• <b>Использовать настройку магазина</b> - использовать общую настройку",
+            reply_markup=builder.as_markup(),
+            parse_mode="HTML"
+        )
     except ValueError:
         await message.answer("Пожалуйста, введите целое число.")
 
@@ -2060,6 +2039,88 @@ async def process_quantity_unit(callback: types.CallbackQuery, state: FSMContext
         # Для обычного товара переходим к вводу количества на складе
         await state.set_state(AddProduct.quantity)
         await callback.message.answer("Введите количество товара на складе:")
+    
+    await callback.answer()
+
+async def show_category_selection(callback_or_message, state: FSMContext):
+    """Вспомогательная функция для показа выбора категории"""
+    data = await state.get_data()
+    user_id = data.get('user_id', callback_or_message.from_user.id)
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "true"}) as resp:
+            if resp.status != 200:
+                if hasattr(callback_or_message, 'message'):
+                    return await callback_or_message.message.answer("❌ Ошибка при получении списка категорий")
+                else:
+                    return await callback_or_message.answer("❌ Ошибка при получении списка категорий")
+            all_categories = await resp.json()
+    
+    if not all_categories:
+        if hasattr(callback_or_message, 'message'):
+            return await callback_or_message.message.answer("❌ Нет категорий. Сначала создайте категорию!")
+        else:
+            return await callback_or_message.answer("❌ Нет категорий. Сначала создайте категорию!")
+    
+    # Получаем иерархию для отображения
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/categories/", params={"user_id": user_id, "flat": "false"}) as resp:
+            if resp.status != 200:
+                if hasattr(callback_or_message, 'message'):
+                    return await callback_or_message.message.answer("❌ Ошибка при получении списка категорий")
+                else:
+                    return await callback_or_message.answer("❌ Ошибка при получении списка категорий")
+            main_categories = await resp.json()
+    
+    # Создаем словарь для быстрого поиска родительских категорий
+    parent_map = {}
+    for main_cat in main_categories:
+        if main_cat.get('subcategories'):
+            for subcat in main_cat['subcategories']:
+                parent_map[subcat['id']] = main_cat['name']
+    
+    builder = InlineKeyboardBuilder()
+    for cat in all_categories:
+        # Если это подкатегория, показываем с указанием родительской
+        if cat.get('parent_id'):
+            parent_name = parent_map.get(cat['id'], '')
+            display_name = f"{parent_name} → {cat['name']}"
+        else:
+            display_name = cat['name']
+        builder.button(text=display_name, callback_data=f"cat_{cat['id']}")
+    builder.adjust(1)
+    
+    await state.set_state(AddProduct.category)
+    if hasattr(callback_or_message, 'message'):
+        await callback_or_message.message.answer("Выберите категорию или подкатегорию:", reply_markup=builder.as_markup())
+    else:
+        await callback_or_message.answer("Выберите категорию или подкатегорию:", reply_markup=builder.as_markup())
+
+@dp.callback_query(StateFilter(AddProduct.quantity_show_enabled), F.data.startswith("quantity_show_"))
+async def process_quantity_show_enabled(callback: types.CallbackQuery, state: FSMContext):
+    show_type = callback.data.replace("quantity_show_", "")
+    
+    if show_type == "yes":
+        quantity_show_enabled = True
+    elif show_type == "no":
+        quantity_show_enabled = False
+    else:  # default
+        quantity_show_enabled = None
+    
+    await state.update_data(quantity_show_enabled=quantity_show_enabled)
+    
+    # Проверяем тип товара
+    data = await state.get_data()
+    is_for_sale = data.get('is_for_sale', False)
+    
+    if is_for_sale:
+        # Для товара для покупки переходим к выбору категории
+        await show_category_selection(callback, state)
+    else:
+        # Для обычного товара переходим к загрузке фото
+        await state.update_data(photos=[])
+        await state.set_state(AddProduct.photos)
+        await callback.message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
     
     await callback.answer()
 
@@ -2246,9 +2307,33 @@ async def process_quantity(message: Message, state: FSMContext):
             # Если единица измерения не установлена (для товара под заказ), устанавливаем по умолчанию
             await state.update_data(quantity_unit="шт")
         
-        await state.update_data(quantity=quantity, photos=[])  # Инициализируем массив фото
-        await state.set_state(AddProduct.photos)
-        await message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
+        await state.update_data(quantity=quantity)
+        
+        # Для обычного товара спрашиваем о показе количества
+        is_made_to_order = data.get('is_made_to_order', False)
+        if not is_made_to_order:
+            await state.set_state(AddProduct.quantity_show_enabled)
+            
+            # Создаем кнопки для выбора показа количества
+            builder = InlineKeyboardBuilder()
+            builder.button(text="✅ Показывать", callback_data="quantity_show_yes")
+            builder.button(text="❌ Не показывать", callback_data="quantity_show_no")
+            builder.button(text="⚙️ Использовать настройку магазина", callback_data="quantity_show_default")
+            builder.adjust(1)
+            
+            await message.answer(
+                "Показывать количество товара на витрине?\n\n"
+                "• <b>Показывать</b> - всегда показывать количество\n"
+                "• <b>Не показывать</b> - скрыть количество\n"
+                "• <b>Использовать настройку магазина</b> - использовать общую настройку",
+                reply_markup=builder.as_markup(),
+                parse_mode="HTML"
+            )
+        else:
+            # Для товара под заказ пропускаем вопрос о показе количества
+            await state.update_data(quantity_show_enabled=None, photos=[])
+            await state.set_state(AddProduct.photos)
+            await message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
     except ValueError:
         await message.answer("Пожалуйста, введите целое число (например, 10 или 0).")
 
@@ -2327,6 +2412,11 @@ async def process_photos_done(message: Message, state: FSMContext):
             payload.add_field('is_hot_offer', str(data.get('is_hot_offer', False)).lower())
             payload.add_field('is_made_to_order', str(data.get('is_made_to_order', False)).lower())
             payload.add_field('is_for_sale', str(data.get('is_for_sale', False)).lower())
+            
+            # Поле для показа количества (может быть None, True или False)
+            quantity_show_enabled = data.get('quantity_show_enabled')
+            if quantity_show_enabled is not None:
+                payload.add_field('quantity_show_enabled', str(quantity_show_enabled).lower())
             
             if data.get('description'):
                 payload.add_field('description', data['description'])
