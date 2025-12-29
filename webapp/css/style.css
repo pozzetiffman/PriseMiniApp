@@ -1189,6 +1189,19 @@ header h1 {
     max-width: 300px;
 }
 
+/* Стили для модального окна покупки */
+#purchase-modal .order-form {
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+#purchase-modal .order-form-field input,
+#purchase-modal .order-form-field textarea,
+#purchase-modal .order-form-field input[type="file"] {
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
 .reservation-title {
     font-size: 20px;
     font-weight: 700;

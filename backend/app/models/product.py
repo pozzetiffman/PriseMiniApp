@@ -19,6 +19,7 @@ class ProductBase(BaseModel):
     price_type: str = 'range'  # Тип цены: 'range' (от-до) или 'fixed' (фиксированная)
     quantity_from: Optional[int] = None  # Количество от (для товаров для покупки)
     quantity_unit: Optional[str] = None  # Единица измерения количества (шт или кг)
+    quantity_show_enabled: Optional[bool] = None  # Индивидуальная настройка показа количества (null = использовать общую настройку магазина)
 
 class ProductCreate(ProductBase):
     pass
@@ -60,6 +61,9 @@ class ForSaleUpdate(BaseModel):
     price_type: str = 'range'  # 'range' или 'fixed'
     quantity_from: Optional[int] = None
     quantity_unit: Optional[str] = None
+
+class QuantityShowEnabledUpdate(BaseModel):
+    quantity_show_enabled: Optional[bool] = None  # null = использовать общую настройку магазина
 
 
 

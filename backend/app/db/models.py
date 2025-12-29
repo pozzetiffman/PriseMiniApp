@@ -39,6 +39,7 @@ class Product(Base):
     price_type = Column(String, default='range')  # Тип цены: 'range' (от-до) или 'fixed' (фиксированная)
     quantity_from = Column(Integer, nullable=True)  # Количество от (для товаров для покупки)
     quantity_unit = Column(String, nullable=True)  # Единица измерения количества (шт или кг)
+    quantity_show_enabled = Column(Boolean, nullable=True)  # Индивидуальная настройка показа количества (null = использовать общую настройку магазина)
     
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship("Category", back_populates="products")

@@ -149,16 +149,21 @@ async def proxy_image(filename: str):
                 }
             )
     
-    # Определяем MIME type по расширению
+    # Определяем MIME type по расширению (поддерживаем изображения и видео)
     ext = filename.lower().split('.')[-1] if '.' in filename else ''
     media_types = {
         'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg',
         'png': 'image/png',
         'gif': 'image/gif',
-        'webp': 'image/webp'
+        'webp': 'image/webp',
+        'mp4': 'video/mp4',
+        'mov': 'video/quicktime',
+        'avi': 'video/x-msvideo',
+        'webm': 'video/webm',
+        'mkv': 'video/x-matroska'
     }
-    media_type = media_types.get(ext, 'image/jpeg')
+    media_type = media_types.get(ext, 'application/octet-stream')
     
     return FileResponse(
         str(file_path),

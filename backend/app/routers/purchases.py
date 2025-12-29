@@ -2,7 +2,7 @@ import os
 import json
 import uuid
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Query, Header, Body, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, Body, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
 from typing import List, Optional
@@ -41,6 +41,18 @@ def make_full_url(path: str) -> str:
     # Формируем полный URL
     base_url = API_PUBLIC_URL.rstrip('/')
     return f"{base_url}/{path}" if base_url else path
+
+def convert_to_api_images_url(path: str) -> str:
+    """Преобразует путь к файлу в URL через /api/images/ для обхода блокировки Telegram WebView"""
+    if not path:
+        return path
+    
+    # Извлекаем имя файла из любого формата пути
+    filename = path.split('/')[-1]
+    
+    # ВСЕГДА используем относительный путь - он будет работать с текущим доменом запроса
+    # Это важно для Telegram WebView, где домен может быть ngrok или Vercel
+    return f"/api/images/{filename}"
 
 def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     """
@@ -102,13 +114,16 @@ async def create_purchase(
     
     # Сохраняем изображения (до 5 шт)
     images_urls = []
+    saved_image_paths = []  # Сохраняем пути к файлам на диске
     if images and len(images) > 0:
         images = images[:5]  # Ограничиваем до 5 фото
         upload_dir = "static/uploads"
         os.makedirs(upload_dir, exist_ok=True)
+        print(f"📷 DEBUG: Saving {len(images)} images to {upload_dir}")
         
         for image in images:
             if not image or not image.filename:
+                print(f"📷 DEBUG: Skipping empty image")
                 continue
             
             file_ext = os.path.splitext(image.filename)[1] if image.filename else '.jpg'
@@ -121,12 +136,17 @@ async def create_purchase(
                     buffer.write(contents)
                 image_url_path = f"/static/uploads/{unique_filename}"
                 images_urls.append(image_url_path)
+                saved_image_paths.append(file_path)  # Сохраняем путь на диске
+                print(f"📷 DEBUG: Saved image {unique_filename} to {file_path}, size={len(contents)} bytes")
             except Exception as e:
                 print(f"ERROR: Failed to save image: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
     
     # Сохраняем видео (1 шт)
     video_url = None
+    saved_video_path = None  # Сохраняем путь к файлу на диске
     if video and video.filename:
         upload_dir = "static/uploads"
         os.makedirs(upload_dir, exist_ok=True)
@@ -140,8 +160,12 @@ async def create_purchase(
             with open(file_path, "wb") as buffer:
                 buffer.write(contents)
             video_url = f"/static/uploads/{unique_filename}"
+            saved_video_path = file_path  # Сохраняем путь на диске
+            print(f"🎥 DEBUG: Saved video {unique_filename} to {file_path}, size={len(contents)} bytes")
         except Exception as e:
             print(f"ERROR: Failed to save video: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Сохраняем массив URL в JSON строку
     images_urls_json = json.dumps(images_urls) if images_urls else None
@@ -182,9 +206,21 @@ async def create_purchase(
                 message += f"Телефон: {phone_number}\n"
             if city:
                 message += f"Город: {city}\n"
+            if address:
+                message += f"Адрес: {address}\n"
+            if notes:
+                message += f"Примечание: {notes}\n"
+            if payment_method:
+                payment_text = "Наличными" if payment_method == "cash" else "Безналичными"
+                message += f"Оплата: {payment_text}\n"
+            if organization:
+                message += f"Организация: {organization}\n"
             
+            bot_api_url = f"https://api.telegram.org/bot{bot_token}"
+            
+            # Отправляем текстовое сообщение
             requests.post(
-                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                f"{bot_api_url}/sendMessage",
                 json={
                     "chat_id": product.user_id,
                     "text": message,
@@ -192,16 +228,84 @@ async def create_purchase(
                 },
                 timeout=10
             )
+            
+            # Отправляем фото (если есть)
+            if images_urls and len(saved_image_paths) > 0:
+                print(f"📷 DEBUG: Sending {len(saved_image_paths)} photos to admin {product.user_id}")
+                
+                # Отправляем каждое фото отдельно через multipart/form-data
+                for idx, file_path in enumerate(saved_image_paths):
+                    try:
+                        print(f"📷 DEBUG: Trying to send photo {idx+1}/{len(saved_image_paths)} from path: {file_path}")
+                        
+                        if os.path.exists(file_path):
+                            with open(file_path, 'rb') as photo_file:
+                                files = {'photo': photo_file}
+                                data = {
+                                    'chat_id': product.user_id,
+                                    'caption': f"📷 Фото товара ({idx+1}/{len(saved_image_paths)})" if len(saved_image_paths) > 1 else "📷 Фото товара"
+                                }
+                                response = requests.post(
+                                    f"{bot_api_url}/sendPhoto",
+                                    files=files,
+                                    data=data,
+                                    timeout=30
+                                )
+                                print(f"📷 DEBUG: Photo {idx+1} send response: status={response.status_code}, body={response.text[:200]}")
+                                if response.ok:
+                                    print(f"✅ Successfully sent photo {idx+1}/{len(saved_image_paths)}")
+                                else:
+                                    print(f"ERROR: Failed to send photo {idx+1}: {response.text}")
+                        else:
+                            print(f"⚠️ Photo file not found at {file_path}")
+                    except Exception as e:
+                        print(f"ERROR: Failed to send photo {idx+1}: {e}")
+                        import traceback
+                        traceback.print_exc()
+            elif images_urls:
+                print(f"⚠️ WARNING: images_urls exists but saved_image_paths is empty")
+            
+            # Отправляем видео (если есть)
+            if video_url and saved_video_path:
+                print(f"🎥 DEBUG: Sending video to admin {product.user_id} from path: {saved_video_path}")
+                try:
+                    if os.path.exists(saved_video_path):
+                        with open(saved_video_path, 'rb') as video_file:
+                            files = {'video': video_file}
+                            data = {
+                                'chat_id': product.user_id,
+                                'caption': "🎥 Видео товара"
+                            }
+                            response = requests.post(
+                                f"{bot_api_url}/sendVideo",
+                                files=files,
+                                data=data,
+                                timeout=60  # Видео может быть большим, увеличиваем таймаут
+                            )
+                            print(f"🎥 DEBUG: Video send response: status={response.status_code}, body={response.text[:200]}")
+                            if response.ok:
+                                print(f"✅ Successfully sent video")
+                            else:
+                                print(f"ERROR: Failed to send video: {response.text}")
+                    else:
+                        print(f"⚠️ Video file not found at {saved_video_path}")
+                except Exception as e:
+                    print(f"ERROR: Failed to send video: {e}")
+                    import traceback
+                    traceback.print_exc()
+            elif video_url:
+                print(f"⚠️ WARNING: video_url exists but saved_video_path is None")
+                    
     except Exception as e:
         print(f"ERROR: Failed to send notification: {e}")
     
-    # Преобразуем images_urls в полные URL
+    # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
     images_urls_list = json.loads(db_purchase.images_urls) if db_purchase.images_urls else None
     if images_urls_list:
-        images_urls_list = [make_full_url(img_url) for img_url in images_urls_list]
+        images_urls_list = [convert_to_api_images_url(img_url) for img_url in images_urls_list]
     
-    # Преобразуем video_url в полный URL
-    video_url_full = make_full_url(db_purchase.video_url) if db_purchase.video_url else None
+    # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
+    video_url_full = convert_to_api_images_url(db_purchase.video_url) if db_purchase.video_url else None
     
     # Преобразуем для ответа
     purchase_dict = {
@@ -263,13 +367,13 @@ async def get_my_purchases(
     result = []
     for purchase in purchases:
         product = purchase.product
-        # Преобразуем images_urls в полные URL
+        # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
         images_urls_list = json.loads(purchase.images_urls) if purchase.images_urls else None
         if images_urls_list:
-            images_urls_list = [make_full_url(img_url) for img_url in images_urls_list]
+            images_urls_list = [convert_to_api_images_url(img_url) for img_url in images_urls_list]
         
-        # Преобразуем video_url в полный URL
-        video_url_full = make_full_url(purchase.video_url) if purchase.video_url else None
+        # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
+        video_url_full = convert_to_api_images_url(purchase.video_url) if purchase.video_url else None
         
         purchase_dict = {
             "id": purchase.id,
@@ -336,13 +440,16 @@ async def get_all_purchases(
     result = []
     for purchase in purchases:
         product = purchase.product
-        # Преобразуем images_urls в полные URL
+        # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
         images_urls_list = json.loads(purchase.images_urls) if purchase.images_urls else None
+        print(f"📷 [PURCHASES ALL] Purchase {purchase.id}: raw images_urls={purchase.images_urls}, parsed={images_urls_list}")
         if images_urls_list:
-            images_urls_list = [make_full_url(img_url) for img_url in images_urls_list]
+            images_urls_list = [convert_to_api_images_url(img_url) for img_url in images_urls_list]
+            print(f"📷 [PURCHASES ALL] Purchase {purchase.id}: converted images_urls={images_urls_list}")
         
-        # Преобразуем video_url в полный URL
-        video_url_full = make_full_url(purchase.video_url) if purchase.video_url else None
+        # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
+        video_url_full = convert_to_api_images_url(purchase.video_url) if purchase.video_url else None
+        print(f"🎥 [PURCHASES ALL] Purchase {purchase.id}: raw video_url={purchase.video_url}, converted={video_url_full}")
         
         purchase_dict = {
             "id": purchase.id,
@@ -423,13 +530,13 @@ async def update_purchase(
     
     product = db_purchase.product
     
-    # Преобразуем images_urls в полные URL
+    # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
     images_urls_list = json.loads(db_purchase.images_urls) if db_purchase.images_urls else None
     if images_urls_list:
-        images_urls_list = [make_full_url(img_url) for img_url in images_urls_list]
+        images_urls_list = [convert_to_api_images_url(img_url) for img_url in images_urls_list]
     
-    # Преобразуем video_url в полный URL
-    video_url_full = make_full_url(db_purchase.video_url) if db_purchase.video_url else None
+    # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
+    video_url_full = convert_to_api_images_url(db_purchase.video_url) if db_purchase.video_url else None
     
     purchase_dict = {
         "id": db_purchase.id,

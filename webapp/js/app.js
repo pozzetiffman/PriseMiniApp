@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelOrderAPI, cancelReservationAPI, createOrderAPI, createPurchaseAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductForSaleAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI } from './api.js';
+import { API_BASE, cancelOrderAPI, cancelReservationAPI, createOrderAPI, createPurchaseAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductForSaleAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI, updateProductQuantityShowEnabledAPI } from './api.js';
 import { initCart, loadCart, loadOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
@@ -916,7 +916,14 @@ function renderProducts(products) {
         // Создаем badge количества товара или "Под заказ"
         let quantityBadge = null;
         const shopSettings = getCurrentShopSettings();
-        const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
+        const globalQuantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
+        
+        // Определяем, нужно ли показывать количество для этого товара
+        // Сначала проверяем индивидуальную настройку товара, если она null - используем глобальную
+        let quantityEnabled = globalQuantityEnabled;
+        if (prod.quantity_show_enabled !== null && prod.quantity_show_enabled !== undefined) {
+            quantityEnabled = prod.quantity_show_enabled === true || prod.quantity_show_enabled === 1 || prod.quantity_show_enabled === '1' || String(prod.quantity_show_enabled).toLowerCase() === 'true';
+        }
         
         // Отладочный вывод
         if (prod.id) {
@@ -924,6 +931,8 @@ function renderProducts(products) {
                 is_made_to_order: prod.is_made_to_order,
                 type: typeof prod.is_made_to_order,
                 quantity: prod.quantity,
+                quantity_show_enabled: prod.quantity_show_enabled,
+                globalQuantityEnabled: globalQuantityEnabled,
                 quantityEnabled: quantityEnabled,
                 full_product: prod
             });
@@ -1494,7 +1503,17 @@ function showProductModal(prod, finalPrice, fullImages) {
     const modalQuantityDiv = document.getElementById('modal-quantity');
     if (modalQuantityDiv) {
         const shopSettingsForModal = getCurrentShopSettings();
-        const quantityEnabledForModal = shopSettingsForModal ? (shopSettingsForModal.quantity_enabled !== false) : true;
+        const globalQuantityEnabled = shopSettingsForModal ? (shopSettingsForModal.quantity_enabled !== false) : true;
+        
+        // Определяем, какую настройку использовать: индивидуальную или общую
+        // Если quantity_show_enabled === null или undefined, используем общую настройку
+        // Иначе используем индивидуальную настройку
+        let quantityEnabledForModal;
+        if (prod.quantity_show_enabled === null || prod.quantity_show_enabled === undefined) {
+            quantityEnabledForModal = globalQuantityEnabled;
+        } else {
+            quantityEnabledForModal = prod.quantity_show_enabled === true || prod.quantity_show_enabled === 1 || prod.quantity_show_enabled === 'true' || prod.quantity_show_enabled === '1';
+        }
         
         // Проверяем функцию "покупка" - приоритет выше, чем "под заказ" или количество
         const isForSale = prod.is_for_sale === true || 
@@ -1565,7 +1584,15 @@ function showProductModal(prod, finalPrice, fullImages) {
     
     // Проверяем, включено ли количество товаров (и соответственно резервация)
     const shopSettingsForReservation = getCurrentShopSettings();
-    const quantityEnabledForReservation = shopSettingsForReservation ? (shopSettingsForReservation.quantity_enabled !== false) : true;
+    const globalQuantityEnabledForReservation = shopSettingsForReservation ? (shopSettingsForReservation.quantity_enabled !== false) : true;
+    
+    // Определяем, какую настройку использовать для резервации: индивидуальную или общую
+    let quantityEnabledForReservation;
+    if (prod.quantity_show_enabled === null || prod.quantity_show_enabled === undefined) {
+        quantityEnabledForReservation = globalQuantityEnabledForReservation;
+    } else {
+        quantityEnabledForReservation = prod.quantity_show_enabled === true || prod.quantity_show_enabled === 1 || prod.quantity_show_enabled === 'true' || prod.quantity_show_enabled === '1';
+    }
     
     // Используем контекст для определения прав (backend уже проверил все)
     const hasActiveReservation = prod.reservation && prod.reservation.reserved_until;
@@ -2158,6 +2185,7 @@ function showEditProductModal(prod) {
     const editDiscountInput = document.getElementById('edit-discount');
     const editQuantityInput = document.getElementById('edit-quantity');
     const editQuantityUnitGeneralInput = document.getElementById('edit-quantity-unit-general');
+    const editQuantityShowEnabledInput = document.getElementById('edit-quantity-show-enabled');
     const editMadeToOrderInput = document.getElementById('edit-made-to-order');
     const editForSaleInput = document.getElementById('edit-for-sale');
     const editPriceFromInput = document.getElementById('edit-price-from');
@@ -2191,6 +2219,21 @@ function showEditProductModal(prod) {
         }
     }
     
+    // Устанавливаем тумблер "Показ количества"
+    const shopSettingsForEdit = getCurrentShopSettings();
+    const globalQuantityEnabled = shopSettingsForEdit ? (shopSettingsForEdit.quantity_enabled !== false) : true;
+    
+    // Если индивидуальная настройка не установлена (null), используем общую настройку
+    let quantityShowEnabledValue;
+    if (prod.quantity_show_enabled === null || prod.quantity_show_enabled === undefined) {
+        quantityShowEnabledValue = globalQuantityEnabled;
+        editQuantityShowEnabledInput.dataset.isUsingGlobal = 'true';
+    } else {
+        quantityShowEnabledValue = prod.quantity_show_enabled === true || prod.quantity_show_enabled === 1 || prod.quantity_show_enabled === 'true' || prod.quantity_show_enabled === '1';
+        editQuantityShowEnabledInput.dataset.isUsingGlobal = 'false';
+    }
+    editQuantityShowEnabledInput.checked = quantityShowEnabledValue;
+    
     // Проверяем is_made_to_order - может быть true, false, 1, 0, "true", "false", или undefined
     // Преобразуем в boolean для надежности
     const isMadeToOrder = prod.is_made_to_order === true || 
@@ -2199,6 +2242,17 @@ function showEditProductModal(prod) {
                           prod.is_made_to_order === 'true' ||
                           String(prod.is_made_to_order).toLowerCase() === 'true';
     editMadeToOrderInput.checked = isMadeToOrder;
+    
+    // Делаем тумблер "Показ количества" неактивным, если включен "Под заказ"
+    // При включенном "Под заказ" количество не отображается, поэтому тумблер неактивен
+    editQuantityShowEnabledInput.disabled = isMadeToOrder;
+    
+    // Обработчик изменения тумблера "Под заказ" - отключаем/включаем тумблер "Показ количества"
+    editMadeToOrderInput.onchange = () => {
+        const madeToOrderEnabled = editMadeToOrderInput.checked;
+        // Отключаем тумблер "Показ количества" при включении "Под заказ"
+        editQuantityShowEnabledInput.disabled = madeToOrderEnabled;
+    };
     
     // Проверяем is_for_sale
     const isForSale = prod.is_for_sale === true || 
@@ -2393,6 +2447,7 @@ async function saveProductEdit(productId) {
     const editPriceInput = document.getElementById('edit-price');
     const editDiscountInput = document.getElementById('edit-discount');
     const editQuantityInput = document.getElementById('edit-quantity');
+    const editQuantityShowEnabledInput = document.getElementById('edit-quantity-show-enabled');
     const editMadeToOrderInput = document.getElementById('edit-made-to-order');
     const editForSaleInput = document.getElementById('edit-for-sale');
     const editPriceFromInput = document.getElementById('edit-price-from');
@@ -2410,7 +2465,38 @@ async function saveProductEdit(productId) {
     const newQuantity = parseInt(editQuantityInput.value, 10);
     // Получаем единицу измерения для обычных товаров
     const newQuantityUnitGeneral = editQuantityUnitGeneralInput ? editQuantityUnitGeneralInput.value || null : null;
+    // Получаем значение тумблера "Показ количества"
+    const shopSettingsForSave = getCurrentShopSettings();
+    const globalQuantityEnabledForSave = shopSettingsForSave ? (shopSettingsForSave.quantity_enabled !== false) : true;
     const newMadeToOrder = editMadeToOrderInput.checked;
+    
+    // Если включен "Под заказ", настройка "Показ количества" не применяется (количество не отображается)
+    // Поэтому сохраняем null (использовать глобальную настройку)
+    let quantityShowEnabledToSave;
+    if (newMadeToOrder) {
+        // При "Под заказ" количество не отображается, поэтому сохраняем null
+        quantityShowEnabledToSave = null;
+    } else {
+        // Если "Под заказ" выключен, сохраняем настройку "Показ количества"
+        const newQuantityShowEnabled = editQuantityShowEnabledInput.checked;
+        
+        // Определяем, какое значение сохранить: если совпадает с глобальной настройкой, сохраняем null
+        if (editQuantityShowEnabledInput.dataset.isUsingGlobal === 'true') {
+            // Использовалась глобальная настройка
+            if (newQuantityShowEnabled === globalQuantityEnabledForSave) {
+                quantityShowEnabledToSave = null; // Оставляем глобальную настройку
+            } else {
+                quantityShowEnabledToSave = newQuantityShowEnabled; // Устанавливаем индивидуальную
+            }
+        } else {
+            // Использовалась индивидуальная настройка
+            if (newQuantityShowEnabled === globalQuantityEnabledForSave) {
+                quantityShowEnabledToSave = null; // Возвращаемся к глобальной
+            } else {
+                quantityShowEnabledToSave = newQuantityShowEnabled; // Сохраняем индивидуальную
+            }
+        }
+    }
     const newForSale = editForSaleInput.checked;
     const newPriceType = editPriceTypeRangeRadio && editPriceTypeRangeRadio.checked ? 'range' : 'fixed';
     const newPriceFrom = editPriceFromInput.value ? parseFloat(editPriceFromInput.value) : null;
@@ -2484,6 +2570,11 @@ async function saveProductEdit(productId) {
         
         // Обновляем количество и единицу измерения (без уведомлений)
         await updateProductQuantityAPI(productId, appContext.shop_owner_id, newQuantity, newQuantityUnitGeneral);
+        
+        // Обновляем индивидуальную настройку показа количества (без уведомлений)
+        console.log(`💾 Saving quantity-show-enabled: productId=${productId}, quantityShowEnabled=${quantityShowEnabledToSave}`);
+        await updateProductQuantityShowEnabledAPI(productId, appContext.shop_owner_id, quantityShowEnabledToSave);
+        console.log(`✅ Quantity-show-enabled saved:`, quantityShowEnabledToSave);
         
         // Обновляем статус 'под заказ' (без уведомлений)
         console.log(`💾 Saving made-to-order: productId=${productId}, isMadeToOrder=${newMadeToOrder}`);

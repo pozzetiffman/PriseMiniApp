@@ -1474,6 +1474,8 @@ async function loadPurchases() {
         
         const purchases = await getAllPurchasesAPI(shopOwnerId);
         
+        console.log('[ADMIN PURCHASES] Loaded purchases:', purchases);
+        
         if (!purchases || purchases.length === 0) {
             purchasesList.innerHTML = '<p class="loading">Заявок на покупку пока нет</p>';
             return;
@@ -1482,7 +1484,12 @@ async function loadPurchases() {
         // Рендерим список покупок
         purchasesList.innerHTML = '';
         
-        purchases.forEach(purchase => {
+        purchases.forEach((purchase, purchaseIndex) => {
+            console.log(`[ADMIN PURCHASES] Processing purchase ${purchaseIndex}:`, {
+                id: purchase.id,
+                images_urls: purchase.images_urls,
+                video_url: purchase.video_url
+            });
             const product = purchase.product;
             if (!product) {
                 console.warn('⚠️ Purchase missing product:', purchase.id);
@@ -1551,57 +1558,247 @@ async function loadPurchases() {
             // Детали заявки
             const detailsList = [];
             
+            const createDetailItem = (label, value) => {
+                const div = document.createElement('div');
+                div.style.cssText = 'margin-bottom: 6px;';
+                const strong = document.createElement('strong');
+                strong.textContent = label + ' ';
+                div.appendChild(strong);
+                div.appendChild(document.createTextNode(value));
+                return div;
+            };
+            
             if (purchase.last_name || purchase.first_name || purchase.middle_name) {
                 const fullName = `${purchase.last_name || ''} ${purchase.first_name || ''} ${purchase.middle_name || ''}`.trim();
                 if (fullName) {
-                    detailsList.push(`<div style="margin-bottom: 6px;"><strong>👤 Имя:</strong> ${fullName}</div>`);
+                    detailsList.push(createDetailItem('👤 Имя:', fullName));
                 }
             }
             
             if (purchase.phone_number) {
-                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📱 Телефон:</strong> ${purchase.phone_number}</div>`);
+                detailsList.push(createDetailItem('📱 Телефон:', purchase.phone_number));
             }
             
             if (purchase.city) {
-                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📍 Город:</strong> ${purchase.city}</div>`);
+                detailsList.push(createDetailItem('📍 Город:', purchase.city));
             }
             
             if (purchase.address) {
-                detailsList.push(`<div style="margin-bottom: 6px;"><strong>🏠 Адрес:</strong> ${purchase.address}</div>`);
+                detailsList.push(createDetailItem('🏠 Адрес:', purchase.address));
             }
             
             if (purchase.payment_method) {
                 const paymentText = purchase.payment_method === 'cash' ? '💵 Наличные' : '🏦 Банковский перевод';
-                detailsList.push(`<div style="margin-bottom: 6px;"><strong>💰 Форма оплаты:</strong> ${paymentText}</div>`);
+                detailsList.push(createDetailItem('💰 Форма оплаты:', paymentText));
             }
             
             if (purchase.organization) {
-                detailsList.push(`<div style="margin-bottom: 6px;"><strong>🏢 Организация:</strong> ${purchase.organization}</div>`);
+                detailsList.push(createDetailItem('🏢 Организация:', purchase.organization));
             }
             
             if (purchase.notes) {
-                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📝 Примечание:</strong> ${purchase.notes}</div>`);
+                detailsList.push(createDetailItem('📝 Примечание:', purchase.notes));
             }
             
             // Превью фото
             if (purchase.images_urls && purchase.images_urls.length > 0) {
-                const imagesHtml = purchase.images_urls.map(imgUrl => {
-                    const fullUrl = imgUrl.startsWith('http') ? imgUrl : `${API_BASE}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`;
-                    return `<img src="${fullUrl}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; margin: 4px;" onerror="this.style.display='none'">`;
-                }).join('');
-                detailsList.push(`<div style="margin-bottom: 6px;"><strong>📷 Фото:</strong><div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">${imagesHtml}</div></div>`);
+                console.log(`[ADMIN PURCHASES] Purchase ${purchase.id} has ${purchase.images_urls.length} images:`, purchase.images_urls);
+                
+                const imagesContainer = document.createElement('div');
+                imagesContainer.style.cssText = 'margin-bottom: 6px;';
+                
+                const imagesLabel = document.createElement('strong');
+                imagesLabel.textContent = '📷 Фото:';
+                imagesLabel.style.cssText = 'display: block; margin-bottom: 4px;';
+                imagesContainer.appendChild(imagesLabel);
+                
+                const imagesWrapper = document.createElement('div');
+                imagesWrapper.style.cssText = 'display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;';
+                
+                purchase.images_urls.forEach((imgUrl, index) => {
+                    // Backend возвращает относительные URL (/api/images/...)
+                    // Нужно добавить API_BASE для получения полного URL
+                    let fullUrl = imgUrl;
+                    if (imgUrl && imgUrl.startsWith('/')) {
+                        // Относительный URL - добавляем API_BASE
+                        fullUrl = `${API_BASE}${imgUrl}`;
+                    } else if (imgUrl && !imgUrl.startsWith('http')) {
+                        // URL без протокола - добавляем API_BASE
+                        fullUrl = `${API_BASE}/${imgUrl}`;
+                    }
+                    
+                    console.log(`[ADMIN PURCHASE ${purchase.id} IMG ${index}] Loading image from: ${fullUrl} (original: ${imgUrl})`);
+                    
+                    const imgContainer = document.createElement('div');
+                    imgContainer.style.cssText = 'width: 60px; height: 60px; border-radius: 8px; overflow: hidden; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; position: relative;';
+                    
+                    const placeholder = document.createElement('div');
+                    placeholder.textContent = '⏳';
+                    placeholder.style.cssText = 'font-size: 20px; color: var(--text-hint);';
+                    imgContainer.appendChild(placeholder);
+                    
+                    // Загружаем изображение через fetch для обхода блокировки Telegram WebView (как в карточке товара)
+                    fetch(fullUrl, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => {
+                        console.log(`[ADMIN PURCHASE ${purchase.id} IMG ${index}] Response status: ${response.status}, headers:`, response.headers);
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`);
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        console.log(`[ADMIN PURCHASE ${purchase.id} IMG ${index}] Blob created, size: ${blob.size} bytes, type: ${blob.type}`);
+                        const blobUrl = URL.createObjectURL(blob);
+                        const img = document.createElement('img');
+                        img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+                        img.alt = `Фото товара ${index + 1}`;
+                        
+                        img.onload = () => {
+                            console.log(`[ADMIN PURCHASE ${purchase.id} IMG ${index}] Image loaded successfully, dimensions: ${img.naturalWidth}x${img.naturalHeight}`);
+                            // Удаляем placeholder только после успешной загрузки
+                            if (placeholder.parentNode) {
+                                placeholder.remove();
+                            }
+                        };
+                        
+                        img.onerror = (e) => {
+                            console.error(`[ADMIN PURCHASE ${purchase.id} IMG ${index}] Image load error:`, e);
+                            URL.revokeObjectURL(blobUrl);
+                            placeholder.textContent = '📷';
+                            placeholder.style.display = 'flex';
+                            if (img.parentNode) {
+                                img.remove();
+                            }
+                        };
+                        
+                        // Сначала добавляем img в контейнер, потом устанавливаем src (как в рабочем коде карточки товара)
+                        imgContainer.appendChild(img);
+                        // Устанавливаем src ПОСЛЕ добавления в DOM
+                        img.src = blobUrl;
+                    })
+                    .catch(error => {
+                        console.error(`[ADMIN PURCHASE ${purchase.id} IMG ${index}] Fetch error:`, error, 'URL:', fullUrl);
+                        placeholder.textContent = '📷';
+                        placeholder.style.display = 'flex';
+                    });
+                    
+                    imagesWrapper.appendChild(imgContainer);
+                });
+                
+                imagesContainer.appendChild(imagesWrapper);
+                detailsList.push(imagesContainer);
+            } else {
+                console.log(`[ADMIN PURCHASES] Purchase ${purchase.id} has no images_urls or empty array`);
             }
             
             // Превью видео
             if (purchase.video_url) {
-                const videoUrl = purchase.video_url.startsWith('http') ? purchase.video_url : `${API_BASE}${purchase.video_url.startsWith('/') ? '' : '/'}${purchase.video_url}`;
-                detailsList.push(`<div style="margin-bottom: 6px;"><strong>🎥 Видео:</strong><br><video src="${videoUrl}" controls style="max-width: 200px; max-height: 150px; border-radius: 8px; margin-top: 4px;"></video></div>`);
+                console.log(`[ADMIN PURCHASES] Purchase ${purchase.id} has video:`, purchase.video_url);
+                
+                const videoContainer = document.createElement('div');
+                videoContainer.style.cssText = 'margin-bottom: 6px;';
+                
+                const videoLabel = document.createElement('strong');
+                videoLabel.textContent = '🎥 Видео:';
+                videoLabel.style.cssText = 'display: block; margin-bottom: 4px;';
+                videoContainer.appendChild(videoLabel);
+                
+                // Backend возвращает относительные URL (/api/images/...)
+                // Нужно добавить API_BASE для получения полного URL
+                let videoUrl = purchase.video_url;
+                if (videoUrl && videoUrl.startsWith('/')) {
+                    // Относительный URL - добавляем API_BASE
+                    videoUrl = `${API_BASE}${videoUrl}`;
+                } else if (videoUrl && !videoUrl.startsWith('http')) {
+                    // URL без протокола - добавляем API_BASE
+                    videoUrl = `${API_BASE}/${videoUrl}`;
+                }
+                
+                console.log(`[ADMIN PURCHASE ${purchase.id} VIDEO] Loading video from: ${videoUrl} (original: ${purchase.video_url})`);
+                
+                const videoWrapper = document.createElement('div');
+                videoWrapper.style.cssText = 'margin-top: 4px;';
+                
+                const placeholder = document.createElement('div');
+                placeholder.textContent = '⏳ Загрузка видео...';
+                placeholder.style.cssText = 'padding: 20px; text-align: center; color: var(--text-hint); background: var(--bg-secondary); border-radius: 8px;';
+                videoWrapper.appendChild(placeholder);
+                
+                // Загружаем видео через fetch для обхода блокировки Telegram WebView
+                fetch(videoUrl, {
+                    headers: {
+                        'ngrok-skip-browser-warning': '69420'
+                    }
+                })
+                .then(response => {
+                    console.log(`[ADMIN PURCHASE ${purchase.id} VIDEO] Response status: ${response.status}, headers:`, response.headers);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`);
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    console.log(`[ADMIN PURCHASE ${purchase.id} VIDEO] Blob created, size: ${blob.size} bytes, type: ${blob.type}`);
+                    const blobUrl = URL.createObjectURL(blob);
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    video.style.cssText = 'max-width: 200px; max-height: 150px; border-radius: 8px; width: 100%;';
+                    
+                    video.onloadeddata = () => {
+                        console.log(`[ADMIN PURCHASE ${purchase.id} VIDEO] Video loaded successfully, duration: ${video.duration}s`);
+                        // Удаляем placeholder только после успешной загрузки
+                        if (placeholder.parentNode) {
+                            placeholder.remove();
+                        }
+                    };
+                    
+                    video.onerror = (e) => {
+                        console.error(`[ADMIN PURCHASE ${purchase.id} VIDEO] Video load error:`, e);
+                        URL.revokeObjectURL(blobUrl);
+                        placeholder.textContent = '❌ Ошибка загрузки видео';
+                        placeholder.style.display = 'block';
+                        if (video.parentNode) {
+                            video.remove();
+                        }
+                    };
+                    
+                    // Сначала добавляем video в контейнер, потом устанавливаем src (как в рабочем коде)
+                    videoWrapper.appendChild(video);
+                    // Устанавливаем src ПОСЛЕ добавления в DOM
+                    video.src = blobUrl;
+                })
+                .catch(error => {
+                    console.error(`[ADMIN PURCHASE ${purchase.id} VIDEO] Fetch error:`, error, 'URL:', videoUrl);
+                    placeholder.textContent = '❌ Ошибка загрузки видео';
+                    placeholder.style.display = 'block';
+                });
+                
+                videoContainer.appendChild(videoWrapper);
+                detailsList.push(videoContainer);
+            } else {
+                console.log(`[ADMIN PURCHASES] Purchase ${purchase.id} has no video_url`);
             }
             
             if (detailsList.length > 0) {
                 const detailsDiv = document.createElement('div');
                 detailsDiv.style.cssText = 'margin-top: 12px; padding: 12px; background: rgba(90, 200, 250, 0.1); border-radius: 8px; font-size: 13px; color: var(--tg-theme-text-color); border: 1px solid rgba(90, 200, 250, 0.2);';
-                detailsDiv.innerHTML = '<div style="font-weight: 600; margin-bottom: 8px; color: var(--tg-theme-button-color, #5ac8fa);">📋 Детали заявки:</div>' + detailsList.join('');
+                
+                const detailsTitle = document.createElement('div');
+                detailsTitle.style.cssText = 'font-weight: 600; margin-bottom: 8px; color: var(--tg-theme-button-color, #5ac8fa);';
+                detailsTitle.textContent = '📋 Детали заявки:';
+                detailsDiv.appendChild(detailsTitle);
+                
+                // Добавляем все элементы из detailsList
+                detailsList.forEach(item => {
+                    if (item instanceof HTMLElement) {
+                        detailsDiv.appendChild(item);
+                    }
+                });
+                
                 infoDiv.appendChild(detailsDiv);
             }
             

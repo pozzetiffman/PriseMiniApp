@@ -437,6 +437,41 @@ export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMade
     return JSON.parse(responseText);
 }
 
+// Обновление индивидуальной настройки показа количества товара (без уведомлений)
+export async function updateProductQuantityShowEnabledAPI(productId, shopOwnerId, quantityShowEnabled) {
+    const url = `${API_BASE}/api/products/${productId}/update-quantity-show-enabled?user_id=${shopOwnerId}`;
+    console.log(`Updating product quantity-show-enabled: productId=${productId}, quantityShowEnabled=${quantityShowEnabled}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            quantity_show_enabled: quantityShowEnabled
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update product quantity-show-enabled response: status=${response.status}, body=${responseText}`);
+    
+    if (response.ok) {
+        const result = JSON.parse(responseText);
+        console.log(`✅ Quantity-show-enabled updated successfully: quantity_show_enabled=${result.quantity_show_enabled}`);
+    }
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить настройку показа количества';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
 // Обновление функции 'покупка' товара (без уведомлений)
 export async function updateProductForSaleAPI(productId, shopOwnerId, forSaleData) {
     const url = `${API_BASE}/api/products/${productId}/update-for-sale?user_id=${shopOwnerId}`;
