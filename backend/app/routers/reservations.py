@@ -656,6 +656,76 @@ async def get_cart_reservations(
     
     return valid_reservations
 
+@router.get("/history", response_model=List[schemas.Reservation])
+async def get_reservations_history(
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Получить историю резерваций пользователя (только завершенные и отмененные, неактивные)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Получаем только неактивные резервации пользователя (история = завершенные и отмененные)
+    # Активные резервации показываются в разделе "Активные", а не в истории
+    reservations = db.query(models.Reservation).filter(
+        and_(
+            models.Reservation.reserved_by_user_id == user_id,
+            models.Reservation.is_active == False  # Только неактивные (история)
+        )
+    ).order_by(models.Reservation.created_at.desc()).all()
+    
+    # Фильтруем резервации, у которых товар существует
+    valid_reservations = []
+    for reservation in reservations:
+        product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
+        if product:
+            valid_reservations.append(reservation)
+    
+    return valid_reservations
+
+@router.delete("/history/clear")
+async def clear_reservations_history(
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Очистить всю историю резерваций пользователя (удалить все неактивные резервации)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Удаляем все неактивные резервации пользователя (история)
+    deleted_count = db.query(models.Reservation).filter(
+        and_(
+            models.Reservation.reserved_by_user_id == user_id,
+            models.Reservation.is_active == False
+        )
+    ).delete(synchronize_session=False)
+    
+    db.commit()
+    
+    return {"message": f"Удалено {deleted_count} записей из истории резерваций", "deleted_count": deleted_count}
+
 # Временная поддержка старого endpoint для обратной совместимости
 @router.get("/user/{user_id}", response_model=List[schemas.Reservation])
 async def get_user_reservations_legacy(

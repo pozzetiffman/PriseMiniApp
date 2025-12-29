@@ -360,8 +360,89 @@ async def get_my_purchases(
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
+    # Получаем только активные покупки (не завершенные и не отмененные)
     purchases = db.query(models.Purchase).filter(
-        models.Purchase.purchased_by_user_id == purchased_by_user_id
+        and_(
+            models.Purchase.purchased_by_user_id == purchased_by_user_id,
+            models.Purchase.is_cancelled == False,
+            models.Purchase.is_completed == False
+        )
+    ).order_by(models.Purchase.created_at.desc()).all()
+    
+    result = []
+    for purchase in purchases:
+        product = purchase.product
+        # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
+        images_urls_list = json.loads(purchase.images_urls) if purchase.images_urls else None
+        if images_urls_list:
+            images_urls_list = [convert_to_api_images_url(img_url) for img_url in images_urls_list]
+        
+        # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
+        video_url_full = convert_to_api_images_url(purchase.video_url) if purchase.video_url else None
+        
+        purchase_dict = {
+            "id": purchase.id,
+            "product_id": purchase.product_id,
+            "user_id": purchase.user_id,
+            "purchased_by_user_id": purchase.purchased_by_user_id,
+            "created_at": purchase.created_at,
+            "is_completed": purchase.is_completed,
+            "is_cancelled": purchase.is_cancelled,
+            "first_name": purchase.first_name,
+            "last_name": purchase.last_name,
+            "middle_name": purchase.middle_name,
+            "phone_number": purchase.phone_number,
+            "city": purchase.city,
+            "address": purchase.address,
+            "notes": purchase.notes,
+            "payment_method": purchase.payment_method,
+            "organization": purchase.organization,
+            "images_urls": images_urls_list,
+            "video_url": video_url_full,
+            "status": purchase.status,
+            "product": {
+                "id": product.id,
+                "name": product.name,
+                "price": product.price,
+                "discount": product.discount,
+                "image_url": make_full_url(product.image_url) if product.image_url else None,
+                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None
+            } if product else None
+        }
+        result.append(purchase_dict)
+    
+    return result
+
+@router.get("/history", response_model=List[schemas.Purchase])
+async def get_purchases_history(
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Получить всю историю покупок пользователя (включая завершенные и отмененные)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        purchased_by_user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Получаем только завершенные или отмененные покупки (история = неактивные)
+    # Активные покупки показываются в разделе "Активные", а не в истории
+    purchases = db.query(models.Purchase).filter(
+        and_(
+            models.Purchase.purchased_by_user_id == purchased_by_user_id,
+            or_(
+                models.Purchase.is_completed == True,
+                models.Purchase.is_cancelled == True
+            )
+        )
     ).order_by(models.Purchase.created_at.desc()).all()
     
     result = []
@@ -569,4 +650,89 @@ async def update_purchase(
     }
     
     return purchase_dict
+
+@router.delete("/history/clear")
+async def clear_purchases_history(
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Очистить всю историю покупок пользователя (удалить все завершенные и отмененные покупки)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Удаляем все завершенные и отмененные покупки пользователя (история)
+    deleted_count = db.query(models.Purchase).filter(
+        and_(
+            models.Purchase.purchased_by_user_id == user_id,
+            or_(
+                models.Purchase.is_completed == True,
+                models.Purchase.is_cancelled == True
+            )
+        )
+    ).delete(synchronize_session=False)
+    
+    db.commit()
+    
+    return {"message": f"Удалено {deleted_count} записей из истории продаж", "deleted_count": deleted_count}
+
+@router.delete("/{purchase_id}")
+async def cancel_purchase(
+    purchase_id: int,
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Отменить покупку (владелец магазина или покупатель)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    purchase = db.query(models.Purchase).filter(models.Purchase.id == purchase_id).first()
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    
+    # Проверяем права: владелец магазина или покупатель
+    is_shop_owner = purchase.user_id == user_id
+    is_purchaser = purchase.purchased_by_user_id == user_id
+    
+    if not is_shop_owner and not is_purchaser:
+        raise HTTPException(
+            status_code=403,
+            detail="У вас нет прав для отмены этой покупки"
+        )
+    
+    # Проверяем, что покупка еще не завершена и не отменена
+    if purchase.is_completed:
+        raise HTTPException(status_code=400, detail="Нельзя отменить выполненную покупку")
+    
+    if purchase.is_cancelled:
+        raise HTTPException(status_code=400, detail="Покупка уже отменена")
+    
+    # Отменяем покупку
+    purchase.is_cancelled = True
+    purchase.status = 'cancelled'
+    db.commit()
+    db.refresh(purchase)
+    
+    return {"message": "Purchase cancelled", "purchase_id": purchase_id}
 

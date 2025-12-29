@@ -433,6 +433,86 @@ async def get_my_orders(
     
     return orders
 
+@router.get("/history", response_model=List[schemas.Order])
+async def get_orders_history(
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Получить историю заказов пользователя (только завершенные и отмененные, неактивные)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Получаем только завершенные или отмененные заказы (история = неактивные)
+    # Активные заказы показываются в разделе "Активные", а не в истории
+    orders = db.query(models.Order).options(
+        joinedload(models.Order.product)
+    ).filter(
+        and_(
+            models.Order.ordered_by_user_id == user_id,
+            or_(
+                models.Order.is_completed == True,
+                models.Order.is_cancelled == True
+            )
+        )
+    ).order_by(models.Order.created_at.desc()).all()
+    
+    # Преобразуем images_urls из JSON строки в список для каждого заказа
+    for order in orders:
+        if order.product and order.product.images_urls:
+            if isinstance(order.product.images_urls, str):
+                try:
+                    order.product.images_urls = json.loads(order.product.images_urls)
+                except (json.JSONDecodeError, TypeError):
+                    order.product.images_urls = []
+    
+    return orders
+
+@router.delete("/history/clear")
+async def clear_orders_history(
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    """Очистить всю историю заказов пользователя (удалить все завершенные и отмененные заказы)"""
+    if not x_telegram_init_data:
+        raise HTTPException(status_code=401, detail="Telegram initData is required")
+    
+    try:
+        user_id, _, _ = await validate_init_data_multi_bot(
+            x_telegram_init_data,
+            db,
+            default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
+    
+    # Удаляем все завершенные и отмененные заказы пользователя (история)
+    deleted_count = db.query(models.Order).filter(
+        and_(
+            models.Order.ordered_by_user_id == user_id,
+            or_(
+                models.Order.is_completed == True,
+                models.Order.is_cancelled == True
+            )
+        )
+    ).delete(synchronize_session=False)
+    
+    db.commit()
+    
+    return {"message": f"Удалено {deleted_count} записей из истории заказов", "deleted_count": deleted_count}
+
 @router.patch("/{order_id}/complete")
 async def complete_order(
     order_id: int,

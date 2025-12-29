@@ -1,7 +1,7 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
-import { API_BASE, cancelOrderAPI, cancelReservationAPI, createOrderAPI, createPurchaseAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductForSaleAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI, updateProductQuantityShowEnabledAPI } from './api.js';
-import { initCart, loadCart, loadOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
+import { API_BASE, cancelOrderAPI, cancelPurchaseAPI, cancelReservationAPI, createOrderAPI, createPurchaseAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductForSaleAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI, updateProductQuantityShowEnabledAPI } from './api.js';
+import { initCart, loadCart, loadOrders, loadPurchases, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
 // Глобальные переменные
@@ -1276,7 +1276,7 @@ function renderProducts(products) {
                          String(prod.is_for_sale).toLowerCase() === 'true';
         
         if (isForSaleCard) {
-            // Если включена функция покупка, показываем цену покупки
+            // Если включена функция продажа, показываем цену продажи
             const priceType = prod.price_type || 'range';
             if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
                 priceSpan.textContent = `${prod.price_fixed} ₽`;
@@ -1699,7 +1699,7 @@ function showProductModal(prod, finalPrice, fullImages) {
         isMadeToOrder: isMadeToOrder
     });
     
-    // Проверяем, является ли товар для покупки (is_for_sale)
+    // Проверяем, является ли товар для продажи (is_for_sale)
     const isForSale = prod.is_for_sale === true || 
                      prod.is_for_sale === 1 || 
                      prod.is_for_sale === '1' ||
@@ -2123,19 +2123,22 @@ async function createReservation(productId, hours, quantity = 1) {
 
 // Отмена резервации
 async function cancelReservation(reservationId, productId) {
-    if (!confirm('Вы уверены, что хотите снять резервацию с этого товара?')) {
+    const { safeConfirm, safeAlert } = await import('./telegram.js');
+    
+    const confirmed = await safeConfirm('Вы уверены, что хотите снять резервацию с этого товара?');
+    if (!confirmed) {
         return;
     }
     
     try {
         if (!appContext) {
-            alert('❌ Ошибка: контекст не загружен');
+            await safeAlert('❌ Ошибка: контекст не загружен');
             return;
         }
         
         // user_id определяется на backend из initData
         await cancelReservationAPI(reservationId);
-        alert('✅ Резервация снята');
+        await safeAlert('✅ Резервация снята');
         
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
@@ -2146,25 +2149,28 @@ async function cancelReservation(reservationId, productId) {
         }, 500);
     } catch (e) {
         console.error('Cancel reservation error:', e);
-        alert(`❌ Ошибка: ${e.message}`);
+        await safeAlert(`❌ Ошибка: ${e.message}`);
     }
 }
 
 // Отмена заказа
 async function cancelOrder(orderId) {
-    if (!confirm('Вы уверены, что хотите отменить этот заказ?')) {
+    const { safeConfirm, safeAlert } = await import('./telegram.js');
+    
+    const confirmed = await safeConfirm('Вы уверены, что хотите отменить этот заказ?');
+    if (!confirmed) {
         return;
     }
     
     try {
         if (!appContext) {
-            alert('❌ Ошибка: контекст не загружен');
+            await safeAlert('❌ Ошибка: контекст не загружен');
             return;
         }
         
         // user_id определяется на backend из initData
         await cancelOrderAPI(orderId);
-        alert('✅ Заказ отменен');
+        await safeAlert('✅ Заказ отменен');
         
         setTimeout(async () => {
             await loadData();
@@ -2172,7 +2178,36 @@ async function cancelOrder(orderId) {
         }, 500);
     } catch (e) {
         console.error('Cancel order error:', e);
-        alert(`❌ Ошибка: ${e.message}`);
+        await safeAlert(`❌ Ошибка: ${e.message}`);
+    }
+}
+
+// Отмена продажи
+async function cancelPurchase(purchaseId) {
+    const { safeConfirm, safeAlert } = await import('./telegram.js');
+    
+    const confirmed = await safeConfirm('Вы уверены, что хотите отменить эту продажу?');
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        if (!appContext) {
+            await safeAlert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        // user_id определяется на backend из initData
+        await cancelPurchaseAPI(purchaseId);
+        await safeAlert('✅ Продажа отменена');
+        
+        setTimeout(async () => {
+            await loadData();
+            await updateCartUI();
+        }, 500);
+    } catch (e) {
+        console.error('Cancel purchase error:', e);
+        await safeAlert(`❌ Ошибка: ${e.message}`);
     }
 }
 
@@ -2388,7 +2423,7 @@ function showEditProductModal(prod) {
     
     // Обработчики изменения типа цены
     if (editPriceTypeRangeRadio && editPriceTypeFixedRadio && priceRangeFields && priceFixedField) {
-        // Инициализируем визуальное состояние при загрузке (если тумблер покупки включен)
+        // Инициализируем визуальное состояние при загрузке (если тумблер продажи включен)
         if (isForSale) {
             setTimeout(() => {
                 updatePriceTypeVisual();
@@ -3162,6 +3197,82 @@ window.cancelOrderFromCart = async function(orderId) {
     await updateCartUI();
 };
 
+window.cancelPurchaseFromCart = async function(purchaseId) {
+    await cancelPurchase(purchaseId);
+    // Перезагружаем продажи в корзине
+    await loadPurchases();
+    await updateCartUI();
+};
+
+// Очистка истории резерваций
+window.clearReservationsHistory = async function() {
+    const { safeConfirm, safeAlert } = await import('./telegram.js');
+    
+    const confirmed = await safeConfirm('Вы уверены, что хотите очистить всю историю резерваций? Это действие нельзя отменить.');
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        const { clearReservationsHistoryAPI } = await import('./api.js');
+        const result = await clearReservationsHistoryAPI();
+        await safeAlert(`✅ История резерваций очищена (удалено ${result.deleted_count || 0} записей)`);
+        
+        // Перезагружаем историю
+        const { loadReservationsHistory } = await import('./cart.js');
+        await loadReservationsHistory();
+    } catch (e) {
+        console.error('Clear reservations history error:', e);
+        await safeAlert(`❌ Ошибка: ${e.message}`);
+    }
+};
+
+// Очистка истории заказов
+window.clearOrdersHistory = async function() {
+    const { safeConfirm, safeAlert } = await import('./telegram.js');
+    
+    const confirmed = await safeConfirm('Вы уверены, что хотите очистить всю историю заказов? Это действие нельзя отменить.');
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        const { clearOrdersHistoryAPI } = await import('./api.js');
+        const result = await clearOrdersHistoryAPI();
+        await safeAlert(`✅ История заказов очищена (удалено ${result.deleted_count || 0} записей)`);
+        
+        // Перезагружаем историю
+        const { loadOrdersHistory } = await import('./cart.js');
+        await loadOrdersHistory();
+    } catch (e) {
+        console.error('Clear orders history error:', e);
+        await safeAlert(`❌ Ошибка: ${e.message}`);
+    }
+};
+
+// Очистка истории продаж
+window.clearPurchasesHistory = async function() {
+    const { safeConfirm, safeAlert } = await import('./telegram.js');
+    
+    const confirmed = await safeConfirm('Вы уверены, что хотите очистить всю историю продаж? Это действие нельзя отменить.');
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        const { clearPurchasesHistoryAPI } = await import('./api.js');
+        const result = await clearPurchasesHistoryAPI();
+        await safeAlert(`✅ История продаж очищена (удалено ${result.deleted_count || 0} записей)`);
+        
+        // Перезагружаем историю
+        const { loadPurchasesHistory } = await import('./cart.js');
+        await loadPurchasesHistory();
+    } catch (e) {
+        console.error('Clear purchases history error:', e);
+        await safeAlert(`❌ Ошибка: ${e.message}`);
+    }
+};
+
 // Пометить товар как проданный
 async function markAsSold(productId, product = null) {
     try {
@@ -3712,7 +3823,7 @@ function applyFilters() {
 }
 
 
-// Показ модального окна покупки
+// Показ модального окна продажи
 function showPurchaseModal(prod) {
     if (!appContext) {
         alert('❌ Ошибка: контекст не загружен');
@@ -3812,7 +3923,7 @@ function showPurchaseModal(prod) {
     purchaseModal.style.display = 'block';
 }
 
-// Отправка формы покупки
+// Отправка формы продажи
 async function submitPurchaseForm(productId) {
     const lastName = document.getElementById('purchase-last-name').value.trim();
     const firstName = document.getElementById('purchase-first-name').value.trim();
@@ -3863,23 +3974,45 @@ async function submitPurchaseForm(productId) {
         
         await createPurchaseAPI(productId, formData);
         
-        alert('✅ Заявка на покупку успешно отправлена!');
-        document.getElementById('purchase-modal').style.display = 'none';
+        const { safeAlert } = await import('./telegram.js');
+        await safeAlert('✅ Заявка на продажу успешно отправлена!');
         
-        // Обновляем корзину
-        if (window.loadCart) {
-            await window.loadCart();
+        // Закрываем модальные окна (продажи и товара), как для заказов
+        const purchaseModal = document.getElementById('purchase-modal');
+        if (purchaseModal) {
+            purchaseModal.style.display = 'none';
         }
-        if (window.updateCartUI) {
-            await window.updateCartUI();
+        // Закрываем также модальное окно товара, чтобы вернуться на общий экран с товарами
+        if (modal) {
+            modal.style.display = 'none';
         }
+        document.body.style.overflow = 'auto';
+        
+        // Обновляем данные и корзину по тому же принципу, как для резерваций и заказов
+        setTimeout(async () => {
+            await loadData();
+            await updateCartUI();
+            
+            // Если корзина открыта и пользователь находится на вкладке продаж, обновляем продажи
+            const cartModal = document.getElementById('cart-modal');
+            if (cartModal && cartModal.style.display === 'block') {
+                const purchasesSection = document.getElementById('purchases-section');
+                if (purchasesSection && purchasesSection.style.display !== 'none') {
+                    const { loadPurchases } = await import('./cart.js');
+                    await loadPurchases();
+                }
+            }
+        }, 500);
     } catch (error) {
         console.error('Error creating purchase:', error);
-        alert(`❌ Ошибка: ${error.message}`);
+        const { safeAlert } = await import('./telegram.js');
+        await safeAlert(`❌ Ошибка: ${error.message}`);
     } finally {
         const submitBtn = document.getElementById('purchase-submit');
-        submitBtn.disabled = false;
-        submitBtn.textContent = '✅ Отправить заявку';
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '✅ Отправить заявку';
+        }
     }
 }
 

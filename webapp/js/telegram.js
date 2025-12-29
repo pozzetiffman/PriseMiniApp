@@ -135,3 +135,81 @@ export function requireTelegram() {
     return true;
 }
 
+/**
+ * Безопасный confirm через Telegram WebApp API
+ * Используется вместо стандартного confirm(), который вызывает краш в Telegram WebView
+ * @param {string} message - Сообщение для подтверждения
+ * @returns {Promise<boolean>} - Promise, который разрешается в true если пользователь подтвердил, false если отменил
+ */
+export function safeConfirm(message) {
+    return new Promise((resolve) => {
+        if (!isTelegramAvailable()) {
+            // Fallback на стандартный confirm если Telegram API недоступен (для тестирования)
+            console.warn('⚠️ Telegram WebApp API недоступен, используем стандартный confirm');
+            const result = window.confirm(message);
+            resolve(result);
+            return;
+        }
+        
+        // Проверяем наличие метода showConfirm
+        if (typeof tg.showConfirm !== 'function') {
+            console.warn('⚠️ tg.showConfirm недоступен, используем стандартный confirm');
+            const result = window.confirm(message);
+            resolve(result);
+            return;
+        }
+        
+        try {
+            // Telegram WebApp API: showConfirm(message, callback)
+            // callback получает boolean: true если подтверждено, false если отменено
+            tg.showConfirm(message, (confirmed) => {
+                resolve(confirmed === true);
+            });
+        } catch (e) {
+            console.error('Ошибка при вызове tg.showConfirm:', e);
+            // Fallback на стандартный confirm при ошибке
+            const result = window.confirm(message);
+            resolve(result);
+        }
+    });
+}
+
+/**
+ * Безопасный alert через Telegram WebApp API
+ * Используется вместо стандартного alert(), который может вызывать проблемы в Telegram WebView
+ * @param {string} message - Сообщение для отображения
+ * @returns {Promise<void>}
+ */
+export function safeAlert(message) {
+    return new Promise((resolve) => {
+        if (!isTelegramAvailable()) {
+            // Fallback на стандартный alert если Telegram API недоступен (для тестирования)
+            console.warn('⚠️ Telegram WebApp API недоступен, используем стандартный alert');
+            window.alert(message);
+            resolve();
+            return;
+        }
+        
+        // Проверяем наличие метода showAlert
+        if (typeof tg.showAlert !== 'function') {
+            console.warn('⚠️ tg.showAlert недоступен, используем стандартный alert');
+            window.alert(message);
+            resolve();
+            return;
+        }
+        
+        try {
+            // Telegram WebApp API: showAlert(message, callback)
+            // callback вызывается после закрытия alert
+            tg.showAlert(message, () => {
+                resolve();
+            });
+        } catch (e) {
+            console.error('Ошибка при вызове tg.showAlert:', e);
+            // Fallback на стандартный alert при ошибке
+            window.alert(message);
+            resolve();
+        }
+    });
+}
+

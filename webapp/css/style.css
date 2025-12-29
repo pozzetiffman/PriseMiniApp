@@ -224,6 +224,44 @@ header h1 {
     background: rgba(90, 200, 250, 0.1);
 }
 
+/* Секции корзины */
+.cart-section {
+    display: block;
+}
+
+/* Подвкладки внутри секций */
+.cart-subtabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 0 4px;
+}
+
+.cart-subtab {
+    flex: 1;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--text-hint);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cart-subtab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--tg-theme-link-color, #5ac8fa);
+}
+
+.cart-subtab.active {
+    color: var(--tg-theme-link-color, #5ac8fa);
+    background: rgba(90, 200, 250, 0.15);
+    border-color: var(--tg-theme-link-color, #5ac8fa);
+}
+
 .cart-items {
     max-height: 70vh;
     overflow-y: auto;

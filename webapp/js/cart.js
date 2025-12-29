@@ -1,5 +1,5 @@
 // Модуль корзины
-import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, cancelOrderAPI, getMyPurchasesAPI } from './api.js';
+import { API_BASE, fetchUserReservations, fetchReservationsHistory, getBaseHeadersNoAuth, getMyOrdersAPI, getOrdersHistoryAPI, cancelOrderAPI, getMyPurchasesAPI, getPurchasesHistoryAPI, clearReservationsHistoryAPI, clearOrdersHistoryAPI, clearPurchasesHistoryAPI } from './api.js';
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -51,17 +51,19 @@ export async function updateCartUI() {
             activeOrders = [];
         }
         
-        // Также проверяем покупки
+        // Также проверяем продажи (API теперь возвращает только активные, но фильтруем для надежности)
         let activePurchases = [];
         try {
-            activePurchases = await getMyPurchasesAPI();
-            console.log(`🛒 Got ${activePurchases ? activePurchases.length : 0} purchases from server`);
+            const allPurchases = await getMyPurchasesAPI();
+            // Дополнительно фильтруем на случай, если API вернет все продажи
+            activePurchases = (allPurchases || []).filter(p => !p.is_completed && !p.is_cancelled);
+            console.log(`🛒 Got ${activePurchases.length} active purchases from server (filtered from ${allPurchases ? allPurchases.length : 0} total)`);
         } catch (e) {
             console.warn('⚠️ Failed to fetch purchases for cart UI:', e);
             activePurchases = [];
         }
         
-        // Общее количество элементов в корзине (резервации + заказы + покупки)
+        // Общее количество элементов в корзине (резервации + заказы + продажи)
         const totalItems = activeReservations.length + (activeOrders ? activeOrders.length : 0) + (activePurchases ? activePurchases.length : 0);
         console.log(`🛒 Total cart items: ${totalItems} (${activeReservations.length} reservations + ${activeOrders ? activeOrders.length : 0} orders + ${activePurchases ? activePurchases.length : 0} purchases)`);
         
@@ -71,9 +73,9 @@ export async function updateCartUI() {
             existingDebugIndicator.remove();
         }
         
-        // Показываем кнопку корзины, если есть резервации ИЛИ заказы ИЛИ покупки
+        // Показываем кнопку корзины, если есть резервации ИЛИ заказы ИЛИ продажи
         if (totalItems > 0) {
-            console.log(`🛒🛒🛒 ПОКАЗЫВАЕМ КОРЗИНУ! Найдено ${activeReservations.length} активных резерваций, ${activeOrders ? activeOrders.length : 0} заказов и ${activePurchases ? activePurchases.length : 0} покупок`);
+            console.log(`🛒🛒🛒 ПОКАЗЫВАЕМ КОРЗИНУ! Найдено ${activeReservations.length} активных резерваций, ${activeOrders ? activeOrders.length : 0} заказов и ${activePurchases ? activePurchases.length : 0} продаж`);
             console.log(`🛒🛒🛒 Резервации:`, activeReservations.map(r => ({
                 id: r.id,
                 product_id: r.product_id,
@@ -138,7 +140,7 @@ export async function updateCartUI() {
                 }
             }, 100);
         } else {
-            console.log(`❌ Cart button hidden - no active reservations, orders or purchases (found ${activeReservations.length} reservations, ${activeOrders ? activeOrders.length : 0} orders, ${activePurchases ? activePurchases.length : 0} purchases)`);
+            console.log(`❌ Cart button hidden - no active reservations, orders or sales (found ${activeReservations.length} reservations, ${activeOrders ? activeOrders.length : 0} orders, ${activePurchases ? activePurchases.length : 0} sales)`);
             cartButton.style.display = 'none';
         }
     } catch (e) {
@@ -326,13 +328,39 @@ export async function loadCart() {
                     imageContainer.appendChild(placeholder);
                 }
                 
+                // Показываем кнопку отмены только для активных резерваций
+                const cancelButton = diffMs > 0
+                    ? `<div class="cart-item-actions">
+                        <button class="cancel-order-btn" onclick="window.cancelReservationFromCart(${reservation.id}, ${reservation.product_id})" title="Отменить резервацию">Отмена</button>
+                       </div>`
+                    : '';
+
+                // Дата создания резервации
+                let dateText = '';
+                if (reservation.created_at) {
+                    let dateStr = reservation.created_at;
+                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                        dateStr = dateStr + 'Z';
+                    }
+                    const createdDate = new Date(dateStr);
+                    dateText = createdDate.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Europe/Moscow'
+                    });
+                }
+
                 cartItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
                         <p class="cart-item-price">${finalPrice} ₽</p>
                         <p class="cart-item-time">⏰ До ${timeText}</p>
+                        ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>
-                    <button class="cancel-reservation-btn-small" onclick="window.cancelReservationFromCart(${reservation.id}, ${reservation.product_id})" title="Снять резервацию">❌</button>
+                    ${cancelButton}
                 `;
                 
                 // Вставляем контейнер изображения в начало
@@ -445,7 +473,7 @@ export function setupCartModal() {
         }
     };
     
-    // Настройка вкладок
+    // Настройка основных вкладок
     const tabs = document.querySelectorAll('.cart-tab');
     if (tabs && tabs.length > 0) {
         tabs.forEach(tab => {
@@ -461,6 +489,20 @@ export function setupCartModal() {
         console.warn('⚠️ Cart tabs not found in HTML');
     }
     
+    // Настройка подвкладок
+    const subtabs = document.querySelectorAll('.cart-subtab');
+    if (subtabs && subtabs.length > 0) {
+        subtabs.forEach(subtab => {
+            subtab.onclick = () => {
+                console.log(`🛒 Cart subtab clicked: ${subtab.dataset.subtab}`);
+                switchCartSubtab(subtab.dataset.subtab);
+            };
+        });
+        console.log('✅ Cart subtabs initialized');
+    } else {
+        console.warn('⚠️ Cart subtabs not found in HTML');
+    }
+    
     console.log('✅ Cart modal initialized');
 }
 
@@ -468,17 +510,17 @@ export function setupCartModal() {
 function switchCartTab(tabName) {
     console.log(`🛒 switchCartTab: switching to tab "${tabName}"`);
     const tabs = document.querySelectorAll('.cart-tab');
-    const cartItems = document.getElementById('cart-items');
-    const ordersItems = document.getElementById('orders-items');
-    const purchasesItems = document.getElementById('purchases-items');
+    const reservationsSection = document.getElementById('reservations-section');
+    const ordersSection = document.getElementById('orders-section');
+    const purchasesSection = document.getElementById('purchases-section');
     
     if (!tabs || tabs.length === 0) {
         console.warn('⚠️ Cart tabs not found');
         return;
     }
     
-    if (!cartItems || !ordersItems || !purchasesItems) {
-        console.warn('⚠️ Cart items containers not found');
+    if (!reservationsSection || !ordersSection || !purchasesSection) {
+        console.warn('⚠️ Cart sections not found');
         return;
     }
     
@@ -490,24 +532,96 @@ function switchCartTab(tabName) {
         }
     });
     
+    // Скрываем все секции
+    reservationsSection.style.display = 'none';
+    ordersSection.style.display = 'none';
+    purchasesSection.style.display = 'none';
+    
+    // Показываем нужную секцию и активируем первую подвкладку
     if (tabName === 'reservations') {
-        cartItems.style.display = 'block';
-        ordersItems.style.display = 'none';
-        purchasesItems.style.display = 'none';
-        console.log('🛒 Loading reservations...');
-        loadCart();
+        reservationsSection.style.display = 'block';
+        switchCartSubtab('reservations-active');
     } else if (tabName === 'orders') {
-        cartItems.style.display = 'none';
-        ordersItems.style.display = 'block';
-        purchasesItems.style.display = 'none';
-        console.log('🛒 Loading orders...');
-        loadOrders();
+        ordersSection.style.display = 'block';
+        switchCartSubtab('orders-active');
     } else if (tabName === 'purchases') {
-        cartItems.style.display = 'none';
-        ordersItems.style.display = 'none';
-        purchasesItems.style.display = 'block';
-        console.log('🛒 Loading purchases...');
-        loadPurchases();
+        purchasesSection.style.display = 'block';
+        switchCartSubtab('purchases-active');
+    }
+}
+
+// Переключение подвкладок корзины
+function switchCartSubtab(subtabName) {
+    console.log(`🛒 switchCartSubtab: switching to subtab "${subtabName}"`);
+    
+    // Определяем основную вкладку по имени подвкладки
+    let mainTab = '';
+    let activeContainer = null;
+    let historyContainer = null;
+    
+    if (subtabName.startsWith('reservations-')) {
+        mainTab = 'reservations';
+        activeContainer = document.getElementById('cart-items');
+        historyContainer = document.getElementById('reservations-history-items');
+    } else if (subtabName.startsWith('orders-')) {
+        mainTab = 'orders';
+        activeContainer = document.getElementById('orders-items');
+        historyContainer = document.getElementById('orders-history-items');
+    } else if (subtabName.startsWith('purchases-')) {
+        mainTab = 'purchases';
+        activeContainer = document.getElementById('purchases-items');
+        historyContainer = document.getElementById('purchases-history-items');
+    }
+    
+    if (!activeContainer || !historyContainer) {
+        console.warn('⚠️ Cart subtab containers not found');
+        return;
+    }
+    
+    // Обновляем активные подвкладки в текущей секции
+    const currentSection = document.getElementById(`${mainTab}-section`);
+    if (currentSection) {
+        const subtabs = currentSection.querySelectorAll('.cart-subtab');
+        subtabs.forEach(subtab => {
+            if (subtab.dataset.subtab === subtabName) {
+                subtab.classList.add('active');
+            } else {
+                subtab.classList.remove('active');
+            }
+        });
+    }
+    
+    // Показываем нужный контейнер
+    if (subtabName.endsWith('-active')) {
+        activeContainer.style.display = 'block';
+        historyContainer.style.display = 'none';
+        
+        // Загружаем данные
+        if (mainTab === 'reservations') {
+            console.log('🛒 Loading active reservations...');
+            loadCart();
+        } else if (mainTab === 'orders') {
+            console.log('🛒 Loading active orders...');
+            loadOrders();
+        } else if (mainTab === 'purchases') {
+            console.log('🛒 Loading active sales...');
+            loadPurchases();
+        }
+    } else if (subtabName.endsWith('-history')) {
+        activeContainer.style.display = 'none';
+        historyContainer.style.display = 'block';
+        
+        // Загружаем историю
+        if (mainTab === 'reservations') {
+            console.log('🛒 Loading reservations history...');
+            loadReservationsHistory();
+        } else if (mainTab === 'orders') {
+            console.log('🛒 Loading orders history...');
+            loadOrdersHistory();
+        } else if (mainTab === 'purchases') {
+            console.log('🛒 Loading sales history...');
+            loadPurchasesHistory();
+        }
     }
 }
 
@@ -648,11 +762,30 @@ export async function loadOrders() {
                        </div>`
                     : '';
                 
+                // Дата создания заказа
+                let dateText = '';
+                if (order.created_at) {
+                    let dateStr = order.created_at;
+                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                        dateStr = dateStr + 'Z';
+                    }
+                    const orderDate = new Date(dateStr);
+                    dateText = orderDate.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Europe/Moscow'
+                    });
+                }
+                
                 orderItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
                         <p class="cart-item-price">${finalPrice} ₽ × ${order.quantity} шт.</p>
                         <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
+                        ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>
                     ${cancelButton}
                 `;
@@ -673,7 +806,7 @@ export async function loadOrders() {
     }
 }
 
-// Загрузка покупок
+// Загрузка продаж
 export async function loadPurchases() {
     console.log('🛒 loadPurchases: Starting...');
     const purchasesItems = document.getElementById('purchases-items');
@@ -682,7 +815,7 @@ export async function loadPurchases() {
         return;
     }
     
-    purchasesItems.innerHTML = '<p class="loading">Загрузка заявок на покупку...</p>';
+    purchasesItems.innerHTML = '<p class="loading">Загрузка заявок на продажу...</p>';
     
     try {
         console.log('🛒 loadPurchases: Fetching purchases from API...');
@@ -690,13 +823,22 @@ export async function loadPurchases() {
         console.log('🛒 loadPurchases: Got purchases:', purchases ? purchases.length : 0, purchases);
         
         if (!purchases || purchases.length === 0) {
-            purchasesItems.innerHTML = '<p class="loading">У вас нет заявок на покупку</p>';
+            purchasesItems.innerHTML = '<p class="loading">У вас нет заявок на продажу</p>';
             return;
         }
         
-        // Рендерим список покупок
+        // Фильтруем только активные продажи (не завершенные и не отмененные)
+        const activePurchases = purchases.filter(p => !p.is_completed && !p.is_cancelled);
+        console.log(`🛒 loadPurchases: Filtered to ${activePurchases.length} active sales from ${purchases.length} total`);
+        
+        if (activePurchases.length === 0) {
+            purchasesItems.innerHTML = '<p class="loading">У вас нет активных заявок на продажу</p>';
+            return;
+        }
+        
+        // Рендерим список продаж
         purchasesItems.innerHTML = '';
-        for (const purchase of purchases) {
+        for (const purchase of activePurchases) {
             try {
                 // Используем информацию о товаре из purchase.product (если есть)
                 const product = purchase.product;
@@ -778,7 +920,7 @@ export async function loadPurchases() {
                     imageContainer.appendChild(placeholder);
                 }
                 
-                // Статус покупки
+                // Статус продажи
                 let statusText = '';
                 let statusColor = '';
                 if (purchase.is_completed) {
@@ -792,31 +934,28 @@ export async function loadPurchases() {
                     statusColor = '#FFA500';
                 }
                 
-                // Формируем информацию о заявке
-                let purchaseInfo = '';
-                if (purchase.last_name || purchase.first_name || purchase.middle_name) {
-                    const nameParts = [purchase.last_name, purchase.first_name, purchase.middle_name].filter(Boolean);
-                    if (nameParts.length > 0) {
-                        purchaseInfo += `<p style="font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px;">👤 ${nameParts.join(' ')}</p>`;
-                    }
-                }
-                if (purchase.phone_number) {
-                    purchaseInfo += `<p style="font-size: 13px; color: var(--tg-theme-hint-color);">📱 ${purchase.phone_number}</p>`;
-                }
-                if (purchase.city) {
-                    purchaseInfo += `<p style="font-size: 13px; color: var(--tg-theme-hint-color);">📍 ${purchase.city}</p>`;
-                }
+                // Показываем кнопку отмены только для активных продаж (не завершенных и не отмененных)
+                const cancelButton = (!purchase.is_completed && !purchase.is_cancelled) 
+                    ? `<div class="cart-item-actions">
+                        <button class="cancel-order-btn" onclick="window.cancelPurchaseFromCart(${purchase.id})" title="Отменить продажу">Отмена</button>
+                       </div>`
+                    : '';
                 
-                // Дата создания
+                // Дата создания продажи
                 let dateText = '';
                 if (purchase.created_at) {
-                    const purchaseDate = new Date(purchase.created_at);
-                    dateText = purchaseDate.toLocaleDateString('ru-RU', {
+                    let dateStr = purchase.created_at;
+                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                        dateStr = dateStr + 'Z';
+                    }
+                    const purchaseDate = new Date(dateStr);
+                    dateText = purchaseDate.toLocaleString('ru-RU', {
                         day: '2-digit',
                         month: '2-digit',
                         year: 'numeric',
                         hour: '2-digit',
-                        minute: '2-digit'
+                        minute: '2-digit',
+                        timeZone: 'Europe/Moscow'
                     });
                 }
                 
@@ -825,9 +964,9 @@ export async function loadPurchases() {
                         <h3>${product.name}</h3>
                         <p class="cart-item-price">${finalPrice} ₽</p>
                         <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
-                        ${purchaseInfo}
                         ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>
+                    ${cancelButton}
                 `;
                 
                 purchaseItem.insertBefore(imageContainer, purchaseItem.firstChild);
@@ -838,11 +977,598 @@ export async function loadPurchases() {
         }
         
         if (purchasesItems.children.length === 0) {
-            purchasesItems.innerHTML = '<p class="loading">Не удалось загрузить заявки на покупку</p>';
+            purchasesItems.innerHTML = '<p class="loading">Не удалось загрузить заявки на продажу</p>';
         }
     } catch (error) {
         console.error('❌ Error loading purchases:', error);
         purchasesItems.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
+    }
+}
+
+// Загрузка истории резерваций
+export async function loadReservationsHistory() {
+    console.log('🛒 loadReservationsHistory: Starting...');
+    const historyItems = document.getElementById('reservations-history-items');
+    if (!historyItems) {
+        console.error('❌ loadReservationsHistory: reservations-history-items element not found');
+        return;
+    }
+    
+    // Создаем контейнер для кнопки очистки (если его еще нет)
+    let clearButtonContainer = historyItems.querySelector('.history-clear-button-container');
+    if (!clearButtonContainer) {
+        clearButtonContainer = document.createElement('div');
+        clearButtonContainer.className = 'history-clear-button-container';
+        clearButtonContainer.style.cssText = 'padding: 12px; display: flex; justify-content: flex-end; border-bottom: 1px solid var(--border-glass);';
+        clearButtonContainer.innerHTML = '<button class="cancel-order-btn" onclick="window.clearReservationsHistory()" title="Очистить историю">Очистить историю</button>';
+        historyItems.insertBefore(clearButtonContainer, historyItems.firstChild);
+    }
+    
+    // Показываем загрузку после кнопки
+    const loadingElement = document.createElement('p');
+    loadingElement.className = 'loading';
+    loadingElement.textContent = 'Загрузка истории резерваций...';
+    // Удаляем старые элементы (кроме кнопки очистки)
+    const itemsToRemove = Array.from(historyItems.children).filter(child => !child.classList.contains('history-clear-button-container'));
+    itemsToRemove.forEach(child => child.remove());
+    historyItems.appendChild(loadingElement);
+    
+    try {
+        const reservations = await fetchReservationsHistory();
+        console.log('🛒 loadReservationsHistory: Got reservations:', reservations.length);
+        
+        // Удаляем элемент загрузки
+        loadingElement.remove();
+        
+        // Дополнительная фильтрация: показываем только неактивные резервации в истории
+        // (активные резервации должны быть в разделе "Активные", а не в истории)
+        const inactiveReservations = (reservations || []).filter(r => r.is_active === false);
+        console.log('🛒 loadReservationsHistory: Filtered to inactive reservations:', inactiveReservations.length);
+        
+        if (!inactiveReservations || inactiveReservations.length === 0) {
+            const emptyMessage = document.createElement('p');
+            emptyMessage.className = 'loading';
+            emptyMessage.textContent = 'У вас нет истории резерваций';
+            historyItems.appendChild(emptyMessage);
+            return;
+        }
+        
+        for (const reservation of inactiveReservations) {
+            try {
+                if (!reservation.product_id) {
+                    continue;
+                }
+                
+                const productUrl = `${API_BASE}/api/products/${reservation.product_id}`;
+                const productResponse = await fetch(productUrl, {
+                    headers: getBaseHeadersNoAuth()
+                });
+                
+                if (!productResponse.ok) {
+                    continue;
+                }
+                
+                const product = await productResponse.json();
+                
+                let imageUrl = null;
+                if (product.images_urls && product.images_urls.length > 0) {
+                    const firstImage = product.images_urls[0];
+                    imageUrl = firstImage.startsWith('http') 
+                        ? firstImage 
+                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
+                } else if (product.image_url) {
+                    imageUrl = product.image_url.startsWith('http') 
+                        ? product.image_url 
+                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
+                }
+                
+                const finalPrice = product.discount > 0 
+                    ? Math.round(product.price * (1 - product.discount / 100)) 
+                    : product.price;
+                
+                const historyItem = document.createElement('div');
+                historyItem.className = 'cart-item';
+                
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'cart-item-image-container';
+                
+                if (imageUrl) {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '⏳';
+                    imageContainer.appendChild(placeholder);
+                    
+                    fetch(imageUrl, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        const img = document.createElement('img');
+                        img.src = blobUrl;
+                        img.alt = product.name;
+                        img.className = 'cart-item-image';
+                        img.onerror = () => {
+                            URL.revokeObjectURL(blobUrl);
+                            placeholder.textContent = '📦';
+                            placeholder.style.display = 'flex';
+                            if (img.parentNode) img.remove();
+                        };
+                        img.onload = () => {
+                            if (placeholder.parentNode) placeholder.remove();
+                        };
+                        imageContainer.appendChild(img);
+                    })
+                    .catch(() => {
+                        placeholder.textContent = '📦';
+                    });
+                } else {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '📦';
+                    imageContainer.appendChild(placeholder);
+                }
+                
+                // Статус резервации
+                let statusText = '';
+                let statusColor = '';
+                const now = new Date();
+                const reservedUntil = new Date(reservation.reserved_until);
+                
+                if (!reservation.is_active) {
+                    statusText = '❌ Отменена';
+                    statusColor = '#F44336';
+                } else if (reservedUntil < now) {
+                    statusText = '⏰ Истекла';
+                    statusColor = '#FFA500';
+                } else {
+                    statusText = '✅ Активна';
+                    statusColor = '#4CAF50';
+                }
+                
+                // Дата создания
+                let dateText = '';
+                if (reservation.created_at) {
+                    // Время приходит в UTC, нужно явно указать это и конвертировать в московское время
+                    let dateStr = reservation.created_at;
+                    // Если строка не заканчивается на Z или +/-, добавляем Z для указания UTC
+                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                        dateStr = dateStr + 'Z';
+                    }
+                    const createdDate = new Date(dateStr);
+                    // Используем timeZone для автоматической конвертации UTC в московское время
+                    dateText = createdDate.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Europe/Moscow'
+                    });
+                }
+                
+                historyItem.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3>${product.name}</h3>
+                        <p class="cart-item-price">${finalPrice} ₽</p>
+                        <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
+                        ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
+                    </div>
+                `;
+                
+                historyItem.insertBefore(imageContainer, historyItem.firstChild);
+                historyItems.appendChild(historyItem);
+            } catch (e) {
+                console.error('❌ Error loading reservation history item:', e);
+            }
+        }
+        
+        // Проверяем, есть ли элементы кроме кнопки очистки
+        const itemsWithoutButton = Array.from(historyItems.children).filter(child => !child.classList.contains('history-clear-button-container'));
+        if (itemsWithoutButton.length === 0) {
+            const errorMessage = document.createElement('p');
+            errorMessage.className = 'loading';
+            errorMessage.textContent = 'Не удалось загрузить историю резерваций';
+            historyItems.appendChild(errorMessage);
+        }
+    } catch (error) {
+        console.error('❌ Error loading reservations history:', error);
+        // Удаляем элемент загрузки если он есть
+        const loadingElement = historyItems.querySelector('.loading');
+        if (loadingElement) loadingElement.remove();
+        
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'loading';
+        errorMessage.textContent = `Ошибка загрузки: ${error.message}`;
+        historyItems.appendChild(errorMessage);
+    }
+}
+
+// Загрузка истории заказов
+export async function loadOrdersHistory() {
+    console.log('🛒 loadOrdersHistory: Starting...');
+    const historyItems = document.getElementById('orders-history-items');
+    if (!historyItems) {
+        console.error('❌ loadOrdersHistory: orders-history-items element not found');
+        return;
+    }
+    
+    // Создаем контейнер для кнопки очистки (если его еще нет)
+    let clearButtonContainer = historyItems.querySelector('.history-clear-button-container');
+    if (!clearButtonContainer) {
+        clearButtonContainer = document.createElement('div');
+        clearButtonContainer.className = 'history-clear-button-container';
+        clearButtonContainer.style.cssText = 'padding: 12px; display: flex; justify-content: flex-end; border-bottom: 1px solid var(--border-glass);';
+        clearButtonContainer.innerHTML = '<button class="cancel-order-btn" onclick="window.clearOrdersHistory()" title="Очистить историю">Очистить историю</button>';
+        historyItems.insertBefore(clearButtonContainer, historyItems.firstChild);
+    }
+    
+    // Показываем загрузку после кнопки
+    const loadingElement = document.createElement('p');
+    loadingElement.className = 'loading';
+    loadingElement.textContent = 'Загрузка истории заказов...';
+    // Удаляем старые элементы (кроме кнопки очистки)
+    const itemsToRemove = Array.from(historyItems.children).filter(child => !child.classList.contains('history-clear-button-container'));
+    itemsToRemove.forEach(child => child.remove());
+    historyItems.appendChild(loadingElement);
+    
+    try {
+        const orders = await getOrdersHistoryAPI();
+        console.log('🛒 loadOrdersHistory: Got orders:', orders ? orders.length : 0);
+        
+        // Удаляем элемент загрузки
+        loadingElement.remove();
+        
+        // Дополнительная фильтрация: показываем только завершенные или отмененные заказы в истории
+        // (активные заказы должны быть в разделе "Активные", а не в истории)
+        const inactiveOrders = (orders || []).filter(o => o.is_completed === true || o.is_cancelled === true);
+        console.log('🛒 loadOrdersHistory: Filtered to inactive orders:', inactiveOrders.length);
+        
+        if (!inactiveOrders || inactiveOrders.length === 0) {
+            const emptyMessage = document.createElement('p');
+            emptyMessage.className = 'loading';
+            emptyMessage.textContent = 'У вас нет истории заказов';
+            historyItems.appendChild(emptyMessage);
+            return;
+        }
+        
+        for (const order of inactiveOrders) {
+            try {
+                if (!order.product_id) {
+                    continue;
+                }
+                
+                const productUrl = `${API_BASE}/api/products/${order.product_id}`;
+                const productResponse = await fetch(productUrl, {
+                    headers: getBaseHeadersNoAuth()
+                });
+                
+                if (!productResponse.ok) {
+                    continue;
+                }
+                
+                const product = await productResponse.json();
+                
+                let imageUrl = null;
+                if (product.images_urls && product.images_urls.length > 0) {
+                    const firstImage = product.images_urls[0];
+                    imageUrl = firstImage.startsWith('http') 
+                        ? firstImage 
+                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
+                } else if (product.image_url) {
+                    imageUrl = product.image_url.startsWith('http') 
+                        ? product.image_url 
+                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
+                }
+                
+                const finalPrice = product.discount > 0 
+                    ? Math.round(product.price * (1 - product.discount / 100)) 
+                    : product.price;
+                
+                const historyItem = document.createElement('div');
+                historyItem.className = 'cart-item';
+                
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'cart-item-image-container';
+                
+                if (imageUrl) {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '⏳';
+                    imageContainer.appendChild(placeholder);
+                    
+                    fetch(imageUrl, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        const img = document.createElement('img');
+                        img.src = blobUrl;
+                        img.alt = product.name;
+                        img.className = 'cart-item-image';
+                        img.onerror = () => {
+                            URL.revokeObjectURL(blobUrl);
+                            placeholder.textContent = '📦';
+                            placeholder.style.display = 'flex';
+                            if (img.parentNode) img.remove();
+                        };
+                        img.onload = () => {
+                            if (placeholder.parentNode) placeholder.remove();
+                        };
+                        imageContainer.appendChild(img);
+                    })
+                    .catch(() => {
+                        placeholder.textContent = '📦';
+                    });
+                } else {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '📦';
+                    imageContainer.appendChild(placeholder);
+                }
+                
+                // Статус заказа
+                let statusText = '';
+                let statusColor = '';
+                if (order.is_completed) {
+                    statusText = '✅ Выполнен';
+                    statusColor = '#4CAF50';
+                } else if (order.is_cancelled) {
+                    statusText = '❌ Отменен';
+                    statusColor = '#F44336';
+                } else {
+                    statusText = '⏳ В обработке';
+                    statusColor = '#FFA500';
+                }
+                
+                // Дата создания
+                let dateText = '';
+                if (order.created_at) {
+                    // Время приходит в UTC, нужно явно указать это и конвертировать в московское время
+                    let dateStr = order.created_at;
+                    // Если строка не заканчивается на Z или +/-, добавляем Z для указания UTC
+                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                        dateStr = dateStr + 'Z';
+                    }
+                    const orderDate = new Date(dateStr);
+                    // Используем timeZone для автоматической конвертации UTC в московское время
+                    dateText = orderDate.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Europe/Moscow'
+                    });
+                }
+                
+                historyItem.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3>${product.name}</h3>
+                        <p class="cart-item-price">${finalPrice} ₽ × ${order.quantity} шт.</p>
+                        <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
+                        ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
+                    </div>
+                `;
+                
+                historyItem.insertBefore(imageContainer, historyItem.firstChild);
+                historyItems.appendChild(historyItem);
+            } catch (e) {
+                console.error('❌ Error loading order history item:', e);
+            }
+        }
+        
+        // Проверяем, есть ли элементы кроме кнопки очистки
+        const itemsWithoutButton = Array.from(historyItems.children).filter(child => !child.classList.contains('history-clear-button-container'));
+        if (itemsWithoutButton.length === 0) {
+            const errorMessage = document.createElement('p');
+            errorMessage.className = 'loading';
+            errorMessage.textContent = 'Не удалось загрузить историю заказов';
+            historyItems.appendChild(errorMessage);
+        }
+    } catch (error) {
+        console.error('❌ Error loading orders history:', error);
+        // Удаляем элемент загрузки если он есть
+        const loadingElement = historyItems.querySelector('.loading');
+        if (loadingElement) loadingElement.remove();
+        
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'loading';
+        errorMessage.textContent = `Ошибка загрузки: ${error.message}`;
+        historyItems.appendChild(errorMessage);
+    }
+}
+
+// Загрузка истории продаж
+export async function loadPurchasesHistory() {
+    console.log('🛒 loadPurchasesHistory: Starting...');
+    const historyItems = document.getElementById('purchases-history-items');
+    if (!historyItems) {
+        console.error('❌ loadPurchasesHistory: purchases-history-items element not found');
+        return;
+    }
+    
+    // Создаем контейнер для кнопки очистки (если его еще нет)
+    let clearButtonContainer = historyItems.querySelector('.history-clear-button-container');
+    if (!clearButtonContainer) {
+        clearButtonContainer = document.createElement('div');
+        clearButtonContainer.className = 'history-clear-button-container';
+        clearButtonContainer.style.cssText = 'padding: 12px; display: flex; justify-content: flex-end; border-bottom: 1px solid var(--border-glass);';
+        clearButtonContainer.innerHTML = '<button class="cancel-order-btn" onclick="window.clearPurchasesHistory()" title="Очистить историю">Очистить историю</button>';
+        historyItems.insertBefore(clearButtonContainer, historyItems.firstChild);
+    }
+    
+    // Показываем загрузку после кнопки
+    const loadingElement = document.createElement('p');
+    loadingElement.className = 'loading';
+    loadingElement.textContent = 'Загрузка истории продаж...';
+    // Удаляем старые элементы (кроме кнопки очистки)
+    const itemsToRemove = Array.from(historyItems.children).filter(child => !child.classList.contains('history-clear-button-container'));
+    itemsToRemove.forEach(child => child.remove());
+    historyItems.appendChild(loadingElement);
+    
+    try {
+        const purchases = await getPurchasesHistoryAPI();
+        console.log('🛒 loadPurchasesHistory: Got purchases:', purchases ? purchases.length : 0);
+        
+        // Удаляем элемент загрузки
+        loadingElement.remove();
+        
+        // Дополнительная фильтрация: показываем только завершенные или отмененные продажи в истории
+        // (активные продажи должны быть в разделе "Активные", а не в истории)
+        const inactivePurchases = (purchases || []).filter(p => p.is_completed === true || p.is_cancelled === true);
+        console.log('🛒 loadPurchasesHistory: Filtered to inactive purchases:', inactivePurchases.length);
+        
+        if (!inactivePurchases || inactivePurchases.length === 0) {
+            const emptyMessage = document.createElement('p');
+            emptyMessage.className = 'loading';
+            emptyMessage.textContent = 'У вас нет истории продаж';
+            historyItems.appendChild(emptyMessage);
+            return;
+        }
+        
+        for (const purchase of inactivePurchases) {
+            try {
+                const product = purchase.product;
+                if (!product) {
+                    continue;
+                }
+                
+                let imageUrl = null;
+                if (product.images_urls && product.images_urls.length > 0) {
+                    const firstImage = product.images_urls[0];
+                    imageUrl = firstImage.startsWith('http') 
+                        ? firstImage 
+                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
+                } else if (product.image_url) {
+                    imageUrl = product.image_url.startsWith('http') 
+                        ? product.image_url 
+                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
+                }
+                
+                const finalPrice = product.discount > 0 
+                    ? Math.round(product.price * (1 - product.discount / 100)) 
+                    : product.price;
+                
+                const historyItem = document.createElement('div');
+                historyItem.className = 'cart-item';
+                
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'cart-item-image-container';
+                
+                if (imageUrl) {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '⏳';
+                    imageContainer.appendChild(placeholder);
+                    
+                    fetch(imageUrl, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        const img = document.createElement('img');
+                        img.src = blobUrl;
+                        img.alt = product.name;
+                        img.className = 'cart-item-image';
+                        img.onerror = () => {
+                            URL.revokeObjectURL(blobUrl);
+                            placeholder.textContent = '📦';
+                            placeholder.style.display = 'flex';
+                            if (img.parentNode) img.remove();
+                        };
+                        img.onload = () => {
+                            if (placeholder.parentNode) placeholder.remove();
+                        };
+                        imageContainer.appendChild(img);
+                    })
+                    .catch(() => {
+                        placeholder.textContent = '📦';
+                    });
+                } else {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cart-item-image-placeholder';
+                    placeholder.textContent = '📦';
+                    imageContainer.appendChild(placeholder);
+                }
+                
+                // Статус продажи
+                let statusText = '';
+                let statusColor = '';
+                if (purchase.is_completed) {
+                    statusText = '✅ Выполнена';
+                    statusColor = '#4CAF50';
+                } else if (purchase.is_cancelled) {
+                    statusText = '❌ Отменена';
+                    statusColor = '#F44336';
+                } else {
+                    statusText = '⏳ Ожидание';
+                    statusColor = '#FFA500';
+                }
+                
+                // Дата создания
+                let dateText = '';
+                if (purchase.created_at) {
+                    // Время приходит в UTC, нужно явно указать это и конвертировать в московское время
+                    let dateStr = purchase.created_at;
+                    // Если строка не заканчивается на Z или +/-, добавляем Z для указания UTC
+                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                        dateStr = dateStr + 'Z';
+                    }
+                    const purchaseDate = new Date(dateStr);
+                    // Используем timeZone для автоматической конвертации UTC в московское время
+                    dateText = purchaseDate.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Europe/Moscow'
+                    });
+                }
+                
+                historyItem.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3>${product.name}</h3>
+                        <p class="cart-item-price">${finalPrice} ₽</p>
+                        <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
+                        ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
+                    </div>
+                `;
+                
+                historyItem.insertBefore(imageContainer, historyItem.firstChild);
+                historyItems.appendChild(historyItem);
+            } catch (e) {
+                console.error('❌ Error loading purchase history item:', e);
+            }
+        }
+        
+        // Проверяем, есть ли элементы кроме кнопки очистки
+        const itemsWithoutButton = Array.from(historyItems.children).filter(child => !child.classList.contains('history-clear-button-container'));
+        if (itemsWithoutButton.length === 0) {
+            const errorMessage = document.createElement('p');
+            errorMessage.className = 'loading';
+            errorMessage.textContent = 'Не удалось загрузить историю продаж';
+            historyItems.appendChild(errorMessage);
+        }
+    } catch (error) {
+        console.error('❌ Error loading purchases history:', error);
+        // Удаляем элемент загрузки если он есть
+        const loadingElement = historyItems.querySelector('.loading');
+        if (loadingElement) loadingElement.remove();
+        
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'loading';
+        errorMessage.textContent = `Ошибка загрузки: ${error.message}`;
+        historyItems.appendChild(errorMessage);
     }
 }
 

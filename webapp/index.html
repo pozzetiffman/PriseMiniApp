@@ -160,11 +160,11 @@
         </div>
     </div>
     
-    <!-- Модальное окно для покупки товара -->
+    <!-- Модальное окно для продажи товара -->
     <div id="purchase-modal" class="modal">
         <div class="modal-content reservation-modal-content">
             <span class="modal-close purchase-close">&times;</span>
-            <h2 class="reservation-title">🛒 Продать товар</h2>
+            <h2 class="reservation-title">💰 Продать товар</h2>
             <div class="order-form" style="max-height: 80vh; overflow-y: auto; padding: 0 20px; box-sizing: border-box;">
                 <div class="order-form-field">
                     <label for="purchase-last-name">Фамилия *</label>
@@ -191,7 +191,7 @@
                     <textarea id="purchase-address" rows="3" placeholder="Введите адрес" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
                 </div>
                 <div class="order-form-field">
-                    <label for="purchase-notes">Примечание к покупке</label>
+                    <label for="purchase-notes">Примечание к продаже</label>
                     <textarea id="purchase-notes" rows="3" placeholder="Дополнительная информация о товаре" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
                 </div>
                 <div class="order-form-field">
@@ -234,16 +234,49 @@
             <div class="cart-tabs">
                 <button class="cart-tab active" data-tab="reservations">🔒 Резервации</button>
                 <button class="cart-tab" data-tab="orders">🛒 Заказы</button>
-                <button class="cart-tab" data-tab="purchases">💰 Покупки</button>
+                <button class="cart-tab" data-tab="purchases">💰 Продажи</button>
             </div>
-            <div id="cart-items" class="cart-items">
-                <!-- Зарезервированные товары будут здесь -->
+            
+            <!-- Резервации -->
+            <div id="reservations-section" class="cart-section">
+                <div class="cart-subtabs">
+                    <button class="cart-subtab active" data-subtab="reservations-active">Активные</button>
+                    <button class="cart-subtab" data-subtab="reservations-history">📜 История</button>
+                </div>
+                <div id="cart-items" class="cart-items">
+                    <!-- Зарезервированные товары будут здесь -->
+                </div>
+                <div id="reservations-history-items" class="cart-items" style="display: none;">
+                    <!-- История резерваций будет здесь -->
+                </div>
             </div>
-            <div id="orders-items" class="cart-items" style="display: none;">
-                <!-- Заказанные товары будут здесь -->
+            
+            <!-- Заказы -->
+            <div id="orders-section" class="cart-section" style="display: none;">
+                <div class="cart-subtabs">
+                    <button class="cart-subtab active" data-subtab="orders-active">Активные</button>
+                    <button class="cart-subtab" data-subtab="orders-history">📜 История</button>
+                </div>
+                <div id="orders-items" class="cart-items">
+                    <!-- Заказанные товары будут здесь -->
+                </div>
+                <div id="orders-history-items" class="cart-items" style="display: none;">
+                    <!-- История заказов будет здесь -->
+                </div>
             </div>
-            <div id="purchases-items" class="cart-items" style="display: none;">
-                <!-- Заявки на покупку будут здесь -->
+            
+            <!-- Продажи -->
+            <div id="purchases-section" class="cart-section" style="display: none;">
+                <div class="cart-subtabs">
+                    <button class="cart-subtab active" data-subtab="purchases-active">Активные</button>
+                    <button class="cart-subtab" data-subtab="purchases-history">📜 История</button>
+                </div>
+                <div id="purchases-items" class="cart-items">
+                    <!-- Заявки на продажу будут здесь -->
+                </div>
+                <div id="purchases-history-items" class="cart-items" style="display: none;">
+                    <!-- История продаж будет здесь -->
+                </div>
             </div>
         </div>
     </div>
@@ -340,7 +373,7 @@
                                 <input type="radio" name="price-type" id="edit-price-type-fixed" value="fixed" style="display: none;">
                                 <div>
                                     <div style="font-weight: 500;">Фиксированная цена</div>
-                                    <div style="font-size: 12px; color: var(--text-hint);">Одна цена покупки</div>
+                                    <div style="font-size: 12px; color: var(--text-hint);">Одна цена продажи</div>
                                 </div>
                             </label>
                         </div>
@@ -357,7 +390,7 @@
                     </div>
                     <div id="price-fixed-field" style="display: none;">
                         <div class="edit-product-field">
-                            <label for="edit-price-fixed">Цена покупки (₽)</label>
+                            <label for="edit-price-fixed">Цена продажи (₽)</label>
                             <input type="number" id="edit-price-fixed" step="0.01" min="0" placeholder="Введите фиксированную цену">
                         </div>
                     </div>

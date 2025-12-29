@@ -144,6 +144,25 @@ export async function fetchUserReservations() {
     return data;
 }
 
+// Загрузка истории резерваций (все резервации пользователя)
+export async function fetchReservationsHistory() {
+    const url = `${API_BASE}/api/reservations/history`;
+    console.log(`Fetching reservations history from: ${url}`);
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Reservations history error:", response.status, errorText);
+        throw new Error(`Reservations history error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`📜 fetchReservationsHistory: Got ${data.length} reservations`);
+    return data;
+}
+
 // Создание резервации (reserved_by_user_id определяется на backend из initData)
 export async function createReservationAPI(productId, hours, quantity = 1) {
     const url = `${API_BASE}/api/reservations/?product_id=${productId}&hours=${hours}&quantity=${quantity}`;
@@ -791,6 +810,25 @@ export async function getMyOrdersAPI() {
     return data;
 }
 
+// Загрузка истории заказов (все заказы пользователя)
+export async function getOrdersHistoryAPI() {
+    const url = `${API_BASE}/api/orders/history`;
+    console.log(`Fetching orders history from: ${url}`);
+    
+    const response = await fetch(url, {
+        headers: getBaseHeaders()
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Orders history error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Orders history fetched: ${data.length}`);
+    return data;
+}
+
 // Выполнить заказ (только владелец магазина)
 export async function completeOrderAPI(orderId) {
     const url = `${API_BASE}/api/orders/${orderId}/complete`;
@@ -991,6 +1029,87 @@ export async function createPurchaseAPI(productId, formData) {
     return JSON.parse(responseText);
 }
 
+// Очистить историю резерваций
+export async function clearReservationsHistoryAPI() {
+    const url = `${API_BASE}/api/reservations/history/clear`;
+    console.log(`Clear reservations history URL: ${url}`);
+    
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Clear reservations history response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось очистить историю резерваций';
+        try {
+            const error = JSON.parse(responseText);
+            errorMessage = error.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Очистить историю заказов
+export async function clearOrdersHistoryAPI() {
+    const url = `${API_BASE}/api/orders/history/clear`;
+    console.log(`Clear orders history URL: ${url}`);
+    
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Clear orders history response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось очистить историю заказов';
+        try {
+            const error = JSON.parse(responseText);
+            errorMessage = error.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Очистить историю продаж
+export async function clearPurchasesHistoryAPI() {
+    const url = `${API_BASE}/api/purchases/history/clear`;
+    console.log(`Clear purchases history URL: ${url}`);
+    
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Clear purchases history response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось очистить историю продаж';
+        try {
+            const error = JSON.parse(responseText);
+            errorMessage = error.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
 // Получение моих покупок
 export async function getMyPurchasesAPI() {
     const url = `${API_BASE}/api/purchases/my`;
@@ -1009,6 +1128,63 @@ export async function getMyPurchasesAPI() {
     
     if (!response.ok) {
         let errorMessage = 'Не удалось загрузить покупки';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Отмена покупки (user_id определяется на backend из initData)
+export async function cancelPurchaseAPI(purchaseId) {
+    const url = `${API_BASE}/api/purchases/${purchaseId}`;
+    console.log(`Cancel purchase URL: ${url}`);
+    
+    const response = await fetch(url, {
+        method: 'DELETE',
+        headers: getBaseHeaders()
+    });
+    
+    const responseText = await response.text();
+    console.log(`Cancel purchase response: status=${response.status}, body=${responseText}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось отменить покупку';
+        try {
+            const error = JSON.parse(responseText);
+            errorMessage = error.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Загрузка истории покупок (все покупки пользователя)
+export async function getPurchasesHistoryAPI() {
+    const url = `${API_BASE}/api/purchases/history`;
+    console.log(`Getting purchases history`);
+    
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'X-Telegram-Init-Data': getInitData(),
+            'ngrok-skip-browser-warning': '69420'
+        }
+    });
+    
+    const responseText = await response.text();
+    console.log(`Get purchases history response: status=${response.status}`);
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось загрузить историю продаж';
         try {
             const errorData = JSON.parse(responseText);
             errorMessage = errorData.detail || errorMessage;
