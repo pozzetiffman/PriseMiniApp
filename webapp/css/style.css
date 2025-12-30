@@ -39,6 +39,13 @@ body {
     user-select: none;
     min-height: 100vh;
     position: relative;
+    /* Скрываем scrollbar везде */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+body::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 body::before {
@@ -307,6 +314,13 @@ header h1 {
 .cart-items {
     max-height: 70vh;
     overflow-y: auto;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.cart-items::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 .cart-item {
@@ -564,6 +578,13 @@ header h1 {
     display: none; /* По умолчанию скрыт */
     -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
     min-width: 120px; /* Уменьшенная минимальная ширина */
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.category-dropdown-list::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 .category-dropdown-item {
@@ -649,6 +670,13 @@ header h1 {
     pointer-events: auto; /* Разрешаем клики */
     will-change: transform; /* Оптимизация для анимации */
     margin: 0 !important; /* Убираем margin */
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.category-filter-dropdown::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 .category-dropdown-item:last-child {
@@ -983,6 +1011,13 @@ header h1 {
     overflow-y: auto;
     backdrop-filter: var(--blur-large);
     -webkit-backdrop-filter: var(--blur-large);
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.modal::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 .modal-content {
@@ -1004,6 +1039,13 @@ header h1 {
     overflow-x: hidden;
     overflow-y: auto;
     width: calc(100% - 40px);
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.modal-content::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 @keyframes modalSlideIn {
@@ -1026,26 +1068,22 @@ header h1 {
     color: var(--text-secondary) !important;
     cursor: pointer;
     z-index: 1001;
-    width: 40px;
-    height: 40px;
+    width: auto;
+    height: auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    background: var(--bg-glass);
-    backdrop-filter: var(--blur-small);
-    -webkit-backdrop-filter: var(--blur-small);
-    border: 1px solid var(--border-glass);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 8px var(--shadow-light);
+    background: transparent;
+    border: none;
+    padding: 0;
 }
 
 .modal-close:hover,
 .modal-close:focus {
     color: var(--text-primary) !important;
-    background: var(--bg-glass-light);
+    background: transparent;
     transform: scale(1.1);
-    box-shadow: 0 4px 12px var(--shadow-medium);
 }
 
 .modal-image {
@@ -1273,6 +1311,13 @@ header h1 {
 #purchase-modal .order-form {
     padding: 0 20px;
     box-sizing: border-box;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+#purchase-modal .order-form::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 #purchase-modal .order-form-field input,
@@ -1342,6 +1387,16 @@ html, body {
     box-sizing: border-box;
 }
 
+/* Глобальное скрытие scrollbar для всех элементов */
+* {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+*::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
 #app {
     width: 100%;
     max-width: 100%;
@@ -1362,6 +1417,110 @@ main {
 
 /* Дополнительные стили для лучшей видимости на мобильных */
 @media (max-width: 480px) {
+    /* Более светлый синий цвет для мобильных устройств */
+    :root {
+        --tg-theme-link-color: #7dd3fc;
+        --tg-theme-button-color: #7dd3fc;
+    }
+    
+    /* Переопределение всех синих цветов на более светлые */
+    .cart-tab.active,
+    .cart-subtab.active,
+    .admin-tab.active {
+        color: #7dd3fc !important;
+        border-bottom-color: #7dd3fc !important;
+    }
+    
+    .product-price,
+    .modal-price,
+    .cart-item-price,
+    .stat-value,
+    .order-total,
+    .order-product-summary .product-price {
+        color: #7dd3fc !important;
+    }
+    
+    .category-badge.active {
+        color: #7dd3fc !important;
+        border-color: rgba(125, 211, 252, 0.5) !important;
+    }
+    
+    .category-dropdown-item.active {
+        color: #7dd3fc !important;
+    }
+    
+    .filter-button.active {
+        border-color: rgba(125, 211, 252, 0.5) !important;
+    }
+    
+    .filter-count {
+        background: linear-gradient(135deg, rgba(125, 211, 252, 0.4) 0%, rgba(125, 211, 252, 0.3) 100%) !important;
+        color: #7dd3fc !important;
+    }
+    
+    .category-dropdown-button:hover,
+    .category-filter-button:hover,
+    .category-filter-button.active {
+        border-color: rgba(125, 211, 252, 0.3) !important;
+    }
+    
+    .category-dropdown-item:hover,
+    .category-dropdown-item.active {
+        background: rgba(125, 211, 252, 0.1) !important;
+    }
+    
+    .category-dropdown-item.active {
+        background: rgba(125, 211, 252, 0.2) !important;
+    }
+    
+    .subcategory-badge.active {
+        background: rgba(125, 211, 252, 0.2) !important;
+        border-color: rgba(125, 211, 252, 0.4) !important;
+    }
+    
+    .reservation-option:hover {
+        border-color: #7dd3fc !important;
+        color: #7dd3fc !important;
+    }
+    
+    .delivery-option:hover {
+        border-color: #7dd3fc !important;
+    }
+    
+    .delivery-option input[type="radio"]:checked + span {
+        color: #7dd3fc !important;
+    }
+    
+    .edit-product-field input:focus,
+    .edit-product-field textarea:focus,
+    .edit-product-field select:focus {
+        border-color: #7dd3fc !important;
+        box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.2) !important;
+    }
+    
+    .edit-product-field select:hover {
+        border-color: #7dd3fc !important;
+        background-color: rgba(125, 211, 252, 0.05) !important;
+    }
+    
+    .edit-product-btn.save {
+        background: #7dd3fc !important;
+    }
+    
+    .toggle-switch input:checked + .toggle-slider {
+        background-color: #7dd3fc !important;
+        border-color: #7dd3fc !important;
+    }
+    
+    .filter-checkbox,
+    .filter-radio {
+        accent-color: #7dd3fc !important;
+    }
+    
+    .delivery-option input[type="radio"] {
+        accent-color: #7dd3fc !important;
+    }
+    
     header {
         padding: 10px 12px;
         padding-bottom: max(10px, calc(10px + env(safe-area-inset-bottom, 0px)));
@@ -1465,15 +1624,33 @@ main {
     }
     
     .admin-tabs {
-        grid-template-columns: repeat(4, 1fr);
-        padding: 3px;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        border-bottom: 1px solid var(--border-glass);
+        background: var(--bg-glass-light);
+        margin-bottom: 15px;
+        border-radius: 12px 12px 0 0;
         gap: 2px;
+        padding: 3px;
     }
     
     .admin-tab {
-        padding: 8px 4px;
-        font-size: 10px;
+        padding: 8px 2px;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        border-radius: 12px;
+        color: var(--text-hint);
+        font-size: 9px;
+        font-weight: 500;
         min-height: 50px;
+    }
+    
+    .admin-tab.active {
+        color: #7dd3fc !important;
+        border-bottom-color: #7dd3fc !important;
+        background: rgba(125, 211, 252, 0.15) !important;
+        box-shadow: 0 2px 8px rgba(125, 211, 252, 0.2) !important;
     }
     
     .admin-tab span:first-child {
@@ -1755,6 +1932,13 @@ main {
     overflow-x: hidden;
     overflow-y: auto;
     animation: filterSlideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.filter-dropdown::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 @keyframes filterSlideDown {
@@ -1873,22 +2057,6 @@ main {
     transform: translateY(-1px);
 }
 
-.filter-dropdown::-webkit-scrollbar {
-    width: 6px;
-}
-
-.filter-dropdown::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.filter-dropdown::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-}
-
-.filter-dropdown::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
-}
 
 /* Отключаем горизонтальный скролл */
 .filter-dropdown {
@@ -2043,6 +2211,9 @@ main {
     cursor: pointer;
     line-height: 1;
     transition: color 0.2s ease;
+    background: transparent;
+    border: none;
+    padding: 0;
 }
 
 .admin-close:hover {
@@ -2066,18 +2237,21 @@ main {
 /* Вкладки админки */
 .admin-tabs {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     border-bottom: 1px solid var(--border-glass);
     background: var(--bg-glass-light);
     flex-shrink: 0;
+    margin-bottom: 15px;
+    border-radius: 12px 12px 0 0;
     gap: 2px;
     padding: 4px;
 }
 
 .admin-tab {
-    padding: 10px 8px;
+    padding: 10px 4px;
     background: transparent;
     border: none;
+    border-bottom: 2px solid transparent;
     border-radius: 12px;
     color: var(--text-hint);
     font-size: 11px;
@@ -2100,6 +2274,7 @@ main {
 
 .admin-tab.active {
     color: var(--tg-theme-link-color, #5ac8fa);
+    border-bottom-color: var(--tg-theme-link-color, #5ac8fa);
     background: rgba(90, 200, 250, 0.15);
     box-shadow: 0 2px 8px rgba(90, 200, 250, 0.2);
 }
@@ -2539,6 +2714,13 @@ main {
     max-width: 500px;
     max-height: 90vh;
     overflow-y: auto;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.order-form-modal::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 .order-step {
@@ -2696,6 +2878,13 @@ main {
     border-radius: 24px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.profile-modal-content::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
 .profile-title {
