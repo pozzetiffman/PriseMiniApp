@@ -72,6 +72,28 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
     return TELEGRAM_BOT_TOKEN
 
+def get_product_price_for_display(product: models.Product) -> float:
+    """
+    Получить правильную цену товара для отображения.
+    Для товаров с is_for_sale использует price_fixed или price_from.
+    Для обычных товаров использует price со скидкой.
+    """
+    if product.is_for_sale:
+        price_type = product.price_type or 'range'
+        if price_type == 'fixed' and product.price_fixed is not None:
+            return product.price_fixed
+        elif price_type == 'range' and product.price_from is not None:
+            return product.price_from
+        elif price_type == 'range' and product.price_to is not None:
+            return product.price_to
+        # Если нет цены для продажи, возвращаем обычную цену
+        return product.price
+    else:
+        # Обычная цена со скидкой
+        if product.discount and product.discount > 0:
+            return round(product.price * (1 - product.discount / 100), 2)
+        return product.price
+
 @router.post("/", response_model=schemas.Purchase)
 async def create_purchase(
     product_id: int = Form(...),
@@ -331,10 +353,15 @@ async def create_purchase(
         "product": {
             "id": product.id,
             "name": product.name,
-            "price": product.price,
+            "price": get_product_price_for_display(product),
             "discount": product.discount,
             "image_url": make_full_url(product.image_url) if product.image_url else None,
-            "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None
+            "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
+            "is_for_sale": product.is_for_sale,
+            "price_from": product.price_from,
+            "price_to": product.price_to,
+            "price_fixed": product.price_fixed,
+            "price_type": product.price_type
         }
     }
     
@@ -365,7 +392,8 @@ async def get_my_purchases(
         and_(
             models.Purchase.purchased_by_user_id == purchased_by_user_id,
             models.Purchase.is_cancelled == False,
-            models.Purchase.is_completed == False
+            models.Purchase.is_completed == False,
+            models.Purchase.product_id.isnot(None)  # Исключаем записи без товара
         )
     ).order_by(models.Purchase.created_at.desc()).all()
     
@@ -403,10 +431,15 @@ async def get_my_purchases(
             "product": {
                 "id": product.id,
                 "name": product.name,
-                "price": product.price,
+                "price": get_product_price_for_display(product),
                 "discount": product.discount,
                 "image_url": make_full_url(product.image_url) if product.image_url else None,
-                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None
+                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
+                "is_for_sale": product.is_for_sale,
+                "price_from": product.price_from,
+                "price_to": product.price_to,
+                "price_fixed": product.price_fixed,
+                "price_type": product.price_type
             } if product else None
         }
         result.append(purchase_dict)
@@ -441,7 +474,8 @@ async def get_purchases_history(
             or_(
                 models.Purchase.is_completed == True,
                 models.Purchase.is_cancelled == True
-            )
+            ),
+            models.Purchase.product_id.isnot(None)  # Исключаем записи без товара
         )
     ).order_by(models.Purchase.created_at.desc()).all()
     
@@ -479,10 +513,15 @@ async def get_purchases_history(
             "product": {
                 "id": product.id,
                 "name": product.name,
-                "price": product.price,
+                "price": get_product_price_for_display(product),
                 "discount": product.discount,
                 "image_url": make_full_url(product.image_url) if product.image_url else None,
-                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None
+                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
+                "is_for_sale": product.is_for_sale,
+                "price_from": product.price_from,
+                "price_to": product.price_to,
+                "price_fixed": product.price_fixed,
+                "price_type": product.price_type
             } if product else None
         }
         result.append(purchase_dict)
@@ -515,7 +554,10 @@ async def get_all_purchases(
         raise HTTPException(status_code=403, detail="Access denied")
     
     purchases = db.query(models.Purchase).filter(
-        models.Purchase.user_id == user_id
+        and_(
+            models.Purchase.user_id == user_id,
+            models.Purchase.product_id.isnot(None)  # Исключаем записи без товара
+        )
     ).order_by(models.Purchase.created_at.desc()).all()
     
     result = []
@@ -555,10 +597,15 @@ async def get_all_purchases(
             "product": {
                 "id": product.id,
                 "name": product.name,
-                "price": product.price,
+                "price": get_product_price_for_display(product),
                 "discount": product.discount,
                 "image_url": make_full_url(product.image_url) if product.image_url else None,
-                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None
+                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
+                "is_for_sale": product.is_for_sale,
+                "price_from": product.price_from,
+                "price_to": product.price_to,
+                "price_fixed": product.price_fixed,
+                "price_type": product.price_type
             } if product else None
         }
         result.append(purchase_dict)
@@ -642,10 +689,15 @@ async def update_purchase(
         "product": {
             "id": product.id,
             "name": product.name,
-            "price": product.price,
+            "price": get_product_price_for_display(product),
             "discount": product.discount,
             "image_url": make_full_url(product.image_url) if product.image_url else None,
-            "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None
+            "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
+            "is_for_sale": product.is_for_sale,
+            "price_from": product.price_from,
+            "price_to": product.price_to,
+            "price_fixed": product.price_fixed,
+            "price_type": product.price_type
         } if product else None
     }
     

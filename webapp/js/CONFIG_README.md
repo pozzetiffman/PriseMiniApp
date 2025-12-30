@@ -57,3 +57,5 @@ window.API_BASE_URL = "https://your-custom-url.com";
 3. **Проверяйте доступность API** перед деплоем
 4. **Используйте HTTPS** для всех URL (Telegram Mini App требует HTTPS)
 
+
+

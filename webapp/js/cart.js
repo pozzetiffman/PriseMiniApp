@@ -1,5 +1,5 @@
 // Модуль корзины
-import { API_BASE, fetchUserReservations, fetchReservationsHistory, getBaseHeadersNoAuth, getMyOrdersAPI, getOrdersHistoryAPI, cancelOrderAPI, getMyPurchasesAPI, getPurchasesHistoryAPI, clearReservationsHistoryAPI, clearOrdersHistoryAPI, clearPurchasesHistoryAPI } from './api.js';
+import { API_BASE, fetchReservationsHistory, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, getMyPurchasesAPI, getOrdersHistoryAPI, getPurchasesHistoryAPI } from './api.js';
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -63,9 +63,52 @@ export async function updateCartUI() {
             activePurchases = [];
         }
         
-        // Общее количество элементов в корзине (резервации + заказы + продажи)
+        // Проверяем историю для всех типов
+        let hasHistory = false;
+        try {
+            // Проверяем историю резерваций
+            const historyReservations = await fetchReservationsHistory();
+            const historyReservationsCount = (historyReservations || []).filter(r => r.is_active === false).length;
+            if (historyReservationsCount > 0) {
+                hasHistory = true;
+                console.log(`🛒 Found ${historyReservationsCount} history reservations`);
+            }
+        } catch (e) {
+            console.warn('⚠️ Failed to fetch reservations history for cart UI:', e);
+        }
+        
+        if (!hasHistory) {
+            try {
+                // Проверяем историю заказов
+                const historyOrders = await getOrdersHistoryAPI();
+                const historyOrdersCount = (historyOrders || []).filter(o => o.is_completed === true || o.is_cancelled === true).length;
+                if (historyOrdersCount > 0) {
+                    hasHistory = true;
+                    console.log(`🛒 Found ${historyOrdersCount} history orders`);
+                }
+            } catch (e) {
+                console.warn('⚠️ Failed to fetch orders history for cart UI:', e);
+            }
+        }
+        
+        if (!hasHistory) {
+            try {
+                // Проверяем историю продаж
+                const historyPurchases = await getPurchasesHistoryAPI();
+                const historyPurchasesCount = (historyPurchases || []).filter(p => p.is_completed === true || p.is_cancelled === true).length;
+                if (historyPurchasesCount > 0) {
+                    hasHistory = true;
+                    console.log(`🛒 Found ${historyPurchasesCount} history purchases`);
+                }
+            } catch (e) {
+                console.warn('⚠️ Failed to fetch purchases history for cart UI:', e);
+            }
+        }
+        
+        // Общее количество активных элементов в корзине (резервации + заказы + продажи)
         const totalItems = activeReservations.length + (activeOrders ? activeOrders.length : 0) + (activePurchases ? activePurchases.length : 0);
-        console.log(`🛒 Total cart items: ${totalItems} (${activeReservations.length} reservations + ${activeOrders ? activeOrders.length : 0} orders + ${activePurchases ? activePurchases.length : 0} purchases)`);
+        console.log(`🛒 Total active cart items: ${totalItems} (${activeReservations.length} reservations + ${activeOrders ? activeOrders.length : 0} orders + ${activePurchases ? activePurchases.length : 0} purchases)`);
+        console.log(`🛒 Has history: ${hasHistory}`);
         
         // Удаляем дебаг-индикатор, если он был создан ранее
         const existingDebugIndicator = document.getElementById('cart-debug-indicator');
@@ -73,8 +116,8 @@ export async function updateCartUI() {
             existingDebugIndicator.remove();
         }
         
-        // Показываем кнопку корзины, если есть резервации ИЛИ заказы ИЛИ продажи
-        if (totalItems > 0) {
+        // Показываем кнопку корзины, если есть активные элементы ИЛИ история
+        if (totalItems > 0 || hasHistory) {
             console.log(`🛒🛒🛒 ПОКАЗЫВАЕМ КОРЗИНУ! Найдено ${activeReservations.length} активных резерваций, ${activeOrders ? activeOrders.length : 0} заказов и ${activePurchases ? activePurchases.length : 0} продаж`);
             console.log(`🛒🛒🛒 Резервации:`, activeReservations.map(r => ({
                 id: r.id,
@@ -140,7 +183,7 @@ export async function updateCartUI() {
                 }
             }, 100);
         } else {
-            console.log(`❌ Cart button hidden - no active reservations, orders or sales (found ${activeReservations.length} reservations, ${activeOrders ? activeOrders.length : 0} orders, ${activePurchases ? activePurchases.length : 0} sales)`);
+            console.log(`❌ Cart button hidden - no active items or history (found ${activeReservations.length} active reservations, ${activeOrders ? activeOrders.length : 0} active orders, ${activePurchases ? activePurchases.length : 0} active sales, hasHistory: ${hasHistory})`);
             cartButton.style.display = 'none';
         }
     } catch (e) {
@@ -265,9 +308,61 @@ export async function loadCart() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
-                const finalPrice = product.discount > 0 
-                    ? Math.round(product.price * (1 - product.discount / 100)) 
-                    : product.price;
+                // Функция для формирования отображения цены с учетом is_for_sale
+                const getProductPriceDisplay = (prod) => {
+                    const isForSale = prod.is_for_sale === true || 
+                                     prod.is_for_sale === 1 || 
+                                     prod.is_for_sale === '1' ||
+                                     prod.is_for_sale === 'true' ||
+                                     String(prod.is_for_sale).toLowerCase() === 'true';
+                    
+                    if (isForSale) {
+                        const priceType = prod.price_type || 'range';
+                        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
+                            return `${prod.price_fixed}р`;
+                        } else if (priceType === 'range') {
+                            // Для диапазона цен показываем "от X до Y р"
+                            // Обрабатываем значения: могут быть числами, строками, null, undefined
+                            let priceFrom = null;
+                            let priceTo = null;
+                            
+                            // Обрабатываем price_from: конвертируем в число, если возможно
+                            if (prod.price_from != null && prod.price_from !== '') {
+                                const fromNum = Number(prod.price_from);
+                                if (!isNaN(fromNum) && isFinite(fromNum)) {
+                                    priceFrom = fromNum;
+                                }
+                            }
+                            
+                            // Обрабатываем price_to: конвертируем в число, если возможно
+                            if (prod.price_to != null && prod.price_to !== '') {
+                                const toNum = Number(prod.price_to);
+                                if (!isNaN(toNum) && isFinite(toNum)) {
+                                    priceTo = toNum;
+                                }
+                            }
+                            
+                            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
+                            if (priceFrom != null && priceTo != null) {
+                                return `от ${priceFrom} до ${priceTo} р`;
+                            } else if (priceFrom != null) {
+                                return `от ${priceFrom} р`;
+                            } else if (priceTo != null) {
+                                return `до ${priceTo} р`;
+                            }
+                        }
+                        // Если нет цены, возвращаем "Цена по запросу"
+                        return 'Цена по запросу';
+                    } else {
+                        // Обычная цена со скидкой
+                        const finalPrice = prod.discount > 0 
+                            ? Math.round(prod.price * (1 - prod.discount / 100)) 
+                            : prod.price;
+                        return `${finalPrice} ₽`;
+                    }
+                };
+                
+                const priceDisplay = getProductPriceDisplay(product);
                 
                 const cartItem = document.createElement('div');
                 cartItem.className = 'cart-item';
@@ -356,7 +451,7 @@ export async function loadCart() {
                 cartItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
-                        <p class="cart-item-price">${finalPrice} ₽</p>
+                        <p class="cart-item-price">${priceDisplay}</p>
                         <p class="cart-item-time">⏰ До ${timeText}</p>
                         ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>
@@ -437,10 +532,23 @@ export function initCart() {
 export function setupCartButton() {
     initCartElements();
     if (cartButton) {
-        cartButton.onclick = () => {
+        cartButton.onclick = async () => {
             if (cartModal) {
+                // Обновляем видимость вкладок перед открытием
+                const tabsData = await updateCartTabsVisibility();
+                
+                // Выбираем первую доступную вкладку
+                let defaultTab = 'reservations';
+                if (tabsData.hasReservations) {
+                    defaultTab = 'reservations';
+                } else if (tabsData.hasOrders) {
+                    defaultTab = 'orders';
+                } else if (tabsData.hasPurchases) {
+                    defaultTab = 'purchases';
+                }
+                
                 // Инициализируем активную вкладку при открытии корзины
-                switchCartTab('reservations');
+                switchCartTab(defaultTab);
                 cartModal.style.display = 'block';
             }
         };
@@ -482,8 +590,19 @@ export function setupCartModal() {
                 switchCartTab(tab.dataset.tab);
             };
         });
-        // Инициализируем активную вкладку по умолчанию
-        switchCartTab('reservations');
+        // Обновляем видимость вкладок при инициализации
+        updateCartTabsVisibility().then(tabsData => {
+            // Выбираем первую доступную вкладку
+            let defaultTab = 'reservations';
+            if (tabsData.hasReservations) {
+                defaultTab = 'reservations';
+            } else if (tabsData.hasOrders) {
+                defaultTab = 'orders';
+            } else if (tabsData.hasPurchases) {
+                defaultTab = 'purchases';
+            }
+            switchCartTab(defaultTab);
+        });
         console.log('✅ Cart tabs initialized');
     } else {
         console.warn('⚠️ Cart tabs not found in HTML');
@@ -506,6 +625,128 @@ export function setupCartModal() {
     console.log('✅ Cart modal initialized');
 }
 
+// Проверка наличия данных и обновление видимости вкладок
+export async function updateCartTabsVisibility() {
+    console.log('🛒 updateCartTabsVisibility: Checking data availability...');
+    
+    try {
+        // Проверяем резервации (активные + история)
+        let hasReservations = false;
+        try {
+            const activeReservations = await fetchUserReservations();
+            const activeCount = (activeReservations || []).filter(r => r.is_active === true).length;
+            
+            let historyCount = 0;
+            try {
+                const historyReservations = await fetchReservationsHistory();
+                historyCount = (historyReservations || []).filter(r => r.is_active === false).length;
+            } catch (e) {
+                console.warn('⚠️ Failed to fetch reservations history for visibility check:', e);
+            }
+            
+            hasReservations = activeCount > 0 || historyCount > 0;
+            console.log(`🛒 Reservations: ${activeCount} active, ${historyCount} history, hasData: ${hasReservations}`);
+        } catch (e) {
+            console.warn('⚠️ Failed to check reservations:', e);
+        }
+        
+        // Проверяем заказы (активные + история)
+        let hasOrders = false;
+        try {
+            const activeOrders = await getMyOrdersAPI();
+            const activeCount = (activeOrders || []).filter(o => !o.is_completed && !o.is_cancelled).length;
+            
+            let historyCount = 0;
+            try {
+                const historyOrders = await getOrdersHistoryAPI();
+                historyCount = (historyOrders || []).filter(o => o.is_completed === true || o.is_cancelled === true).length;
+            } catch (e) {
+                console.warn('⚠️ Failed to fetch orders history for visibility check:', e);
+            }
+            
+            hasOrders = activeCount > 0 || historyCount > 0;
+            console.log(`🛒 Orders: ${activeCount} active, ${historyCount} history, hasData: ${hasOrders}`);
+        } catch (e) {
+            console.warn('⚠️ Failed to check orders:', e);
+        }
+        
+        // Проверяем продажи (активные + история)
+        let hasPurchases = false;
+        try {
+            const allPurchases = await getMyPurchasesAPI();
+            const activeCount = (allPurchases || []).filter(p => !p.is_completed && !p.is_cancelled).length;
+            
+            let historyCount = 0;
+            try {
+                const historyPurchases = await getPurchasesHistoryAPI();
+                historyCount = (historyPurchases || []).filter(p => p.is_completed === true || p.is_cancelled === true).length;
+            } catch (e) {
+                console.warn('⚠️ Failed to fetch purchases history for visibility check:', e);
+            }
+            
+            hasPurchases = activeCount > 0 || historyCount > 0;
+            console.log(`🛒 Purchases: ${activeCount} active, ${historyCount} history, hasData: ${hasPurchases}`);
+        } catch (e) {
+            console.warn('⚠️ Failed to check purchases:', e);
+        }
+        
+        // Обновляем видимость вкладок
+        const tabs = document.querySelectorAll('.cart-tab');
+        const reservationsTab = Array.from(tabs).find(tab => tab.dataset.tab === 'reservations');
+        const ordersTab = Array.from(tabs).find(tab => tab.dataset.tab === 'orders');
+        const purchasesTab = Array.from(tabs).find(tab => tab.dataset.tab === 'purchases');
+        
+        if (reservationsTab) {
+            if (hasReservations) {
+                reservationsTab.style.display = '';
+                reservationsTab.classList.remove('hidden');
+            } else {
+                reservationsTab.style.display = 'none';
+                reservationsTab.classList.add('hidden');
+            }
+        }
+        
+        if (ordersTab) {
+            if (hasOrders) {
+                ordersTab.style.display = '';
+                ordersTab.classList.remove('hidden');
+            } else {
+                ordersTab.style.display = 'none';
+                ordersTab.classList.add('hidden');
+            }
+        }
+        
+        if (purchasesTab) {
+            if (hasPurchases) {
+                purchasesTab.style.display = '';
+                purchasesTab.classList.remove('hidden');
+            } else {
+                purchasesTab.style.display = 'none';
+                purchasesTab.classList.add('hidden');
+            }
+        }
+        
+        // Если текущая активная вкладка скрыта, переключаемся на первую доступную
+        const activeTab = Array.from(tabs).find(tab => tab.classList.contains('active'));
+        if (activeTab && (activeTab.style.display === 'none' || activeTab.classList.contains('hidden'))) {
+            const firstVisibleTab = Array.from(tabs).find(tab => 
+                tab.style.display !== 'none' && !tab.classList.contains('hidden')
+            );
+            if (firstVisibleTab) {
+                console.log(`🛒 Switching to first visible tab: ${firstVisibleTab.dataset.tab}`);
+                switchCartTab(firstVisibleTab.dataset.tab);
+            }
+        }
+        
+        console.log(`🛒 Tabs visibility updated: Reservations=${hasReservations}, Orders=${hasOrders}, Purchases=${hasPurchases}`);
+        
+        return { hasReservations, hasOrders, hasPurchases };
+    } catch (error) {
+        console.error('❌ Error updating cart tabs visibility:', error);
+        return { hasReservations: true, hasOrders: true, hasPurchases: true }; // По умолчанию показываем все
+    }
+}
+
 // Переключение вкладок корзины
 function switchCartTab(tabName) {
     console.log(`🛒 switchCartTab: switching to tab "${tabName}"`);
@@ -521,6 +762,21 @@ function switchCartTab(tabName) {
     
     if (!reservationsSection || !ordersSection || !purchasesSection) {
         console.warn('⚠️ Cart sections not found');
+        return;
+    }
+    
+    // Проверяем, что вкладка видима перед переключением
+    const targetTab = Array.from(tabs).find(tab => tab.dataset.tab === tabName);
+    if (targetTab && (targetTab.style.display === 'none' || targetTab.classList.contains('hidden'))) {
+        console.warn(`⚠️ Cannot switch to hidden tab: ${tabName}`);
+        // Переключаемся на первую видимую вкладку
+        const firstVisibleTab = Array.from(tabs).find(tab => 
+            tab.style.display !== 'none' && !tab.classList.contains('hidden')
+        );
+        if (firstVisibleTab) {
+            console.log(`🛒 Switching to first visible tab: ${firstVisibleTab.dataset.tab}`);
+            switchCartTab(firstVisibleTab.dataset.tab);
+        }
         return;
     }
     
@@ -681,9 +937,61 @@ export async function loadOrders() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
-                const finalPrice = product.discount > 0 
-                    ? Math.round(product.price * (1 - product.discount / 100)) 
-                    : product.price;
+                // Функция для формирования отображения цены с учетом is_for_sale
+                const getProductPriceDisplay = (prod) => {
+                    const isForSale = prod.is_for_sale === true || 
+                                     prod.is_for_sale === 1 || 
+                                     prod.is_for_sale === '1' ||
+                                     prod.is_for_sale === 'true' ||
+                                     String(prod.is_for_sale).toLowerCase() === 'true';
+                    
+                    if (isForSale) {
+                        const priceType = prod.price_type || 'range';
+                        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
+                            return `${prod.price_fixed}р`;
+                        } else if (priceType === 'range') {
+                            // Для диапазона цен показываем "от X до Y р"
+                            // Обрабатываем значения: могут быть числами, строками, null, undefined
+                            let priceFrom = null;
+                            let priceTo = null;
+                            
+                            // Обрабатываем price_from: конвертируем в число, если возможно
+                            if (prod.price_from != null && prod.price_from !== '') {
+                                const fromNum = Number(prod.price_from);
+                                if (!isNaN(fromNum) && isFinite(fromNum)) {
+                                    priceFrom = fromNum;
+                                }
+                            }
+                            
+                            // Обрабатываем price_to: конвертируем в число, если возможно
+                            if (prod.price_to != null && prod.price_to !== '') {
+                                const toNum = Number(prod.price_to);
+                                if (!isNaN(toNum) && isFinite(toNum)) {
+                                    priceTo = toNum;
+                                }
+                            }
+                            
+                            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
+                            if (priceFrom != null && priceTo != null) {
+                                return `от ${priceFrom} до ${priceTo} р`;
+                            } else if (priceFrom != null) {
+                                return `от ${priceFrom} р`;
+                            } else if (priceTo != null) {
+                                return `до ${priceTo} р`;
+                            }
+                        }
+                        // Если нет цены, возвращаем "Цена по запросу"
+                        return 'Цена по запросу';
+                    } else {
+                        // Обычная цена со скидкой
+                        const finalPrice = prod.discount > 0 
+                            ? Math.round(prod.price * (1 - prod.discount / 100)) 
+                            : prod.price;
+                        return `${finalPrice} ₽`;
+                    }
+                };
+                
+                const priceDisplay = getProductPriceDisplay(product);
                 
                 const orderItem = document.createElement('div');
                 orderItem.className = 'cart-item';
@@ -783,7 +1091,7 @@ export async function loadOrders() {
                 orderItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
-                        <p class="cart-item-price">${finalPrice} ₽ × ${order.quantity} шт.</p>
+                        <p class="cart-item-price">${priceDisplay} × ${order.quantity} шт.</p>
                         <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
                         ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>
@@ -859,10 +1167,6 @@ export async function loadPurchases() {
                         ? product.image_url 
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
-                
-                const finalPrice = product.discount > 0 
-                    ? Math.round(product.price * (1 - product.discount / 100)) 
-                    : product.price;
                 
                 const purchaseItem = document.createElement('div');
                 purchaseItem.className = 'cart-item';
@@ -962,7 +1266,6 @@ export async function loadPurchases() {
                 purchaseItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
-                        <p class="cart-item-price">${finalPrice} ₽</p>
                         <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
                         ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>
@@ -1062,9 +1365,61 @@ export async function loadReservationsHistory() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
-                const finalPrice = product.discount > 0 
-                    ? Math.round(product.price * (1 - product.discount / 100)) 
-                    : product.price;
+                // Функция для формирования отображения цены с учетом is_for_sale
+                const getProductPriceDisplay = (prod) => {
+                    const isForSale = prod.is_for_sale === true || 
+                                     prod.is_for_sale === 1 || 
+                                     prod.is_for_sale === '1' ||
+                                     prod.is_for_sale === 'true' ||
+                                     String(prod.is_for_sale).toLowerCase() === 'true';
+                    
+                    if (isForSale) {
+                        const priceType = prod.price_type || 'range';
+                        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
+                            return `${prod.price_fixed}р`;
+                        } else if (priceType === 'range') {
+                            // Для диапазона цен показываем "от X до Y р"
+                            // Обрабатываем значения: могут быть числами, строками, null, undefined
+                            let priceFrom = null;
+                            let priceTo = null;
+                            
+                            // Обрабатываем price_from: конвертируем в число, если возможно
+                            if (prod.price_from != null && prod.price_from !== '') {
+                                const fromNum = Number(prod.price_from);
+                                if (!isNaN(fromNum) && isFinite(fromNum)) {
+                                    priceFrom = fromNum;
+                                }
+                            }
+                            
+                            // Обрабатываем price_to: конвертируем в число, если возможно
+                            if (prod.price_to != null && prod.price_to !== '') {
+                                const toNum = Number(prod.price_to);
+                                if (!isNaN(toNum) && isFinite(toNum)) {
+                                    priceTo = toNum;
+                                }
+                            }
+                            
+                            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
+                            if (priceFrom != null && priceTo != null) {
+                                return `от ${priceFrom} до ${priceTo} р`;
+                            } else if (priceFrom != null) {
+                                return `от ${priceFrom} р`;
+                            } else if (priceTo != null) {
+                                return `до ${priceTo} р`;
+                            }
+                        }
+                        // Если нет цены, возвращаем "Цена по запросу"
+                        return 'Цена по запросу';
+                    } else {
+                        // Обычная цена со скидкой
+                        const finalPrice = prod.discount > 0 
+                            ? Math.round(prod.price * (1 - prod.discount / 100)) 
+                            : prod.price;
+                        return `${finalPrice} ₽`;
+                    }
+                };
+                
+                const priceDisplay = getProductPriceDisplay(product);
                 
                 const historyItem = document.createElement('div');
                 historyItem.className = 'cart-item';
@@ -1152,7 +1507,7 @@ export async function loadReservationsHistory() {
                 historyItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
-                        <p class="cart-item-price">${finalPrice} ₽</p>
+                        <p class="cart-item-price">${priceDisplay}</p>
                         <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
                         ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>
@@ -1263,9 +1618,61 @@ export async function loadOrdersHistory() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
-                const finalPrice = product.discount > 0 
-                    ? Math.round(product.price * (1 - product.discount / 100)) 
-                    : product.price;
+                // Функция для формирования отображения цены с учетом is_for_sale
+                const getProductPriceDisplay = (prod) => {
+                    const isForSale = prod.is_for_sale === true || 
+                                     prod.is_for_sale === 1 || 
+                                     prod.is_for_sale === '1' ||
+                                     prod.is_for_sale === 'true' ||
+                                     String(prod.is_for_sale).toLowerCase() === 'true';
+                    
+                    if (isForSale) {
+                        const priceType = prod.price_type || 'range';
+                        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
+                            return `${prod.price_fixed}р`;
+                        } else if (priceType === 'range') {
+                            // Для диапазона цен показываем "от X до Y р"
+                            // Обрабатываем значения: могут быть числами, строками, null, undefined
+                            let priceFrom = null;
+                            let priceTo = null;
+                            
+                            // Обрабатываем price_from: конвертируем в число, если возможно
+                            if (prod.price_from != null && prod.price_from !== '') {
+                                const fromNum = Number(prod.price_from);
+                                if (!isNaN(fromNum) && isFinite(fromNum)) {
+                                    priceFrom = fromNum;
+                                }
+                            }
+                            
+                            // Обрабатываем price_to: конвертируем в число, если возможно
+                            if (prod.price_to != null && prod.price_to !== '') {
+                                const toNum = Number(prod.price_to);
+                                if (!isNaN(toNum) && isFinite(toNum)) {
+                                    priceTo = toNum;
+                                }
+                            }
+                            
+                            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
+                            if (priceFrom != null && priceTo != null) {
+                                return `от ${priceFrom} до ${priceTo} р`;
+                            } else if (priceFrom != null) {
+                                return `от ${priceFrom} р`;
+                            } else if (priceTo != null) {
+                                return `до ${priceTo} р`;
+                            }
+                        }
+                        // Если нет цены, возвращаем "Цена по запросу"
+                        return 'Цена по запросу';
+                    } else {
+                        // Обычная цена со скидкой
+                        const finalPrice = prod.discount > 0 
+                            ? Math.round(prod.price * (1 - prod.discount / 100)) 
+                            : prod.price;
+                        return `${finalPrice} ₽`;
+                    }
+                };
+                
+                const priceDisplay = getProductPriceDisplay(product);
                 
                 const historyItem = document.createElement('div');
                 historyItem.className = 'cart-item';
@@ -1350,7 +1757,7 @@ export async function loadOrdersHistory() {
                 historyItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
-                        <p class="cart-item-price">${finalPrice} ₽ × ${order.quantity} шт.</p>
+                        <p class="cart-item-price">${priceDisplay} × ${order.quantity} шт.</p>
                         <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
                         ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>
@@ -1451,10 +1858,6 @@ export async function loadPurchasesHistory() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
-                const finalPrice = product.discount > 0 
-                    ? Math.round(product.price * (1 - product.discount / 100)) 
-                    : product.price;
-                
                 const historyItem = document.createElement('div');
                 historyItem.className = 'cart-item';
                 
@@ -1538,7 +1941,6 @@ export async function loadPurchasesHistory() {
                 historyItem.innerHTML = `
                     <div class="cart-item-info">
                         <h3>${product.name}</h3>
-                        <p class="cart-item-price">${finalPrice} ₽</p>
                         <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
                         ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
                     </div>

@@ -69,7 +69,7 @@ export async function getContext(shopOwnerId = null) {
         if (!response.ok) {
             const errorText = await response.text();
             console.error("❌ Context error response:", errorText);
-            throw new Error(`Context error: ${response.status} - ${errorText}`);
+            throw new Error(`Ошибка загрузки контекста: ${response.status} - ${errorText}`);
         }
         
         const data = await response.json();
@@ -78,6 +78,14 @@ export async function getContext(shopOwnerId = null) {
     } catch (e) {
         console.error("❌ getContext fetch error:", e);
         console.error("❌ Error stack:", e.stack);
+        
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching context:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу. Проверьте подключение к интернету.");
+        }
+        
+        // Пробрасываем другие ошибки как есть
         throw e;
     }
 }
@@ -92,17 +100,30 @@ export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
         url += `&flat=true`;
     }
     console.log("📂 Fetching categories from:", url, "botId:", botId, "flat:", flat);
-    const response = await fetch(url, {
-        headers: getBaseHeadersNoAuth()
-    });
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Categories error:", response.status, errorText);
-        throw new Error(`Categories error: ${response.status} - ${errorText}`);
+    
+    try {
+        const response = await fetch(url, {
+            headers: getBaseHeadersNoAuth()
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Categories error:", response.status, errorText);
+            throw new Error(`Ошибка загрузки категорий: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log("✅ Categories fetched:", data.length);
+        return data;
+    } catch (e) {
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching categories:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу. Проверьте подключение к интернету.");
+        }
+        // Пробрасываем другие ошибки как есть
+        throw e;
     }
-    const data = await response.json();
-    console.log("✅ Categories fetched:", data.length);
-    return data;
 }
 
 // Загрузка товаров (не требует авторизации - только просмотр)
@@ -115,17 +136,30 @@ export async function fetchProducts(shopOwnerId, categoryId = null, botId = null
         url += `&bot_id=${botId}`;
     }
     console.log("📦 Fetching products from:", url, "botId:", botId);
-    const response = await fetch(url, {
-        headers: getBaseHeadersNoAuth()
-    });
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Products error:", response.status, errorText);
-        throw new Error(`Products error: ${response.status} - ${errorText}`);
+    
+    try {
+        const response = await fetch(url, {
+            headers: getBaseHeadersNoAuth()
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Products error:", response.status, errorText);
+            throw new Error(`Ошибка загрузки товаров: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log("✅ Products fetched:", data.length);
+        return data;
+    } catch (e) {
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching products:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу. Проверьте подключение к интернету.");
+        }
+        // Пробрасываем другие ошибки как есть
+        throw e;
     }
-    const data = await response.json();
-    console.log("✅ Products fetched:", data.length);
-    return data;
 }
 
 // Загрузка резерваций для корзины (только те, где текущий пользователь - резервирующий)

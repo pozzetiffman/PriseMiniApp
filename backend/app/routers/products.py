@@ -270,6 +270,14 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
             matching_main.is_sold = db_product.is_sold
             matching_main.is_made_to_order = db_product.is_made_to_order
             matching_main.quantity_show_enabled = db_product.quantity_show_enabled
+            # Обновляем поля для продажи
+            matching_main.is_for_sale = db_product.is_for_sale
+            matching_main.price_from = db_product.price_from
+            matching_main.price_to = db_product.price_to
+            matching_main.price_fixed = db_product.price_fixed
+            matching_main.price_type = db_product.price_type
+            matching_main.quantity_from = db_product.quantity_from
+            matching_main.quantity_unit = db_product.quantity_unit
             matching_main.category_id = category_id_for_main
             # Устанавливаем sync_product_id если он не был установлен
             if not matching_main.sync_product_id:
@@ -329,6 +337,8 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.quantity = db_product.quantity
                 matching.is_sold = db_product.is_sold
                 matching.is_made_to_order = db_product.is_made_to_order
+                matching.quantity_show_enabled = db_product.quantity_show_enabled
+                # Обновляем поля для продажи
                 matching.is_for_sale = db_product.is_for_sale
                 matching.price_from = db_product.price_from
                 matching.price_to = db_product.price_to
@@ -460,6 +470,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                             if matching_category:
                                 category_id_for_bot = matching_category.id
                     
+                    matching.name = db_product.name  # Обновляем название
                     matching.description = db_product.description
                     matching.price = db_product.price  # Обновляем цену при синхронизации
                     matching.image_url = db_product.image_url
@@ -470,6 +481,14 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     matching.is_sold = db_product.is_sold
                     matching.is_made_to_order = db_product.is_made_to_order
                     matching.quantity_show_enabled = db_product.quantity_show_enabled
+                    # Обновляем поля для продажи
+                    matching.is_for_sale = db_product.is_for_sale
+                    matching.price_from = db_product.price_from
+                    matching.price_to = db_product.price_to
+                    matching.price_fixed = db_product.price_fixed
+                    matching.price_type = db_product.price_type
+                    matching.quantity_from = db_product.quantity_from
+                    matching.quantity_unit = db_product.quantity_unit
                     matching.category_id = category_id_for_bot
                     # Обновляем sync_product_id если он не был установлен
                     if not matching.sync_product_id:
@@ -535,6 +554,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         if matching_category:
                             category_id_for_main = matching_category.id
                 
+                existing_main.name = db_product.name  # Обновляем название
                 existing_main.description = db_product.description
                 existing_main.price = db_product.price
                 existing_main.image_url = db_product.image_url
@@ -544,9 +564,13 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 existing_main.quantity = db_product.quantity
                 existing_main.is_sold = db_product.is_sold
                 existing_main.is_made_to_order = db_product.is_made_to_order
+                existing_main.quantity_show_enabled = db_product.quantity_show_enabled
+                # Обновляем поля для продажи
                 existing_main.is_for_sale = db_product.is_for_sale
                 existing_main.price_from = db_product.price_from
                 existing_main.price_to = db_product.price_to
+                existing_main.price_fixed = db_product.price_fixed
+                existing_main.price_type = db_product.price_type
                 existing_main.quantity_from = db_product.quantity_from
                 existing_main.quantity_unit = db_product.quantity_unit
                 existing_main.category_id = category_id_for_main
@@ -762,6 +786,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         if matching_category:
                             category_id_for_main = matching_category.id
                 
+                matching_main.name = db_product.name  # Обновляем название
                 matching_main.description = db_product.description
                 matching_main.price = db_product.price  # Обновляем цену при синхронизации
                 matching_main.image_url = db_product.image_url
@@ -771,6 +796,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 matching_main.quantity = db_product.quantity
                 matching_main.is_sold = db_product.is_sold
                 matching_main.is_made_to_order = db_product.is_made_to_order
+                matching_main.quantity_show_enabled = db_product.quantity_show_enabled
+                # Обновляем поля для продажи
                 matching_main.is_for_sale = db_product.is_for_sale
                 matching_main.price_from = db_product.price_from
                 matching_main.price_to = db_product.price_to
@@ -778,7 +805,6 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 matching_main.price_type = db_product.price_type
                 matching_main.quantity_from = db_product.quantity_from
                 matching_main.quantity_unit = db_product.quantity_unit
-                matching_main.quantity_show_enabled = db_product.quantity_show_enabled
                 matching_main.category_id = category_id_for_main
                 print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
             
@@ -825,6 +851,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                             if matching_category:
                                 category_id_for_bot = matching_category.id
                     
+                    matching.name = db_product.name  # Обновляем название
                     matching.description = db_product.description
                     matching.price = db_product.price  # Обновляем цену при синхронизации
                     matching.image_url = db_product.image_url
@@ -834,6 +861,15 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     matching.quantity = db_product.quantity
                     matching.is_sold = db_product.is_sold
                     matching.is_made_to_order = db_product.is_made_to_order
+                    matching.quantity_show_enabled = db_product.quantity_show_enabled
+                    # Обновляем поля для продажи
+                    matching.is_for_sale = db_product.is_for_sale
+                    matching.price_from = db_product.price_from
+                    matching.price_to = db_product.price_to
+                    matching.price_fixed = db_product.price_fixed
+                    matching.price_type = db_product.price_type
+                    matching.quantity_from = db_product.quantity_from
+                    matching.quantity_unit = db_product.quantity_unit
                     matching.category_id = category_id_for_bot
                     # Обновляем sync_product_id если он не был установлен
                     if sync_id and not matching.sync_product_id:

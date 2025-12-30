@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, List
 
 class PurchaseBase(BaseModel):
-    product_id: int
+    product_id: Optional[int] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     middle_name: Optional[str] = None

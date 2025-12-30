@@ -122,3 +122,5 @@ if (isForSale && appContext.role === 'client') {
 3. Проверить Network tab в DevTools на наличие failed requests
 4. Убедиться, что база данных доступна и миграция выполнена
 
+
+
