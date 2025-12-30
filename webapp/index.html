@@ -13,7 +13,7 @@
 <body>
     <div id="app">
         <header>
-            <button id="admin-button" class="admin-button" style="display: none;">⚙️</button>
+            <button id="profile-button" class="profile-button" style="display: none;">👤</button>
             <h1 id="user-name">Загрузка...</h1>
             <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
         </header>
@@ -406,6 +406,45 @@
                 <div class="edit-product-actions">
                     <button id="edit-product-save" class="edit-product-btn save">💾 Сохранить</button>
                     <button id="edit-product-cancel" class="edit-product-btn cancel">❌ Отменить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно личного кабинета -->
+    <div id="profile-modal" class="modal">
+        <div class="modal-content profile-modal-content">
+            <span class="modal-close profile-close">&times;</span>
+            <h2 class="profile-title">👤 Личный кабинет</h2>
+            <div class="profile-content">
+                <div class="profile-avatar-container">
+                    <img id="profile-avatar" class="profile-avatar" src="" alt="Аватар" style="display: none;">
+                    <div id="profile-avatar-placeholder" class="profile-avatar-placeholder">👤</div>
+                </div>
+                <div class="profile-info">
+                    <div class="profile-field">
+                        <label>Имя:</label>
+                        <div id="profile-first-name" class="profile-value">—</div>
+                    </div>
+                    <div class="profile-field">
+                        <label>Фамилия:</label>
+                        <div id="profile-last-name" class="profile-value">—</div>
+                    </div>
+                    <div class="profile-field">
+                        <label>Username:</label>
+                        <div id="profile-username" class="profile-value">—</div>
+                    </div>
+                    <div class="profile-field">
+                        <label>ID пользователя:</label>
+                        <div id="profile-user-id" class="profile-value">—</div>
+                    </div>
+                    <div class="profile-field">
+                        <label>Язык:</label>
+                        <div id="profile-language" class="profile-value">—</div>
+                    </div>
+                    <button id="profile-admin-button" class="profile-admin-button" style="display: none; margin-top: 20px;">
+                        ⚙️ Настройки магазина
+                    </button>
                 </div>
             </div>
         </div>

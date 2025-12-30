@@ -2,6 +2,7 @@
 import { getCurrentShopSettings, initAdmin, loadShopSettings, openAdmin } from './admin.js';
 import { API_BASE, cancelOrderAPI, cancelPurchaseAPI, cancelReservationAPI, createOrderAPI, createPurchaseAPI, createReservationAPI, deleteProductAPI, fetchCategories, fetchProducts, getContext, getShopSettings, markProductSoldAPI, toggleHotOffer, trackShopVisit, updateProductAPI, updateProductForSaleAPI, updateProductMadeToOrderAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI, updateProductQuantityShowEnabledAPI } from './api.js';
 import { initCart, loadCart, loadOrders, loadPurchases, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
+import { initProfile, setupProfileButton } from './profile.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 
 // Глобальные переменные
@@ -221,11 +222,14 @@ window.updateShopNameInHeader = async function updateShopNameInHeader() {
         // Для владельца загружаем свои настройки
         await loadShopSettings();
         initAdmin();
-        setupAdminButton();
     } else {
         // Для клиентов загружаем настройки владельца магазина
         await loadShopSettings(appContext.shop_owner_id);
     }
+    
+    // 8.1 Инициализируем личный кабинет для всех пользователей
+    initProfile();
+    setupProfileButton();
     
     // Обновляем заголовок с названием магазина (async функция)
     await updateShopNameInHeader();
@@ -3238,19 +3242,7 @@ function setupModals() {
     });
 }
 
-// Настройка кнопки админки
-function setupAdminButton() {
-    const adminButton = document.getElementById('admin-button');
-    if (adminButton) {
-        adminButton.style.display = 'block';
-        adminButton.onclick = () => {
-            openAdmin();
-        };
-        console.log('✅ Admin button set up');
-    } else {
-        console.error('❌ Admin button not found');
-    }
-}
+// Функция setupAdminButton удалена - теперь используется setupProfileButton из profile.js
 
 // Глобальная функция для отмены резервации из корзины
 window.cancelReservationFromCart = async function(reservationId, productId) {

@@ -75,6 +75,7 @@ header {
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;
+    justify-items: center;
     gap: 12px;
     border-radius: 24px 24px 0 0;
     padding-bottom: max(12px, calc(12px + env(safe-area-inset-bottom, 0px)));
@@ -91,8 +92,14 @@ header h1 {
     text-overflow: ellipsis;
     white-space: nowrap;
     justify-self: center;
+    align-self: center;
     max-width: 100%;
     padding: 0 8px;
+    display: flex;
+    align-items: center;
+    height: 100%;
+    line-height: 1;
+    vertical-align: middle;
 }
 
 .cart-button {
@@ -115,10 +122,13 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 0;
     position: relative;
     z-index: 2;
     flex-shrink: 0;
+    line-height: 1;
+    vertical-align: middle;
+    align-self: center;
 }
 
 .cart-button:hover {
@@ -134,16 +144,28 @@ header h1 {
 }
 
 /* Состояние неактивной корзины (когда пуста) */
-.cart-button[style*="display: none"],
-.cart-button:not([style*="display: block"]):not([style*="display: flex"]) {
+.cart-button[style*="opacity: 0.3"],
+.cart-button[style*="opacity:0.3"] {
     display: flex !important;
-    opacity: 0.3;
-    pointer-events: none;
+    opacity: 0.3 !important;
+    pointer-events: none !important;
     cursor: default;
     background: linear-gradient(135deg, rgba(128, 128, 128, 0.1) 0%, rgba(128, 128, 128, 0.05) 100%);
     border-color: rgba(128, 128, 128, 0.2);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
                 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    min-height: 44px;
+    line-height: 1;
+    vertical-align: middle;
+    align-self: center;
+    gap: 0;
+    position: static !important;
+    transform: none !important;
+    right: auto !important;
+    top: auto !important;
 }
 
 .cart-button[style*="display: none"]:hover,
@@ -156,11 +178,26 @@ header h1 {
 }
 
 /* Активное состояние корзины (когда есть товары) */
-.cart-button[style*="display: block"],
-.cart-button[style*="display: flex"] {
+.cart-button[style*="display: flex"],
+.cart-button[style*="display:block"],
+.cart-button[style*="opacity: 1"],
+.cart-button[style*="opacity:1"] {
     opacity: 1 !important;
     pointer-events: auto !important;
     cursor: pointer !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    min-height: 44px;
+    line-height: 1;
+    vertical-align: middle;
+    align-self: center;
+    gap: 0;
+    position: static !important;
+    transform: none !important;
+    right: auto !important;
+    top: auto !important;
 }
 
 #cart-count {
@@ -174,7 +211,12 @@ header h1 {
     text-align: center;
     box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4),
                 0 0 0 1px rgba(255, 255, 255, 0.2) inset;
-    line-height: 1.4;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: baseline;
+    margin-left: 2px;
 }
 
 .cart-button[style*="display: none"] #cart-count,
@@ -1327,18 +1369,19 @@ main {
         bottom: 0;
         gap: 8px;
         border-radius: 20px 20px 0 0;
+        align-items: center;
+        justify-items: center;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
     }
     
     header h1 {
         font-size: 13px;
         padding: 0 4px;
-    }
-    
-    .admin-button {
-        min-width: 40px;
-        width: 40px;
-        height: 40px;
-        font-size: 18px;
+        align-self: center;
+        display: flex;
+        align-items: center;
+        height: 100%;
     }
     
     .cart-button {
@@ -1346,25 +1389,75 @@ main {
         height: 40px;
         padding: 0 12px;
         font-size: 12px;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        vertical-align: middle;
+        line-height: 1;
+        gap: 0;
+    }
+    
+    /* Убеждаемся, что активная корзина выровнена так же */
+    .cart-button[style*="display: block"],
+    .cart-button[style*="display: flex"] {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        vertical-align: middle;
+        height: 40px;
+        min-height: 40px;
+        line-height: 1;
+        gap: 0;
+    }
+    
+    /* Убеждаемся, что неактивная корзина выровнена так же */
+    .cart-button[style*="display: none"],
+    .cart-button:not([style*="display: block"]):not([style*="display: flex"]) {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        vertical-align: middle;
+        height: 40px;
+        min-height: 40px;
+        line-height: 1;
+        gap: 0;
     }
     
     #cart-count {
         font-size: 10px;
         padding: 2px 6px;
         min-width: 18px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        vertical-align: baseline;
+        margin-left: 2px;
     }
     
-    .cart-button {
-        font-size: 11px;
-        padding: 5px 10px;
-        min-height: 28px;
+    header h1 {
+        line-height: 1;
+        vertical-align: middle;
     }
     
-    .admin-button {
-        padding: 5px 8px;
-        font-size: 14px;
-        min-width: 28px;
-        height: 28px;
+    .profile-button {
+        align-self: center;
+        line-height: 1;
+        vertical-align: middle;
+    }
+    
+    .profile-button {
+        min-width: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
     }
     
     main {
@@ -2541,4 +2634,208 @@ main {
     font-size: 16px;
     color: var(--text-primary);
     flex: 1;
+}
+
+/* Стили для личного кабинета */
+.profile-button {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.15) 0%, rgba(90, 200, 250, 0.08) 100%);
+    border: 1px solid rgba(90, 200, 250, 0.3);
+    color: var(--text-primary);
+    padding: 0;
+    border-radius: 16px;
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+    align-self: center;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.profile-button:hover {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.25) 0%, rgba(90, 200, 250, 0.15) 100%);
+    border-color: rgba(90, 200, 250, 0.5);
+    box-shadow: 0 6px 24px rgba(90, 200, 250, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-2px);
+}
+
+.profile-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.profile-button[style*="display: none"] {
+    display: flex !important;
+    opacity: 0.3;
+    pointer-events: none;
+    cursor: default;
+}
+
+/* Модальное окно личного кабинета */
+.profile-modal-content {
+    max-width: 500px;
+    width: 90%;
+    margin: 5% auto;
+    padding: 0;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: var(--bg-glass);
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    padding: 24px 24px 16px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-content {
+    padding: 24px;
+}
+
+.profile-avatar-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.profile-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(90, 200, 250, 0.3);
+    box-shadow: 0 8px 24px rgba(90, 200, 250, 0.2);
+}
+
+.profile-avatar-placeholder {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%);
+    border: 3px solid rgba(90, 200, 250, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: var(--text-primary);
+    box-shadow: 0 8px 24px rgba(90, 200, 250, 0.2);
+}
+
+.profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.profile-field label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-hint);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.profile-value {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-primary);
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-height: 24px;
+}
+
+.profile-admin-button {
+    width: 100%;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%);
+    border: 1px solid rgba(90, 200, 250, 0.3);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.15);
+}
+
+.profile-admin-button:hover {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.3) 0%, rgba(90, 200, 250, 0.2) 100%);
+    border-color: rgba(90, 200, 250, 0.5);
+    box-shadow: 0 6px 24px rgba(90, 200, 250, 0.25);
+    transform: translateY(-2px);
+}
+
+.profile-admin-button:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Адаптивные стили для личного кабинета */
+@media (max-width: 768px) {
+    .profile-modal-content {
+        max-width: 95%;
+        width: calc(100% - 20px);
+        margin: 10px auto;
+        max-height: calc(100vh - 20px);
+    }
+    
+    .profile-title {
+        font-size: 20px;
+        padding: 20px 20px 12px 20px;
+    }
+    
+    .profile-content {
+        padding: 20px;
+    }
+    
+    .profile-avatar,
+    .profile-avatar-placeholder {
+        width: 100px;
+        height: 100px;
+    }
+    
+    .profile-avatar-placeholder {
+        font-size: 40px;
+    }
+    
+    .profile-value {
+        font-size: 16px;
+        padding: 10px 14px;
+    }
+    
+    .profile-button {
+        min-width: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
 }

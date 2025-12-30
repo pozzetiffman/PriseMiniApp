@@ -133,23 +133,13 @@ export async function updateCartUI() {
                 is_cancelled: o.is_cancelled
             })) : []);
             
-            // ПРИНУДИТЕЛЬНО показываем кнопку корзины
+            // Показываем кнопку корзины через CSS классы (без inline стилей, чтобы не ломать grid layout)
             cartButton.removeAttribute('hidden');
-            cartButton.removeAttribute('style');
+            cartButton.style.display = 'flex';
+            cartButton.style.visibility = 'visible';
+            cartButton.style.opacity = '1';
             cartButton.classList.remove('hidden');
             cartButton.classList.add('cart-button');
-            
-            // Устанавливаем стили через cssText с !important
-            cartButton.style.cssText = `
-                display: block !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-                position: absolute !important;
-                right: 15px !important;
-                top: 50% !important;
-                transform: translateY(-50%) !important;
-                z-index: 9999 !important;
-            `;
             
             cartCount.textContent = String(totalItems);
             
@@ -175,7 +165,7 @@ export async function updateCartUI() {
                 if (!isVisible) {
                     console.error('❌❌❌ КРИТИЧЕСКАЯ ОШИБКА: Кнопка корзины все еще не видна!');
                     console.error('❌ Принудительно устанавливаем стили через setProperty');
-                    cartButton.style.setProperty('display', 'block', 'important');
+                    cartButton.style.setProperty('display', 'flex', 'important');
                     cartButton.style.setProperty('visibility', 'visible', 'important');
                     cartButton.style.setProperty('opacity', '1', 'important');
                 } else {
@@ -184,12 +174,18 @@ export async function updateCartUI() {
             }, 100);
         } else {
             console.log(`❌ Cart button hidden - no active items or history (found ${activeReservations.length} active reservations, ${activeOrders ? activeOrders.length : 0} active orders, ${activePurchases ? activePurchases.length : 0} active sales, hasHistory: ${hasHistory})`);
-            cartButton.style.display = 'none';
+            // Для неактивной корзины используем opacity и pointer-events, но оставляем в grid layout
+            cartButton.style.display = 'flex';
+            cartButton.style.opacity = '0.3';
+            cartButton.style.pointerEvents = 'none';
         }
     } catch (e) {
         console.error('❌❌❌ КРИТИЧЕСКАЯ ОШИБКА в updateCartUI:', e);
         if (cartButton) {
-            cartButton.style.display = 'none';
+            // В случае ошибки тоже оставляем в grid layout
+            cartButton.style.display = 'flex';
+            cartButton.style.opacity = '0.3';
+            cartButton.style.pointerEvents = 'none';
         }
     }
     

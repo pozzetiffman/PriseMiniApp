@@ -12,6 +12,7 @@ from aiogram.types import Message, WebAppInfo, ReplyKeyboardMarkup, KeyboardButt
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.exceptions import TelegramNetworkError, TelegramAPIError
 
 # Загружаем .env
 load_dotenv(dotenv_path="../.env")
@@ -21,6 +22,13 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBAPP_URL = os.getenv("WEBAPP_URL")
 API_URL = "http://localhost:8000/api"
+
+# Проверка наличия токена
+if not TOKEN:
+    print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не найден в переменных окружения!")
+    print("Проверьте файл .env в корне проекта.")
+    print("Убедитесь, что файл .env содержит строку: TELEGRAM_BOT_TOKEN=ваш_токен")
+    exit(1)
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -2561,8 +2569,76 @@ async def send_reservation_notification(product_owner_id: int, product_id: int, 
         logging.error(f"Error sending reservation notification: {e}", exc_info=True)
 
 async def main():
+    # Проверка токена
+    if not TOKEN:
+        print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не найден в переменных окружения!")
+        print("Проверьте файл .env в корне проекта.")
+        return
+    
     print("Бот запущен. Все пользователи могут управлять своими витринами.")
-    await dp.start_polling(bot)
+    
+    # Проверка подключения к Telegram API с повторными попытками
+    max_retries = 5
+    retry_delay = 5  # секунд
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f"Попытка подключения к Telegram API ({attempt}/{max_retries})...")
+            # Проверяем подключение через get_me
+            bot_info = await bot.get_me()
+            print(f"✅ Подключение успешно! Бот: @{bot_info.username} (ID: {bot_info.id})")
+            break
+        except TelegramNetworkError as e:
+            error_msg = str(e)
+            if attempt < max_retries:
+                print(f"⚠️ Ошибка сети (попытка {attempt}/{max_retries}): {error_msg}")
+                print(f"Повторная попытка через {retry_delay} секунд...")
+                await asyncio.sleep(retry_delay)
+            else:
+                print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось подключиться к Telegram API после {max_retries} попыток")
+                print(f"Последняя ошибка: {error_msg}")
+                print("\nВозможные причины:")
+                print("1. Проблемы с интернет-соединением")
+                print("2. Telegram API временно недоступен")
+                print("3. Блокировка Telegram API (проверьте прокси/файрвол)")
+                print("4. Проблемы с SSL/TLS соединением")
+                return
+        except TelegramAPIError as e:
+            error_msg = str(e)
+            print(f"❌ Ошибка Telegram API: {error_msg}")
+            print("\nВозможные причины:")
+            print("1. Неверный токен бота")
+            print("2. Бот был удален или заблокирован")
+            print("3. Проблемы с правами доступа")
+            return
+        except Exception as e:
+            error_msg = str(e)
+            if attempt < max_retries:
+                print(f"⚠️ Неожиданная ошибка (попытка {attempt}/{max_retries}): {error_msg}")
+                print(f"Повторная попытка через {retry_delay} секунд...")
+                await asyncio.sleep(retry_delay)
+            else:
+                print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось подключиться к Telegram API после {max_retries} попыток")
+                print(f"Последняя ошибка: {error_msg}")
+                logging.error(f"Connection error: {e}", exc_info=True)
+                return
+    
+    # Запускаем polling
+    try:
+        await dp.start_polling(bot)
+    except KeyboardInterrupt:
+        print("\n⚠️ Получен сигнал остановки (Ctrl+C)")
+    except Exception as e:
+        print(f"❌ Ошибка во время работы бота: {e}")
+        logging.error(f"Bot error: {e}", exc_info=True)
+    finally:
+        await bot.session.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n⚠️ Бот остановлен пользователем")
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
+        logging.error(f"Critical error: {e}", exc_info=True)
