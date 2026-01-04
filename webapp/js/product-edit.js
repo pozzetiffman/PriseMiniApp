@@ -3,17 +3,37 @@
 
 // Импорты зависимостей
 import { getCurrentShopSettings } from './admin.js';
+import {
+    deleteProductAPI,
+    markProductSoldAPI,
+    updateProductAPI,
+    updateProductForSaleAPI,
+    updateProductMadeToOrderAPI,
+    updateProductNameDescriptionAPI,
+    updateProductQuantityAPI,
+    updateProductQuantityShowEnabledAPI
+} from './api.js';
 
 // Зависимости, которые будут переданы из app.js
 let currentProductGetter = null; // Функция-геттер для получения currentProduct
 let currentProductSetter = null; // Функция-сеттер для установки currentProduct
-let saveProductEditCallback = null; // Функция для сохранения изменений товара
+let appContextGetter = null; // Функция-геттер для получения appContext
+let modalElement = null; // Элемент модального окна товара
+let loadDataCallback = null; // Функция для загрузки данных
+let allProductsGetter = null; // Функция-геттер для получения allProducts
+let showSellModalCallback = null; // Функция для показа модального окна продажи (используется в markAsSold)
+let sellModalElement = null; // Элемент модального окна продажи
 
 // Инициализация зависимостей
 export function initProductEditDependencies(dependencies) {
     currentProductGetter = dependencies.currentProductGetter;
     currentProductSetter = dependencies.currentProductSetter;
-    saveProductEditCallback = dependencies.saveProductEdit;
+    appContextGetter = dependencies.appContextGetter;
+    modalElement = dependencies.modal;
+    loadDataCallback = dependencies.loadData;
+    allProductsGetter = dependencies.allProductsGetter;
+    showSellModalCallback = dependencies.showSellModal;
+    sellModalElement = dependencies.sellModal;
 }
 
 // Показ модального окна редактирования товара
@@ -297,9 +317,7 @@ export function showEditProductModal(prod) {
     
     // Добавляем новые обработчики
     newSaveBtn.onclick = async () => {
-        if (saveProductEditCallback) {
-            await saveProductEditCallback(prod.id);
-        }
+        await saveProductEdit(prod.id);
     };
     
     newCancelBtn.onclick = () => {
@@ -309,5 +327,405 @@ export function showEditProductModal(prod) {
         console.error('❌ Error in showEditProductModal:', error);
         alert(`❌ Ошибка при открытии окна редактирования: ${error.message}`);
     }
+}
+
+// Сохранение изменений товара
+export async function saveProductEdit(productId) {
+    const editNameInput = document.getElementById('edit-name');
+    const editDescriptionInput = document.getElementById('edit-description');
+    const editPriceInput = document.getElementById('edit-price');
+    const editDiscountInput = document.getElementById('edit-discount');
+    const editQuantityInput = document.getElementById('edit-quantity');
+    const editQuantityShowEnabledInput = document.getElementById('edit-quantity-show-enabled');
+    const editMadeToOrderInput = document.getElementById('edit-made-to-order');
+    const editQuantityUnitGeneralInput = document.getElementById('edit-quantity-unit-general');
+    
+    // Получаем currentProduct через геттер
+    const currentProduct = currentProductGetter ? currentProductGetter() : null;
+    
+    // Проверяем, является ли товар для продажи (is_for_sale)
+    // Используем currentProduct, который был установлен при открытии модального окна редактирования
+    const isForSale = currentProduct && (
+        currentProduct.is_for_sale === true || 
+        currentProduct.is_for_sale === 1 || 
+        currentProduct.is_for_sale === '1' ||
+        currentProduct.is_for_sale === 'true' ||
+        String(currentProduct.is_for_sale).toLowerCase() === 'true'
+    );
+    
+    const newName = editNameInput.value.trim();
+    const newDescription = editDescriptionInput.value.trim();
+    
+    // Для товаров с флагом продажа не парсим обычные поля
+    let newPrice, newDiscount, newQuantity, newQuantityUnitGeneral, newMadeToOrder, quantityShowEnabledToSave;
+    if (!isForSale) {
+        newPrice = parseFloat(editPriceInput.value);
+        newDiscount = parseFloat(editDiscountInput.value);
+        newQuantity = parseInt(editQuantityInput.value, 10);
+        // Получаем единицу измерения для обычных товаров
+        newQuantityUnitGeneral = editQuantityUnitGeneralInput ? editQuantityUnitGeneralInput.value || null : null;
+        // Получаем значение тумблера "Показ количества"
+        const shopSettingsForSave = getCurrentShopSettings();
+        const globalQuantityEnabledForSave = shopSettingsForSave ? (shopSettingsForSave.quantity_enabled !== false) : true;
+        newMadeToOrder = editMadeToOrderInput.checked;
+        
+        // Если включен "Под заказ", настройка "Показ количества" не применяется (количество не отображается)
+        // Поэтому сохраняем null (использовать глобальную настройку)
+        if (newMadeToOrder) {
+            // При "Под заказ" количество не отображается, поэтому сохраняем null
+            quantityShowEnabledToSave = null;
+        } else {
+            // Если "Под заказ" выключен, сохраняем настройку "Показ количества"
+            const newQuantityShowEnabled = editQuantityShowEnabledInput.checked;
+            
+            // Определяем, какое значение сохранить: если совпадает с глобальной настройкой, сохраняем null
+            if (editQuantityShowEnabledInput.dataset.isUsingGlobal === 'true') {
+                // Использовалась глобальная настройка
+                if (newQuantityShowEnabled === globalQuantityEnabledForSave) {
+                    quantityShowEnabledToSave = null; // Оставляем глобальную настройку
+                } else {
+                    quantityShowEnabledToSave = newQuantityShowEnabled; // Устанавливаем индивидуальную
+                }
+            } else {
+                // Использовалась индивидуальная настройка
+                if (newQuantityShowEnabled === globalQuantityEnabledForSave) {
+                    quantityShowEnabledToSave = null; // Возвращаемся к глобальной
+                } else {
+                    quantityShowEnabledToSave = newQuantityShowEnabled; // Сохраняем индивидуальную
+                }
+            }
+        }
+    }
+    
+    // Для товаров с флагом продажа получаем данные из полей продажи
+    let newPriceType, newPriceFrom, newPriceTo, newPriceFixed, newQuantityFrom, newQuantityUnit;
+    if (isForSale) {
+        const editPriceTypeRangeRadio = document.getElementById('edit-price-type-range');
+        const editPriceFromInput = document.getElementById('edit-price-from');
+        const editPriceToInput = document.getElementById('edit-price-to');
+        const editPriceFixedInput = document.getElementById('edit-price-fixed');
+        const editQuantityFromInput = document.getElementById('edit-quantity-from');
+        const editQuantityUnitInput = document.getElementById('edit-quantity-unit');
+        
+        newPriceType = editPriceTypeRangeRadio && editPriceTypeRangeRadio.checked ? 'range' : 'fixed';
+        newPriceFrom = editPriceFromInput.value ? parseFloat(editPriceFromInput.value) : null;
+        newPriceTo = editPriceToInput.value ? parseFloat(editPriceToInput.value) : null;
+        newPriceFixed = editPriceFixedInput.value ? parseFloat(editPriceFixedInput.value) : null;
+        newQuantityFrom = editQuantityFromInput.value ? parseInt(editQuantityFromInput.value, 10) : null;
+        newQuantityUnit = editQuantityUnitInput.value || null;
+    }
+    
+    // Валидация
+    if (!newName || newName.length === 0) {
+        alert('❌ Введите название товара');
+        return;
+    }
+    
+    // Валидация для обычных товаров
+    if (!isForSale) {
+        if (isNaN(newPrice) || newPrice <= 0) {
+            alert('❌ Введите корректную цену (больше 0)');
+            return;
+        }
+        
+        if (isNaN(newDiscount) || newDiscount < 0 || newDiscount > 100) {
+            alert('❌ Введите корректную скидку (от 0 до 100%)');
+            return;
+        }
+        
+        if (isNaN(newQuantity) || newQuantity < 0) {
+            alert('❌ Введите корректное количество (0 или больше)');
+            return;
+        }
+    } else {
+        // Валидация для товаров с флагом продажа
+        if (newPriceType === 'range') {
+            if (newPriceFrom !== null && (isNaN(newPriceFrom) || newPriceFrom < 0)) {
+                alert('❌ Введите корректную цену от (0 или больше)');
+                return;
+            }
+            if (newPriceTo !== null && (isNaN(newPriceTo) || newPriceTo < 0)) {
+                alert('❌ Введите корректную цену до (0 или больше)');
+                return;
+            }
+            if (newPriceFrom !== null && newPriceTo !== null && newPriceFrom > newPriceTo) {
+                alert('❌ Цена от не может быть больше цены до');
+                return;
+            }
+        } else if (newPriceType === 'fixed') {
+            if (newPriceFixed === null || isNaN(newPriceFixed) || newPriceFixed < 0) {
+                alert('❌ Введите корректную фиксированную цену (0 или больше)');
+                return;
+            }
+        }
+        if (newQuantityFrom !== null && (isNaN(newQuantityFrom) || newQuantityFrom < 0)) {
+            alert('❌ Введите корректное количество от (0 или больше)');
+            return;
+        }
+    }
+    
+    try {
+        // Получаем appContext через геттер
+        const appContext = appContextGetter ? appContextGetter() : null;
+        
+        if (!appContext) {
+            alert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        // Обновляем название и описание (без уведомлений)
+        await updateProductNameDescriptionAPI(productId, appContext.shop_owner_id, newName, newDescription || null);
+        
+        if (isForSale) {
+            // Для товаров с флагом продажа обновляем данные продажи
+            console.log(`💾 Saving for-sale: productId=${productId}`, { 
+                is_for_sale: true, 
+                price_type: newPriceType, 
+                price_from: newPriceFrom, 
+                price_to: newPriceTo, 
+                price_fixed: newPriceFixed, 
+                quantity_from: newQuantityFrom, 
+                quantity_unit: newQuantityUnit 
+            });
+            const forSaleResult = await updateProductForSaleAPI(productId, appContext.shop_owner_id, {
+                is_for_sale: true,
+                price_type: newPriceType,
+                price_from: newPriceFrom,
+                price_to: newPriceTo,
+                price_fixed: newPriceFixed,
+                quantity_from: newQuantityFrom,
+                quantity_unit: newQuantityUnit
+            });
+            console.log(`✅ For-sale saved:`, forSaleResult);
+        } else {
+            // Для обычных товаров обновляем обычные поля
+            // Обновляем цену и скидку (с уведомлениями)
+            await updateProductAPI(productId, appContext.shop_owner_id, newPrice, newDiscount);
+            
+            // Обновляем количество и единицу измерения (без уведомлений)
+            await updateProductQuantityAPI(productId, appContext.shop_owner_id, newQuantity, newQuantityUnitGeneral);
+            
+            // Обновляем индивидуальную настройку показа количества (без уведомлений)
+            console.log(`💾 Saving quantity-show-enabled: productId=${productId}, quantityShowEnabled=${quantityShowEnabledToSave}`);
+            await updateProductQuantityShowEnabledAPI(productId, appContext.shop_owner_id, quantityShowEnabledToSave);
+            console.log(`✅ Quantity-show-enabled saved:`, quantityShowEnabledToSave);
+            
+            // Обновляем статус 'под заказ' (без уведомлений)
+            console.log(`💾 Saving made-to-order: productId=${productId}, isMadeToOrder=${newMadeToOrder}`);
+            const madeToOrderResult = await updateProductMadeToOrderAPI(productId, appContext.shop_owner_id, newMadeToOrder);
+            console.log(`✅ Made-to-order saved:`, madeToOrderResult);
+        }
+        
+        // Закрываем модальное окно редактирования
+        const editProductModal = document.getElementById('edit-product-modal');
+        editProductModal.style.display = 'none';
+        
+        // Закрываем модальное окно товара
+        if (modalElement) {
+            modalElement.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Показываем уведомление
+        alert('✅ Товар обновлен!');
+        
+        // Обновляем данные и сбрасываем currentProduct
+        if (currentProductSetter) {
+            currentProductSetter(null);
+        }
+        if (loadDataCallback) {
+            setTimeout(async () => {
+                await loadDataCallback();
+                console.log('✅ Data reloaded after product edit');
+            }, 500);
+        }
+    } catch (e) {
+        console.error('Save product edit error:', e);
+        alert(`❌ Ошибка: ${e.message}`);
+    }
+}
+
+// Удаление товара
+export async function deleteProduct(productId) {
+    if (!confirm('Вы уверены, что хотите удалить этот товар? Это действие нельзя отменить.')) {
+        return;
+    }
+    
+    try {
+        // Получаем appContext через геттер
+        const appContext = appContextGetter ? appContextGetter() : null;
+        
+        if (!appContext) {
+            alert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        await deleteProductAPI(productId, appContext.shop_owner_id);
+        alert('✅ Товар удален');
+        
+        // Закрываем модальное окно
+        if (modalElement) {
+            modalElement.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Обновляем данные
+        if (loadDataCallback) {
+            setTimeout(async () => {
+                await loadDataCallback();
+            }, 500);
+        }
+    } catch (e) {
+        console.error('Delete product error:', e);
+        alert(`❌ Ошибка: ${e.message}`);
+    }
+}
+
+// Пометить товар как проданный
+export async function markAsSold(productId, product = null) {
+    try {
+        // Получаем appContext через геттер
+        const appContext = appContextGetter ? appContextGetter() : null;
+        
+        if (!appContext) {
+            alert('❌ Ошибка: контекст не загружен');
+            return;
+        }
+        
+        // Получаем allProducts через геттер
+        const allProducts = allProductsGetter ? allProductsGetter() : [];
+        
+        // Если product не передан, ищем его в allProducts
+        if (!product) {
+            product = allProducts.find(p => p.id === productId);
+        }
+        
+        // Проверяем количество товара
+        const productQuantity = product?.quantity || 0;
+        const hasQuantity = productQuantity > 1;
+        
+        if (hasQuantity) {
+            // Если товаров больше 1, показываем модальное окно для выбора количества
+            if (showSellModalCallback) {
+                showSellModalCallback(productId, product);
+            }
+        } else {
+            // Если товаров 1 или нет, продаем 1 товар по умолчанию
+            if (!confirm('Пометить товар как проданный? Товар будет скрыт с витрины и добавлен в историю продаж.')) {
+                return;
+            }
+            await markProductSoldAPI(productId, appContext.shop_owner_id, 1);
+            alert('✅ Товар помечен как проданный');
+            
+            // Закрываем модальное окно
+            if (modalElement) {
+                modalElement.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+            
+            // Обновляем данные
+            if (loadDataCallback) {
+                setTimeout(async () => {
+                    await loadDataCallback();
+                }, 500);
+            }
+        }
+    } catch (e) {
+        console.error('Mark as sold error:', e);
+        alert(`❌ Ошибка: ${e.message}`);
+    }
+}
+
+// Показать модальное окно для продажи товара
+export function showSellModal(productId, product) {
+    // Получаем appContext через геттер
+    const appContext = appContextGetter ? appContextGetter() : null;
+    
+    if (!appContext) {
+        alert('❌ Ошибка: контекст не загружен');
+        return;
+    }
+    
+    if (!sellModalElement) {
+        alert('❌ Ошибка: модальное окно продажи не найдено');
+        return;
+    }
+    
+    const productQuantity = product?.quantity !== undefined && product?.quantity !== null ? product.quantity : 0;
+    
+    // Устанавливаем максимальное значение и значение по умолчанию
+    const quantityInput = document.getElementById('sell-quantity');
+    const sellAllCheckbox = document.getElementById('sell-all-checkbox');
+    
+    if (quantityInput) {
+        quantityInput.value = 1;
+        quantityInput.max = Math.max(1, productQuantity);
+        quantityInput.min = 1;
+    }
+    
+    // Сбрасываем чекбокс "Продать все"
+    if (sellAllCheckbox) {
+        sellAllCheckbox.checked = false;
+    }
+    
+    // Обработчик чекбокса "Продать все"
+    if (sellAllCheckbox && quantityInput) {
+        sellAllCheckbox.onchange = (e) => {
+            if (e.target.checked) {
+                quantityInput.value = productQuantity;
+                quantityInput.disabled = true;
+            } else {
+                quantityInput.disabled = false;
+                quantityInput.value = 1;
+            }
+        };
+    }
+    
+    // Показываем информацию о доступном количестве
+    const quantityInfo = document.getElementById('sell-quantity-info');
+    if (quantityInfo) {
+        quantityInfo.textContent = `Доступно: ${productQuantity} шт.`;
+    }
+    
+    // Устанавливаем обработчик кнопки продажи
+    const submitBtn = document.getElementById('sell-submit');
+    if (submitBtn) {
+        submitBtn.onclick = async () => {
+            let quantity;
+            if (sellAllCheckbox && sellAllCheckbox.checked) {
+                quantity = productQuantity;
+            } else {
+                quantity = parseInt(quantityInput.value) || 1;
+            }
+            
+            if (quantity < 1) {
+                alert('❌ Количество должно быть не менее 1');
+                return;
+            }
+            if (quantity > productQuantity) {
+                alert(`❌ Нельзя продать больше, чем есть в наличии (${productQuantity} шт.)`);
+                return;
+            }
+            
+            sellModalElement.style.display = 'none';
+            await markProductSoldAPI(productId, appContext.shop_owner_id, quantity);
+            alert(`✅ Продано ${quantity} шт. товара`);
+            
+            // Закрываем модальное окно товара
+            if (modalElement) {
+                modalElement.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+            
+            // Обновляем данные
+            if (loadDataCallback) {
+                setTimeout(async () => {
+                    await loadDataCallback();
+                }, 500);
+            }
+        };
+    }
+    
+    sellModalElement.style.display = 'block';
 }
 

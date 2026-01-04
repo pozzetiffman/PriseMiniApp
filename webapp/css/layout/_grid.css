@@ -1,0 +1,36 @@
+/* Стили для сетки товаров */
+#products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    padding: 10px;
+    max-width: 100%;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 0 !important; /* Ниже чем фильтры, чтобы не перекрывать их */
+    margin-top: 0; /* Убираем отступ сверху, чтобы не перекрывать фильтр */
+    min-height: 0; /* Убираем минимальную высоту, чтобы не перекрывать фильтр */
+}
+
+#products-grid > * {
+    z-index: 0; /* Ниже чем фильтры */
+}
+
+/* Адаптивность для больших экранов */
+@media (min-width: 768px) {
+    #products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+        padding: 15px;
+    }
+}
+
+/* Адаптивность для очень больших экранов */
+@media (min-width: 1024px) {
+    #products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+        padding: 20px;
+    }
+}
+

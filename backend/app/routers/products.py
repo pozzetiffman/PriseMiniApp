@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header, Request, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 from ..db import models, database
 from ..models import product as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
@@ -1796,7 +1796,7 @@ async def create_product(
     quantity_show_enabled: Optional[str] = Form(None),
     bot_id: Optional[int] = Form(None, description="ID бота для независимых магазинов"),
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
-    images: List[UploadFile] = File(None),
+    images: List[UploadFile] = File(default_factory=list),
     db: Session = Depends(database.get_db)
 ):
     # Конвертируем строки в boolean
@@ -1811,7 +1811,16 @@ async def create_product(
     images_urls = []
     image_url = None  # Для обратной совместимости (первое фото)
     
-    print(f"DEBUG: create_product called - images type: {type(images)}, images value: {images}")
+    print(f"DEBUG: create_product called - images type: {type(images)}, images count: {len(images) if images else 0}")
+    
+    # Фильтруем пустые файлы (если FastAPI передал пустые объекты)
+    if images:
+        images = [img for img in images if img and img.filename]
+    
+    print(f"DEBUG: images is a list with {len(images)} items after filtering")
+    for i, img in enumerate(images):
+        if img:
+            print(f"DEBUG: images[{i}]: filename={getattr(img, 'filename', 'unknown')}, content_type={getattr(img, 'content_type', 'unknown')}")
     
     if images and len(images) > 0:
         # Ограничиваем до 5 фото

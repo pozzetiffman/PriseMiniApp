@@ -322,7 +322,7 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
     ))
     
     msg = f"Привет, {message.from_user.first_name}! Нажми кнопку ниже, чтобы открыть свою витрину."
-    msg += "\n\nИспользуйте ≠/manage для управления товарами и публикации витрины."
+    msg += "\n\nИспользуйте /manage для управления товарами и публикации витрины."
 
     await message.answer(msg, reply_markup=builder.as_markup())
 
@@ -2350,40 +2350,77 @@ async def process_photos(message: Message, state: FSMContext):
     data = await state.get_data()
     photos_list = data.get('photos', [])
     
+    logging.info(f"[PHOTOS] Received photo, current photos_list length: {len(photos_list)}")
+    
     # Проверяем лимит (до 5 фото)
     if len(photos_list) >= 5:
         await message.answer("⚠️ Максимум 5 фото. Отправьте /done чтобы закончить добавление товара.")
         return
     
     photo = message.photo[-1]
+    logging.info(f"[PHOTOS] Processing photo with file_id: {photo.file_id}")
     
     # Сохраняем file_id и путь к файлу во временное хранилище
-    try:
-        file_info = await bot.get_file(photo.file_id)
-        file_ext = os.path.splitext(file_info.file_path)[1] or '.jpg'
-        
-        # Скачиваем во временный файл
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-            tmp_path = tmp_file.name
-            await bot.download_file(file_info.file_path, tmp_path)
-        
-        # Сохраняем путь к временному файлу
-        photos_list.append({
-            'file_id': photo.file_id,
-            'tmp_path': tmp_path,
-            'file_ext': file_ext
-        })
-        
-        await state.update_data(photos=photos_list)
-        
-        remaining = 5 - len(photos_list)
-        if remaining > 0:
-            await message.answer(f"✅ Фото {len(photos_list)}/5 добавлено. Отправьте еще фото или /done чтобы закончить.")
-        else:
-            await message.answer("✅ Добавлено максимальное количество фото (5). Отправьте /done чтобы закончить.")
-    except Exception as e:
-        logging.error(f"Exception in process_photos: {e}", exc_info=True)
-        await message.answer(f"❌ Ошибка при обработке фото: {str(e)}")
+    # Добавляем повторные попытки при ошибках сети
+    max_retries = 3
+    retry_delay = 2  # секунды
+    
+    for attempt in range(max_retries):
+        try:
+            file_info = await bot.get_file(photo.file_id)
+            file_ext = os.path.splitext(file_info.file_path)[1] or '.jpg'
+            
+            # Скачиваем во временный файл
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+                tmp_path = tmp_file.name
+                await bot.download_file(file_info.file_path, tmp_path)
+            
+            # ВАЖНО: снова получаем актуальное состояние, так как оно могло измениться
+            data = await state.get_data()
+            photos_list = data.get('photos', [])
+            
+            # Проверяем, не добавлено ли уже это фото (по file_id)
+            if any(p.get('file_id') == photo.file_id for p in photos_list):
+                logging.warning(f"[PHOTOS] Photo {photo.file_id} already in list, skipping")
+                await message.answer(f"⚠️ Это фото уже добавлено. Отправьте другое фото или /done чтобы закончить.")
+                return
+            
+            # Сохраняем путь к временному файлу
+            photos_list.append({
+                'file_id': photo.file_id,
+                'tmp_path': tmp_path,
+                'file_ext': file_ext
+            })
+            
+            logging.info(f"[PHOTOS] Successfully added photo {len(photos_list)}/5, file_id: {photo.file_id}, tmp_path: {tmp_path}")
+            
+            await state.update_data(photos=photos_list)
+            
+            # Проверяем, что фото действительно добавлено в состояние
+            verify_data = await state.get_data()
+            verify_photos = verify_data.get('photos', [])
+            logging.info(f"[PHOTOS] Verified: photos in state after update: {len(verify_photos)}")
+            
+            remaining = 5 - len(photos_list)
+            if remaining > 0:
+                await message.answer(f"✅ Фото {len(photos_list)}/5 добавлено. Отправьте еще фото или /done чтобы закончить.")
+            else:
+                await message.answer("✅ Добавлено максимальное количество фото (5). Отправьте /done чтобы закончить.")
+            break  # Успешно обработано, выходим из цикла
+        except (TelegramNetworkError, aiohttp.client_exceptions.ClientConnectorError) as e:
+            if attempt < max_retries - 1:
+                logging.warning(f"Network error on attempt {attempt + 1}/{max_retries} for photo {len(photos_list)+1}, retrying in {retry_delay}s: {e}")
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2  # Увеличиваем задержку при каждой попытке
+            else:
+                logging.error(f"Exception in process_photos after {max_retries} attempts for photo {len(photos_list)+1}: {e}", exc_info=True)
+                await message.answer(f"❌ Ошибка при обработке фото {len(photos_list)+1} после {max_retries} попыток. Попробуйте отправить фото еще раз.")
+                # НЕ выходим из функции - пользователь может попробовать отправить фото снова
+                return
+        except Exception as e:
+            logging.error(f"Exception in process_photos: {e}", exc_info=True)
+            await message.answer(f"❌ Ошибка при обработке фото: {str(e)}")
+            break  # Для других ошибок не повторяем
 
 @dp.message(AddProduct.photos)
 async def process_photos_done(message: Message, state: FSMContext):
@@ -2396,110 +2433,114 @@ async def process_photos_done(message: Message, state: FSMContext):
         user_id = data.get('user_id', message.from_user.id)
         photos_list = data.get('photos', [])
         
+        logging.info(f"Processing photos_done: photos_list length={len(photos_list)}")
+        for idx, photo_data in enumerate(photos_list):
+            logging.info(f"Photo {idx+1}: file_id={photo_data.get('file_id')}, tmp_path={photo_data.get('tmp_path')}, exists={os.path.exists(photo_data.get('tmp_path', ''))}")
+        
         try:
             # Отправляем данные на бэкенд
-            payload = aiohttp.FormData()
-            payload.add_field('name', data['name'])
-            
-            # Для товаров для покупки price может быть не установлен
-            # Используем price_from или price_fixed как базовую цену для отображения
-            if data.get('is_for_sale'):
-                if data.get('price_type') == 'fixed' and data.get('price_fixed'):
-                    payload.add_field('price', str(data['price_fixed']))
-                elif data.get('price_from'):
-                    payload.add_field('price', str(data['price_from']))
-                else:
-                    payload.add_field('price', '0')
-            else:
-                payload.add_field('price', str(data.get('price', 0)))
-            
-            payload.add_field('category_id', str(data['category_id']))
-            payload.add_field('user_id', str(user_id))
-            payload.add_field('discount', str(data.get('discount', 0)))
-            payload.add_field('quantity', str(data.get('quantity', 0)))
-            payload.add_field('is_hot_offer', str(data.get('is_hot_offer', False)).lower())
-            payload.add_field('is_made_to_order', str(data.get('is_made_to_order', False)).lower())
-            payload.add_field('is_for_sale', str(data.get('is_for_sale', False)).lower())
-            
-            # Поле для показа количества (может быть None, True или False)
-            quantity_show_enabled = data.get('quantity_show_enabled')
-            if quantity_show_enabled is not None:
-                payload.add_field('quantity_show_enabled', str(quantity_show_enabled).lower())
-            
-            if data.get('description'):
-                payload.add_field('description', data['description'])
-            
-            # Поля для товаров для покупки
-            if data.get('is_for_sale'):
-                if data.get('price_type'):
-                    payload.add_field('price_type', data['price_type'])
-                
-                if data.get('price_from') is not None:
-                    payload.add_field('price_from', str(data['price_from']))
-                if data.get('price_to') is not None:
-                    payload.add_field('price_to', str(data['price_to']))
-                if data.get('price_fixed') is not None:
-                    payload.add_field('price_fixed', str(data['price_fixed']))
-                if data.get('quantity_from') is not None:
-                    payload.add_field('quantity_from', str(data['quantity_from']))
-                if data.get('quantity_unit'):
-                    payload.add_field('quantity_unit', data['quantity_unit'])
-            
-            # Добавляем все фото (FastAPI ожидает список файлов с одним именем поля)
-            # ВАЖНО: для нескольких файлов нужно использовать одно имя поля 'images'
-            # Открываем все файлы и сохраняем их в список, чтобы они оставались открытыми
-            file_handles = []
-            try:
-                for idx, photo_data in enumerate(photos_list):
-                    tmp_path = photo_data['tmp_path']
-                    file_ext = photo_data['file_ext']
-                    
-                    # Открываем файл для чтения (остается открытым до отправки)
-                    file_handle = open(tmp_path, 'rb')
-                    file_handles.append(file_handle)
-                    
-                    # Используем одно и то же имя поля 'images' для всех файлов
-                    # FastAPI соберет их в список
-                    payload.add_field('images', 
-                                     file_handle, 
-                                     filename=f"product_{photo_data['file_id']}{file_ext}",
-                                     content_type='image/jpeg')
-                    
-                    logging.info(f"Added image {idx+1} to payload: {tmp_path}")
-            except Exception as e:
-                # Закрываем все открытые файлы в случае ошибки
-                for fh in file_handles:
-                    try:
-                        fh.close()
-                    except:
-                        pass
-                raise e
-            
+            # Используем FormData для правильной отправки множественных файлов
             logging.info(f"Sending product data to {API_URL}/products/ with {len(photos_list)} photos")
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.post(f"{API_URL}/products/", data=payload) as resp:
-                        response_text = await resp.text()
-                        logging.info(f"Backend response: status={resp.status}, body={response_text[:500]}")
-                        
-                        if resp.status == 200:
-                            result = await resp.json()
-                            images_count = len(result.get('images_urls', []))
-                            logging.info(f"Product created successfully: id={result.get('id')}, images_count={images_count}")
-                            await message.answer(f"✅ Товар успешно добавлен!\n\n📷 Фото: {images_count} шт.")
+                    # Создаем FormData для правильной отправки множественных файлов
+                    # FormData правильно обрабатывает множественные файлы с одним именем поля для FastAPI
+                    form_data = aiohttp.FormData()
+                    
+                    # Добавляем все текстовые поля
+                    form_data.add_field('name', data['name'])
+                    
+                    # Для товаров для покупки price может быть не установлен
+                    # Используем price_from или price_fixed как базовую цену для отображения
+                    if data.get('is_for_sale'):
+                        if data.get('price_type') == 'fixed' and data.get('price_fixed'):
+                            form_data.add_field('price', str(data['price_fixed']))
+                        elif data.get('price_from'):
+                            form_data.add_field('price', str(data['price_from']))
                         else:
-                            logging.error(f"Error creating product: status={resp.status}, error={response_text}")
-                            await message.answer(f"❌ Ошибка при сохранении (статус {resp.status}): {response_text[:200]}")
+                            form_data.add_field('price', '0')
+                    else:
+                        form_data.add_field('price', str(data.get('price', 0)))
+                    
+                    form_data.add_field('category_id', str(data['category_id']))
+                    form_data.add_field('user_id', str(user_id))
+                    form_data.add_field('discount', str(data.get('discount', 0)))
+                    form_data.add_field('quantity', str(data.get('quantity', 0)))
+                    form_data.add_field('is_hot_offer', str(data.get('is_hot_offer', False)).lower())
+                    form_data.add_field('is_made_to_order', str(data.get('is_made_to_order', False)).lower())
+                    form_data.add_field('is_for_sale', str(data.get('is_for_sale', False)).lower())
+                    
+                    # Поле для показа количества (может быть None, True или False)
+                    quantity_show_enabled = data.get('quantity_show_enabled')
+                    if quantity_show_enabled is not None:
+                        form_data.add_field('quantity_show_enabled', str(quantity_show_enabled).lower())
+                    
+                    if data.get('description'):
+                        form_data.add_field('description', data['description'])
+                    
+                    # Поля для товаров для покупки
+                    if data.get('is_for_sale'):
+                        if data.get('price_type'):
+                            form_data.add_field('price_type', data['price_type'])
+                        
+                        if data.get('price_from') is not None:
+                            form_data.add_field('price_from', str(data['price_from']))
+                        if data.get('price_to') is not None:
+                            form_data.add_field('price_to', str(data['price_to']))
+                        if data.get('price_fixed') is not None:
+                            form_data.add_field('price_fixed', str(data['price_fixed']))
+                        if data.get('quantity_from') is not None:
+                            form_data.add_field('quantity_from', str(data['quantity_from']))
+                        if data.get('quantity_unit'):
+                            form_data.add_field('quantity_unit', data['quantity_unit'])
+                    
+                    # Добавляем все файлы с одним именем поля 'images'
+                    # ВАЖНО: FormData позволяет добавлять несколько файлов с одним именем поля
+                    # FastAPI соберет их в список при использовании List[UploadFile]
+                    file_handles = []
+                    try:
+                        for idx, photo_data in enumerate(photos_list):
+                            tmp_path = photo_data['tmp_path']
+                            file_ext = photo_data['file_ext']
+                            
+                            # Открываем файл для чтения (остается открытым до отправки)
+                            file_handle = open(tmp_path, 'rb')
+                            file_handles.append(file_handle)
+                            
+                            # Добавляем файл в FormData с одним именем поля 'images'
+                            # Все файлы с именем 'images' будут собраны FastAPI в список
+                            form_data.add_field(
+                                'images',
+                                file_handle,
+                                filename=f"product_{photo_data['file_id']}{file_ext}",
+                                content_type='image/jpeg'
+                            )
+                            logging.info(f"Added image {idx+1} to FormData: {tmp_path}")
+                        
+                        logging.info(f"Total images added to FormData: {len(photos_list)}")
+                        
+                        async with session.post(f"{API_URL}/products/", data=form_data) as resp:
+                            response_text = await resp.text()
+                            logging.info(f"Backend response: status={resp.status}, body={response_text[:500]}")
+                            
+                            if resp.status == 200:
+                                result = await resp.json()
+                                images_count = len(result.get('images_urls', []))
+                                logging.info(f"Product created successfully: id={result.get('id')}, images_count={images_count}")
+                                await message.answer(f"✅ Товар успешно добавлен!\n\n📷 Фото: {images_count} шт.")
+                            else:
+                                logging.error(f"Error creating product: status={resp.status}, error={response_text}")
+                                await message.answer(f"❌ Ошибка при сохранении (статус {resp.status}): {response_text[:200]}")
+                    finally:
+                        # Закрываем все открытые файлы после отправки
+                        for fh in file_handles:
+                            try:
+                                fh.close()
+                            except:
+                                pass
             except Exception as req_e:
                 logging.error(f"Exception during request: {req_e}", exc_info=True)
                 await message.answer(f"❌ Ошибка при отправке запроса: {str(req_e)}")
-            finally:
-                # Закрываем все открытые файлы после отправки
-                for fh in file_handles:
-                    try:
-                        fh.close()
-                    except:
-                        pass
         except Exception as e:
             logging.error(f"Exception in process_photos_done: {e}", exc_info=True)
             await message.answer(f"❌ Ошибка при сохранении товара: {str(e)}")
