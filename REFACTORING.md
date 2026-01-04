@@ -2,9 +2,9 @@
 
 ## Статус рефакторинга
 
-**Текущий размер файла:** 1530 строк (после выгрузки категорий, products и product-edit)  
+**Текущий размер файла:** 1332 строки (после выгрузки категорий, products, product-edit и reservations)  
 **Целевой размер:** ~900–1000 строк  
-**Выгружено:** ~1409+ строк
+**Выгружено:** ~1607+ строк (4 модуля: categories, products, product-edit, reservations)
 
 ---
 
@@ -46,15 +46,15 @@
 
 ---
 
-### ⏳ 4. Модуль "reservations.js" (резервации)
+### ✅ 4. Модуль "reservations.js" (резервации) - **ВЫПОЛНЕНО**
 
-- ⏳ `showReservationModal(productId)` — показ модального окна резервации (~122 строки)
-- ⏳ `createReservation(productId, hours, quantity)` — создание резервации (~29 строк)
-- ⏳ `cancelReservation(reservationId, productId)` — отмена резервации (~30 строк)
-- ⏳ `window.cancelReservationFromCart()` — отмена из корзины (~5 строк)
-- ⏳ `window.clearReservationsHistory()` — очистка истории (~22 строки)
+- ✅ `showReservationModal(productId)` — показ модального окна резервации (~122 строки) - **ВЫПОЛНЕНО** (старый код удалён)
+- ✅ `createReservation(productId, hours, quantity)` — создание резервации (~29 строк) - **ВЫПОЛНЕНО** (старый код удалён)
+- ✅ `cancelReservation(reservationId, productId)` — отмена резервации (~30 строк) - **ВЫПОЛНЕНО** (старый код удалён)
+- ✅ `window.cancelReservationFromCart()` — отмена из корзины (~5 строк) - **ВЫПОЛНЕНО** (старый код удалён)
+- ✅ `window.clearReservationsHistory()` — очистка истории (~22 строки) - **ВЫПОЛНЕНО** (старый код удалён)
 
-**Статус:** Не начато
+**Статус:** ✅ **ВЫПОЛНЕНО** (5/5 функций) - старый код удалён
 
 ---
 
@@ -118,8 +118,8 @@
 
 - **Всего функций:** ~38
 - **Приблизительный объем кода для выгрузки:** ~2500+ строк
-- **Текущий размер файла:** 1530 строк (было 2939)
-- **Выгружено:** ~1409 строк (3 модуля: categories, products, product-edit)
+- **Текущий размер файла:** 1332 строки (было 2939)
+- **Выгружено:** ~1607 строк (4 модуля: categories, products, product-edit, reservations)
 - **После выгрузки останется:** ~900–1000 строк (инициализация, глобальные переменные, координация модулей)
 
 ---
@@ -129,8 +129,8 @@
 1. ✅ **categories.js** - ВЫПОЛНЕНО
 2. ✅ **products.js** - ВЫПОЛНЕНО
 3. ✅ **product-edit.js** - ВЫПОЛНЕНО
-4. ⏳ **reservations.js** - СЛЕДУЮЩИЙ
-5. ⏳ **orders.js**
+4. ✅ **reservations.js** - ВЫПОЛНЕНО
+5. ⏳ **orders.js** - СЛЕДУЮЩИЙ
 6. ⏳ **purchases.js**
 7. ⏳ **filters.js**
 8. ⏳ **modals.js**

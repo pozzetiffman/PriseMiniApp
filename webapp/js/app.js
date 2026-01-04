@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings } from './admin.js';
-import { API_BASE, cancelOrderAPI, cancelPurchaseAPI, cancelReservationAPI, createOrderAPI, createPurchaseAPI, createReservationAPI, fetchCategories, fetchProducts, getContext, getShopSettings, trackShopVisit } from './api.js';
+import { API_BASE, cancelOrderAPI, cancelPurchaseAPI, createOrderAPI, createPurchaseAPI, fetchCategories, fetchProducts, getContext, getShopSettings, trackShopVisit } from './api.js';
 import { initCart, loadCart, loadOrders, loadPurchases, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { initProfile, setupProfileButton } from './profile.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
@@ -18,6 +18,8 @@ import {
 import { initProductsDependencies, renderProducts } from './products.js';
 // Импорт функций редактирования товаров из отдельного модуля (рефакторинг)
 import { deleteProduct, initProductEditDependencies, markAsSold, showEditProductModal, showSellModal } from './product-edit.js';
+// Импорт функций резерваций из отдельного модуля (рефакторинг)
+import { cancelReservation, initReservationsDependencies, showReservationModal } from './reservations.js';
 
 // Глобальные переменные
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
@@ -151,6 +153,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         showPurchaseModal: showPurchaseModal,
         showReservationModal: showReservationModal,
         showOrderModal: showOrderModal
+    });
+    
+    // 4.4 Инициализируем зависимости для модуля резерваций
+    initReservationsDependencies({
+        appContextGetter: () => appContext, // Функция-геттер для получения appContext
+        currentProductGetter: () => currentProduct, // Функция-геттер для получения currentProduct
+        allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
+        reservationModal: reservationModal, // DOM элемент модального окна резервации
+        modal: modal, // DOM элемент модального окна товара
+        loadData: loadData, // Функция для загрузки данных
+        updateCartUI: updateCartUI, // Функция для обновления корзины
+        loadCart: loadCart // Функция для загрузки корзины
     });
     
     // 5. Получаем контекст магазина из backend
@@ -401,129 +415,6 @@ window.loadData = async function loadData() {
 }
 
 // Показ модального окна товара
-// Показ модального окна резервации
-function showReservationModal(productId) {
-    if (!appContext) {
-        alert('❌ Ошибка: контекст не загружен');
-        return;
-    }
-    
-    // Находим товар в текущем списке (используем allProducts или currentProduct)
-    let product = currentProduct; // Сначала пробуем текущий товар из модального окна
-    if (!product || product.id !== productId) {
-        // Если не совпадает, ищем в allProducts
-        product = allProducts.find(p => p.id === productId);
-    }
-    if (!product) {
-        console.error('❌ Product not found:', productId, 'allProducts length:', allProducts.length);
-        alert('❌ Ошибка: товар не найден');
-        return;
-    }
-    
-    const productQuantity = product.quantity || 0;
-    console.log('🔒 showReservationModal:', { productId, productQuantity, productName: product.name });
-    
-    // Проверяем, включен ли показ количества в настройках
-    const shopSettings = getCurrentShopSettings();
-    const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
-    console.log('🔒 quantityEnabled from settings:', quantityEnabled);
-    
-    const quantityContainer = document.getElementById('reservation-quantity-container');
-    const quantityInput = document.getElementById('reservation-quantity');
-    const quantityInfo = document.getElementById('reservation-quantity-info');
-    
-    if (!quantityContainer || !quantityInput || !quantityInfo) {
-        console.error('❌ Reservation modal elements not found!', { quantityContainer, quantityInput, quantityInfo });
-        alert('❌ Ошибка: элементы модального окна не найдены');
-        return;
-    }
-    
-    // Показываем выбор количества только если quantity_enabled включен И quantity > 1
-    if (quantityEnabled && productQuantity > 1) {
-        console.log('🔒 Showing quantity selector for product with quantity:', productQuantity);
-        quantityContainer.style.display = 'block';
-        quantityInput.max = productQuantity;
-        quantityInput.value = 1;
-        
-        // Показываем информацию о доступном количестве
-        const activeReservationsCount = product.reservation ? 1 : 0;
-        const availableCount = productQuantity - activeReservationsCount;
-        const quantityUnit = product.quantity_unit || 'шт';
-        quantityInfo.textContent = `Доступно для резервации: ${availableCount} из ${productQuantity} ${quantityUnit}`;
-        
-        // Обновляем max при изменении
-        quantityInput.oninput = () => {
-            const value = parseInt(quantityInput.value) || 1;
-            if (value > availableCount) {
-                quantityInput.value = availableCount;
-            }
-            if (value < 1) {
-                quantityInput.value = 1;
-            }
-        };
-    } else {
-        // Если quantity_enabled выключен ИЛИ quantity = 1 или null/undefined, скрываем выбор количества
-        console.log('🔒 Hiding quantity selector (quantity_enabled=false or quantity <= 1 or null)');
-        quantityContainer.style.display = 'none';
-    }
-    
-    if (!reservationModal) {
-        console.error('❌ Reservation modal not found!');
-        alert('❌ Ошибка: модальное окно резервации не найдено');
-        return;
-    }
-    
-    console.log('🔒 Opening reservation modal');
-    reservationModal.style.display = 'block';
-    
-    // Убеждаемся, что обработчики событий устанавливаются заново каждый раз
-    const options = document.querySelectorAll('.reservation-option');
-    console.log('🔒 Found reservation options:', options.length);
-    
-    if (options.length === 0) {
-        console.error('❌ No reservation options found!');
-        alert('❌ Ошибка: кнопки выбора времени не найдены');
-        return;
-    }
-    
-    options.forEach((option, index) => {
-        // Удаляем старые обработчики
-        const newOption = option.cloneNode(true);
-        option.parentNode.replaceChild(newOption, option);
-        
-        newOption.onclick = async () => {
-            const hours = parseInt(newOption.dataset.hours);
-            let quantity = 1;
-            
-            console.log('🔒 Reservation option clicked:', { hours, productQuantity, quantityEnabled, containerDisplay: quantityContainer ? quantityContainer.style.display : 'not found' });
-            
-            // Если показывается выбор количества (quantity_enabled включен И quantity > 1), берем значение из input
-            if (quantityEnabled && productQuantity > 1 && quantityContainer && quantityContainer.style.display !== 'none') {
-                quantity = parseInt(quantityInput.value) || 1;
-                const activeReservationsCount = product.reservation ? 1 : 0;
-                const availableCount = Math.max(0, productQuantity - activeReservationsCount);
-                const quantityUnit = product.quantity_unit || 'шт';
-                console.log('🔒 Quantity check:', { quantity, availableCount, productQuantity, activeReservationsCount });
-                if (quantity > availableCount) {
-                    alert(`❌ Недостаточно товара. Доступно для резервации: ${availableCount} ${quantityUnit}`);
-                    return;
-                }
-                if (quantity < 1) {
-                    alert('❌ Количество должно быть не менее 1');
-                    return;
-                }
-            } else {
-                console.log('🔒 Using default quantity=1 (quantity selector not shown or quantity <= 1)');
-            }
-            
-            console.log('🔒 Creating reservation with:', { productId, hours, quantity });
-            reservationModal.style.display = 'none';
-            await createReservation(productId, hours, quantity);
-        };
-    });
-    
-    console.log('🔒 Reservation modal setup complete');
-}
 
 // Текущий товар для заказа
 let currentOrderProduct = null;
@@ -739,68 +630,7 @@ async function createOrder(productId, quantity) {
     await submitOrder(productId);
 }
 
-// Создание резервации
-async function createReservation(productId, hours, quantity = 1) {
-    try {
-        console.log('🔒 createReservation called:', { productId, hours, quantity });
-        if (!appContext) {
-            alert('❌ Ошибка: контекст не загружен');
-            return;
-        }
-        
-        // reserved_by_user_id определяется на backend из initData
-        console.log('🔒 Calling createReservationAPI with quantity:', quantity);
-        const reservation = await createReservationAPI(productId, hours, quantity);
-        console.log('✅ Reservation created:', reservation);
-        
-        const quantityText = quantity > 1 ? ` (${quantity} шт.)` : '';
-        alert(`✅ Товар зарезервирован на ${hours} ${hours === 1 ? 'час' : hours === 2 ? 'часа' : 'часов'}${quantityText}`);
-        
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-        
-        // Обновляем данные и корзину
-        setTimeout(async () => {
-            await loadData();
-            await updateCartUI();
-        }, 500);
-    } catch (e) {
-        console.error('Reservation error:', e);
-        alert(`❌ Ошибка при резервации: ${e.message}`);
-    }
-}
 
-// Отмена резервации
-async function cancelReservation(reservationId, productId) {
-    const { safeConfirm, safeAlert } = await import('./telegram.js');
-    
-    const confirmed = await safeConfirm('Вы уверены, что хотите снять резервацию с этого товара?');
-    if (!confirmed) {
-        return;
-    }
-    
-    try {
-        if (!appContext) {
-            await safeAlert('❌ Ошибка: контекст не загружен');
-            return;
-        }
-        
-        // user_id определяется на backend из initData
-        await cancelReservationAPI(reservationId);
-        await safeAlert('✅ Резервация снята');
-        
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-        
-        setTimeout(async () => {
-            await loadData();
-            await updateCartUI();
-        }, 500);
-    } catch (e) {
-        console.error('Cancel reservation error:', e);
-        await safeAlert(`❌ Ошибка: ${e.message}`);
-    }
-}
 
 // Отмена заказа
 async function cancelOrder(orderId) {
@@ -1007,12 +837,6 @@ function setupModals() {
 
 // Функция setupAdminButton удалена - теперь используется setupProfileButton из profile.js
 
-// Глобальная функция для отмены резервации из корзины
-window.cancelReservationFromCart = async function(reservationId, productId) {
-    await cancelReservation(reservationId, productId);
-    loadCart();
-    await updateCartUI();
-};
 
 // Глобальная функция для отмены заказа из корзины
 window.cancelOrderFromCart = async function(orderId) {
@@ -1029,28 +853,6 @@ window.cancelPurchaseFromCart = async function(purchaseId) {
     await updateCartUI();
 };
 
-// Очистка истории резерваций
-window.clearReservationsHistory = async function() {
-    const { safeConfirm, safeAlert } = await import('./telegram.js');
-    
-    const confirmed = await safeConfirm('Вы уверены, что хотите очистить всю историю резерваций? Это действие нельзя отменить.');
-    if (!confirmed) {
-        return;
-    }
-    
-    try {
-        const { clearReservationsHistoryAPI } = await import('./api.js');
-        const result = await clearReservationsHistoryAPI();
-        await safeAlert(`✅ История резерваций очищена (удалено ${result.deleted_count || 0} записей)`);
-        
-        // Перезагружаем историю
-        const { loadReservationsHistory } = await import('./cart.js');
-        await loadReservationsHistory();
-    } catch (e) {
-        console.error('Clear reservations history error:', e);
-        await safeAlert(`❌ Ошибка: ${e.message}`);
-    }
-};
 
 // Очистка истории заказов
 window.clearOrdersHistory = async function() {
