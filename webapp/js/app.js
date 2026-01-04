@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
 import { getCurrentShopSettings, initAdmin, loadShopSettings } from './admin.js';
-import { API_BASE, cancelOrderAPI, cancelPurchaseAPI, createOrderAPI, createPurchaseAPI, fetchCategories, fetchProducts, getContext, getShopSettings, trackShopVisit } from './api.js';
+import { API_BASE, cancelPurchaseAPI, createPurchaseAPI, fetchCategories, fetchProducts, getContext, getShopSettings, trackShopVisit } from './api.js';
 import { initCart, loadCart, loadOrders, loadPurchases, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { initProfile, setupProfileButton } from './profile.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
@@ -20,6 +20,8 @@ import { initProductsDependencies, renderProducts } from './products.js';
 import { deleteProduct, initProductEditDependencies, markAsSold, showEditProductModal, showSellModal } from './product-edit.js';
 // Импорт функций резерваций из отдельного модуля (рефакторинг)
 import { cancelReservation, initReservationsDependencies, showReservationModal } from './reservations.js';
+// Импорт функций заказов из отдельного модуля (рефакторинг)
+import { initOrdersDependencies, resetOrderForm, showOrderModal, showOrderStep } from './orders.js';
 
 // Глобальные переменные
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
@@ -165,6 +167,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadData: loadData, // Функция для загрузки данных
         updateCartUI: updateCartUI, // Функция для обновления корзины
         loadCart: loadCart // Функция для загрузки корзины
+    });
+    
+    // 4.5 Инициализируем зависимости для модуля заказов
+    initOrdersDependencies({
+        appContextGetter: () => appContext, // Функция-геттер для получения appContext
+        allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
+        orderModal: orderModal, // DOM элемент модального окна заказа
+        modal: modal, // DOM элемент модального окна товара
+        loadData: loadData, // Функция для загрузки данных
+        updateCartUI: updateCartUI, // Функция для обновления корзины
+        loadOrders: loadOrders // Функция для загрузки заказов
     });
     
     // 5. Получаем контекст магазина из backend
@@ -416,251 +429,6 @@ window.loadData = async function loadData() {
 
 // Показ модального окна товара
 
-// Текущий товар для заказа
-let currentOrderProduct = null;
-
-// Показ модального окна заказа
-function showOrderModal(productId) {
-    if (!appContext) {
-        alert('❌ Ошибка: контекст не загружен');
-        return;
-    }
-    
-    if (!orderModal) {
-        alert('❌ Ошибка: модальное окно заказа не найдено');
-        return;
-    }
-    
-    // Находим товар
-    const product = allProducts.find(p => p.id === productId);
-    if (!product) {
-        alert('❌ Товар не найден');
-        return;
-    }
-    
-    currentOrderProduct = product;
-    
-    // Сбрасываем форму
-    resetOrderForm();
-    
-    // Показываем информацию о товаре
-    updateOrderProductSummary(product);
-    
-    // Показываем первый шаг
-    showOrderStep(1);
-    
-    // Устанавливаем обработчики
-    setupOrderFormHandlers(productId);
-    
-    orderModal.style.display = 'block';
-}
-
-// Сброс формы заказа
-function resetOrderForm() {
-    document.getElementById('order-promo-code').value = '';
-    document.getElementById('order-quantity').value = 1;
-    document.getElementById('order-first-name').value = '';
-    document.getElementById('order-last-name').value = '';
-    document.getElementById('order-middle-name').value = '';
-    document.getElementById('order-phone-country-code').value = '+7';
-    document.getElementById('order-phone-number').value = '';
-    document.getElementById('order-email').value = '';
-    document.getElementById('order-notes').value = '';
-    document.querySelector('input[name="delivery-method"][value="delivery"]').checked = true;
-}
-
-// Обновление информации о товаре в форме
-function updateOrderProductSummary(product) {
-    const summaryDiv = document.getElementById('order-product-summary');
-    const totalDiv = document.getElementById('order-total');
-    
-    if (!summaryDiv || !totalDiv) return;
-    
-    const finalPrice = product.discount > 0 
-        ? Math.round(product.price * (1 - product.discount / 100)) 
-        : product.price;
-    
-    summaryDiv.innerHTML = `
-        <h3>${product.name}</h3>
-        <div class="product-price">${finalPrice} ₽</div>
-    `;
-    
-    // Обновляем итого при изменении количества
-    const quantityInput = document.getElementById('order-quantity');
-    const updateTotal = () => {
-        const quantity = parseInt(quantityInput.value) || 1;
-        const total = finalPrice * quantity;
-        totalDiv.textContent = `Итого: ${total} ₽`;
-    };
-    
-    quantityInput.oninput = updateTotal;
-    updateTotal();
-}
-
-// Показ шага формы заказа
-function showOrderStep(step) {
-    // Скрываем все шаги
-    for (let i = 1; i <= 3; i++) {
-        const stepDiv = document.getElementById(`order-step-${i}`);
-        if (stepDiv) {
-            stepDiv.classList.remove('active');
-        }
-    }
-    
-    // Показываем нужный шаг
-    const stepDiv = document.getElementById(`order-step-${step}`);
-    if (stepDiv) {
-        stepDiv.classList.add('active');
-    }
-}
-
-// Настройка обработчиков формы заказа
-function setupOrderFormHandlers(productId) {
-    // Шаг 1: Продолжить
-    const step1Next = document.getElementById('order-step-1-next');
-    if (step1Next) {
-        step1Next.onclick = () => {
-            const quantity = parseInt(document.getElementById('order-quantity').value) || 1;
-            if (quantity < 1) {
-                alert('❌ Количество должно быть не менее 1');
-                return;
-            }
-            showOrderStep(2);
-        };
-    }
-    
-    // Шаг 2: Назад
-    const step2Back = document.getElementById('order-step-2-back');
-    if (step2Back) {
-        step2Back.onclick = () => showOrderStep(1);
-    }
-    
-    // Шаг 2: Продолжить
-    const step2Next = document.getElementById('order-step-2-next');
-    if (step2Next) {
-        step2Next.onclick = () => {
-            const firstName = document.getElementById('order-first-name').value.trim();
-            const lastName = document.getElementById('order-last-name').value.trim();
-            const phoneNumber = document.getElementById('order-phone-number').value.trim();
-            
-            if (!firstName) {
-                alert('❌ Пожалуйста, введите имя');
-                return;
-            }
-            if (!lastName) {
-                alert('❌ Пожалуйста, введите фамилию');
-                return;
-            }
-            if (!phoneNumber) {
-                alert('❌ Пожалуйста, введите номер телефона');
-                return;
-            }
-            
-            showOrderStep(3);
-        };
-    }
-    
-    // Шаг 3: Назад
-    const step3Back = document.getElementById('order-step-3-back');
-    if (step3Back) {
-        step3Back.onclick = () => showOrderStep(2);
-    }
-    
-    // Шаг 3: Оформить заказ
-    const step3Submit = document.getElementById('order-step-3-submit');
-    if (step3Submit) {
-        step3Submit.onclick = async () => {
-            await submitOrder(productId);
-        };
-    }
-}
-
-// Отправка заказа
-async function submitOrder(productId) {
-    try {
-        if (!appContext) {
-            alert('❌ Ошибка: контекст не загружен');
-            return;
-        }
-        
-        // Собираем данные формы
-        const orderData = {
-            product_id: productId,
-            quantity: parseInt(document.getElementById('order-quantity').value) || 1,
-            promo_code: document.getElementById('order-promo-code').value.trim() || null,
-            first_name: document.getElementById('order-first-name').value.trim(),
-            last_name: document.getElementById('order-last-name').value.trim(),
-            middle_name: document.getElementById('order-middle-name').value.trim() || null,
-            phone_country_code: document.getElementById('order-phone-country-code').value,
-            phone_number: document.getElementById('order-phone-number').value.trim(),
-            email: document.getElementById('order-email').value.trim() || null,
-            notes: document.getElementById('order-notes').value.trim() || null,
-            delivery_method: document.querySelector('input[name="delivery-method"]:checked').value
-        };
-        
-        // Проверяем обязательные поля
-        if (!orderData.first_name || !orderData.last_name || !orderData.phone_number) {
-            alert('❌ Пожалуйста, заполните все обязательные поля');
-            return;
-        }
-        
-        // Отправляем заказ
-        const order = await createOrderAPI(orderData);
-        
-        alert(`✅ Заказ оформлен! Статус: ожидание`);
-        
-        orderModal.style.display = 'none';
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-        
-        // Обновляем данные и корзину
-        setTimeout(async () => {
-            await loadData();
-            await updateCartUI();
-        }, 500);
-    } catch (e) {
-        console.error('Order error:', e);
-        alert(`❌ Ошибка при оформлении заказа: ${e.message}`);
-    }
-}
-
-// Создание заказа (старая функция для обратной совместимости)
-async function createOrder(productId, quantity) {
-    // Эта функция больше не используется, но оставляем для совместимости
-    await submitOrder(productId);
-}
-
-
-
-// Отмена заказа
-async function cancelOrder(orderId) {
-    const { safeConfirm, safeAlert } = await import('./telegram.js');
-    
-    const confirmed = await safeConfirm('Вы уверены, что хотите отменить этот заказ?');
-    if (!confirmed) {
-        return;
-    }
-    
-    try {
-        if (!appContext) {
-            await safeAlert('❌ Ошибка: контекст не загружен');
-            return;
-        }
-        
-        // user_id определяется на backend из initData
-        await cancelOrderAPI(orderId);
-        await safeAlert('✅ Заказ отменен');
-        
-        setTimeout(async () => {
-            await loadData();
-            await updateCartUI();
-        }, 500);
-    } catch (e) {
-        console.error('Cancel order error:', e);
-        await safeAlert(`❌ Ошибка: ${e.message}`);
-    }
-}
-
 // Отмена продажи
 async function cancelPurchase(purchaseId) {
     const { safeConfirm, safeAlert } = await import('./telegram.js');
@@ -838,14 +606,6 @@ function setupModals() {
 // Функция setupAdminButton удалена - теперь используется setupProfileButton из profile.js
 
 
-// Глобальная функция для отмены заказа из корзины
-window.cancelOrderFromCart = async function(orderId) {
-    await cancelOrder(orderId);
-    // Перезагружаем заказы в корзине
-    await loadOrders();
-    await updateCartUI();
-};
-
 window.cancelPurchaseFromCart = async function(purchaseId) {
     await cancelPurchase(purchaseId);
     // Перезагружаем продажи в корзине
@@ -853,29 +613,6 @@ window.cancelPurchaseFromCart = async function(purchaseId) {
     await updateCartUI();
 };
 
-
-// Очистка истории заказов
-window.clearOrdersHistory = async function() {
-    const { safeConfirm, safeAlert } = await import('./telegram.js');
-    
-    const confirmed = await safeConfirm('Вы уверены, что хотите очистить всю историю заказов? Это действие нельзя отменить.');
-    if (!confirmed) {
-        return;
-    }
-    
-    try {
-        const { clearOrdersHistoryAPI } = await import('./api.js');
-        const result = await clearOrdersHistoryAPI();
-        await safeAlert(`✅ История заказов очищена (удалено ${result.deleted_count || 0} записей)`);
-        
-        // Перезагружаем историю
-        const { loadOrdersHistory } = await import('./cart.js');
-        await loadOrdersHistory();
-    } catch (e) {
-        console.error('Clear orders history error:', e);
-        await safeAlert(`❌ Ошибка: ${e.message}`);
-    }
-};
 
 // Очистка истории продаж
 window.clearPurchasesHistory = async function() {
