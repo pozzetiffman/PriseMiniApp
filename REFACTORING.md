@@ -2,9 +2,9 @@
 
 ## Статус рефакторинга
 
-**Текущий размер файла:** ~610 строк (после выгрузки категорий, products, product-edit, reservations, orders, purchases и filters)  
+**Текущий размер файла:** ~610 строк (после выгрузки категорий, products, product-edit, reservations, orders, purchases, filters и modals)  
 **Целевой размер:** ~800–900 строк  
-**Выгружено:** ~2300+ строк (7 модулей: categories, products, product-edit, reservations, orders, purchases, filters)
+**Выгружено:** ~2400+ строк (8 модулей: categories, products, product-edit, reservations, orders, purchases, filters, modals)
 
 ---
 
@@ -97,11 +97,11 @@
 
 ---
 
-### ⏳ 8. Модуль "modals.js" (настройка модальных окон)
+### ✅ 8. Модуль "modals.js" (настройка модальных окон) - **ВЫПОЛНЕНО**
 
-- ⏳ `setupModals()` — настройка модальных окон (~138 строк)
+- ✅ `setupModals()` — настройка модальных окон (~138 строк) - **ВЫПОЛНЕНО** (старый код удалён)
 
-**Статус:** Не начато
+**Статус:** ✅ **ВЫПОЛНЕНО** (1/1 функций) - старый код удалён
 
 ---
 
@@ -119,7 +119,7 @@
 - **Всего функций:** ~38
 - **Приблизительный объем кода для выгрузки:** ~2500+ строк
 - **Текущий размер файла:** ~610 строк (было 2939)
-- **Выгружено:** ~2300+ строк (7 модулей: categories, products, product-edit, reservations, orders, purchases, filters)
+- **Выгружено:** ~2400+ строк (8 модулей: categories, products, product-edit, reservations, orders, purchases, filters, modals)
 - **После выгрузки останется:** ~600–700 строк (инициализация, глобальные переменные, координация модулей)
 
 ---
@@ -133,8 +133,8 @@
 5. ✅ **orders.js** - ВЫПОЛНЕНО
 6. ✅ **purchases.js** - ВЫПОЛНЕНО
 7. ✅ **filters.js** - ВЫПОЛНЕНО
-8. ⏳ **modals.js** - СЛЕДУЮЩИЙ
-9. ⏳ **data.js**
+8. ✅ **modals.js** - ВЫПОЛНЕНО
+9. ⏳ **data.js** - СЛЕДУЮЩИЙ
 
 ---
 

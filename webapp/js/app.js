@@ -21,11 +21,13 @@ import { deleteProduct, initProductEditDependencies, markAsSold, showEditProduct
 // Импорт функций резерваций из отдельного модуля (рефакторинг)
 import { cancelReservation, initReservationsDependencies, showReservationModal } from './reservations.js';
 // Импорт функций заказов из отдельного модуля (рефакторинг)
-import { initOrdersDependencies, resetOrderForm, showOrderModal, showOrderStep } from './orders.js';
+import { initOrdersDependencies, showOrderModal } from './orders.js';
 // Импорт функций продаж из отдельного модуля (рефакторинг)
 import { initPurchasesDependencies, showPurchaseModal } from './purchases.js';
 // Импорт функций фильтров из отдельного модуля (рефакторинг)
 import { applyFilters, initFilters, initFiltersDependencies, updateProductFilterOptions } from './filters.js';
+// Импорт функций настройки модальных окон из отдельного модуля (рефакторинг)
+import { initModalsDependencies, setupModals } from './modals.js';
 
 // Глобальные переменные
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
@@ -321,6 +323,27 @@ window.updateShopNameInHeader = async function updateShopNameInHeader() {
     }
 }
     
+    // 4.7 Инициализируем зависимости для модуля модальных окон
+    initModalsDependencies({
+        modal: modal,
+        modalClose: modalClose,
+        reservationModal: reservationModal,
+        reservationClose: reservationClose,
+        orderModal: orderModal,
+        orderClose: orderClose,
+        sellModal: sellModal,
+        sellClose: sellClose,
+        // Геттеры/сеттеры для переменных состояния модального окна товара
+        currentImagesGetter: () => currentImages,
+        currentImagesSetter: (val) => { currentImages = val; },
+        currentImageIndexGetter: () => currentImageIndex,
+        currentImageIndexSetter: (val) => { currentImageIndex = val; },
+        currentProductGetter: () => currentProduct,
+        currentProductSetter: (val) => { currentProduct = val; },
+        currentImageLoadIdGetter: () => currentImageLoadId,
+        currentImageLoadIdSetter: (val) => { currentImageLoadId = val; }
+    });
+    
     // 6. Настраиваем обработчики модальных окон
     setupModals();
     
@@ -461,144 +484,6 @@ window.loadData = async function loadData() {
 // Показ изображения в модальном окне
 
 // Настройка модальных окон
-function setupModals() {
-    // Функция для очистки состояния модального окна товара
-    const cleanupProductModal = () => {
-        console.log('[MODAL] cleanupProductModal called');
-        const modalImage = document.getElementById('modal-image');
-        if (modalImage) {
-            // Очищаем blob URL если был
-            const oldBlobUrl = modalImage.dataset.blobUrl;
-            if (oldBlobUrl) {
-                URL.revokeObjectURL(oldBlobUrl);
-                delete modalImage.dataset.blobUrl;
-            }
-            // Очищаем навигацию
-            const oldNav = modalImage.querySelector('.image-navigation');
-            if (oldNav) {
-                oldNav.remove();
-            }
-            // Полностью очищаем содержимое
-            modalImage.innerHTML = '';
-        }
-        // Сбрасываем состояние
-        currentImages = [];
-        currentImageIndex = 0;
-        currentProduct = null;
-        currentImageLoadId = 0; // Сбрасываем ID загрузки
-        console.log('[MODAL] State cleared');
-    };
-    
-    // Закрытие модального окна товара
-    modalClose.onclick = () => {
-        cleanupProductModal();
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-    };
-    
-    modal.onclick = (e) => {
-        if (e.target === modal) {
-            cleanupProductModal();
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-    };
-    
-    // Закрытие модального окна резервации
-    if (reservationClose) {
-        reservationClose.onclick = () => {
-            reservationModal.style.display = 'none';
-        };
-    }
-    
-    reservationModal.onclick = (e) => {
-        if (e.target === reservationModal) {
-            reservationModal.style.display = 'none';
-        }
-    };
-    
-    // Закрытие модального окна заказа
-    if (orderClose) {
-        orderClose.onclick = () => {
-            orderModal.style.display = 'none';
-            resetOrderForm();
-            showOrderStep(1);
-            orderModal.style.display = 'none';
-        };
-    }
-    
-    if (orderModal) {
-        orderModal.onclick = (e) => {
-            if (e.target === orderModal) {
-                orderModal.style.display = 'none';
-                resetOrderForm();
-                showOrderStep(1);
-            }
-        };
-    }
-    
-    // Закрытие модального окна продажи
-    if (sellClose) {
-        sellClose.onclick = () => {
-            sellModal.style.display = 'none';
-        };
-    }
-    
-    if (sellModal) {
-        sellModal.onclick = (e) => {
-            if (e.target === sellModal) {
-                sellModal.style.display = 'none';
-            }
-        };
-    }
-    
-    // Закрытие модального окна редактирования товара
-    const editProductModal = document.getElementById('edit-product-modal');
-    const editProductClose = document.querySelector('.edit-product-close');
-    if (editProductClose) {
-        editProductClose.onclick = () => {
-            editProductModal.style.display = 'none';
-        };
-    }
-    
-    if (editProductModal) {
-        editProductModal.onclick = (e) => {
-            if (e.target === editProductModal) {
-                editProductModal.style.display = 'none';
-            }
-        };
-    }
-    
-    // Закрытие по Escape
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            if (modal.style.display === 'block') {
-                modal.style.display = 'none';
-                document.body.style.overflow = 'auto';
-            }
-            if (reservationModal.style.display === 'block') {
-                reservationModal.style.display = 'none';
-            }
-            const cartModal = document.getElementById('cart-modal');
-            if (cartModal && cartModal.style.display === 'block') {
-                cartModal.style.display = 'none';
-            }
-            const adminModal = document.getElementById('admin-modal');
-            if (adminModal && adminModal.style.display === 'block') {
-                adminModal.style.display = 'none';
-            }
-            if (editProductModal && editProductModal.style.display === 'block') {
-                editProductModal.style.display = 'none';
-            }
-            if (sellModal && sellModal.style.display === 'block') {
-                sellModal.style.display = 'none';
-            }
-            if (orderModal && orderModal.style.display === 'block') {
-                orderModal.style.display = 'none';
-            }
-        }
-    });
-}
 
 // Функция setupAdminButton удалена - теперь используется setupProfileButton из profile.js
 
