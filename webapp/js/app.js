@@ -1,6 +1,6 @@
 // Главный файл приложения - инициализация и координация модулей
-import { getCurrentShopSettings, initAdmin, loadShopSettings } from './admin.js';
-import { API_BASE, fetchCategories, fetchProducts, getContext, getShopSettings, trackShopVisit } from './api.js';
+import { initAdmin, loadShopSettings } from './admin.js';
+import { getContext } from './api.js';
 import { initCart, loadCart, loadOrders, loadPurchases, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { initProfile, setupProfileButton } from './profile.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
@@ -10,7 +10,6 @@ import {
     // Импортируем переменные состояния категорий
     currentCategoryId,
     initCategoriesDependencies,
-    renderCategories,
     selectedCategoryIds,
     selectedMainCategoryId
 } from './categories.js';
@@ -28,6 +27,8 @@ import { initPurchasesDependencies, showPurchaseModal } from './purchases.js';
 import { applyFilters, initFilters, initFiltersDependencies, updateProductFilterOptions } from './filters.js';
 // Импорт функций настройки модальных окон из отдельного модуля (рефакторинг)
 import { initModalsDependencies, setupModals } from './modals.js';
+// Импорт функций загрузки данных из отдельного модуля (рефакторинг)
+import { initDataDependencies, loadData, updateShopNameInHeader } from './data.js';
 
 // Глобальные переменные
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
@@ -293,35 +294,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         userNameElement.innerText = "Прайс";
     }
-
-// Обновление заголовка с названием магазина
-window.updateShopNameInHeader = async function updateShopNameInHeader() {
-    if (appContext && appContext.role === 'client') {
-        // ВАЖНО: Всегда загружаем настройки заново для текущего магазина,
-        // чтобы избежать проблем с кэшированием настроек разных магазинов
-        const currentShopOwnerId = appContext.shop_owner_id;
-        console.log(`🏷️ Updating shop name header for shop_owner_id: ${currentShopOwnerId}`);
-        
-        try {
-            // Загружаем настройки заново для текущего магазина
-            const shopSettings = await getShopSettings(currentShopOwnerId);
-            console.log(`🏷️ Shop settings loaded for shop_owner_id ${currentShopOwnerId}:`, shopSettings);
-            
-            const shopName = shopSettings && shopSettings.shop_name ? shopSettings.shop_name : 'Магазин';
-            userNameElement.innerText = shopName; // Убираем эмодзи, показываем только название
-            
-            // Обновляем глобальную переменную для других частей приложения
-            await loadShopSettings(currentShopOwnerId);
-            console.log(`✅ Shop name header updated to: "${shopName}"`);
-        } catch (error) {
-            console.error(`❌ Error loading shop settings for header (shop_owner_id: ${currentShopOwnerId}):`, error);
-            // В случае ошибки используем кэшированные настройки или дефолт
-            const shopSettings = getCurrentShopSettings();
-            const shopName = shopSettings && shopSettings.shop_name ? shopSettings.shop_name : 'Магазин';
-            userNameElement.innerText = shopName;
-        }
-    }
-}
     
     // 4.7 Инициализируем зависимости для модуля модальных окон
     initModalsDependencies({
@@ -343,6 +315,19 @@ window.updateShopNameInHeader = async function updateShopNameInHeader() {
         currentImageLoadIdGetter: () => currentImageLoadId,
         currentImageLoadIdSetter: (val) => { currentImageLoadId = val; }
     });
+    
+    // 4.8 Инициализируем зависимости для модуля загрузки данных
+    initDataDependencies({
+        appContextGetter: () => appContext, // Функция-геттер для получения appContext
+        productsGridElement: productsGrid, // DOM элемент для отображения товаров
+        allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
+        allProductsSetter: (val) => { allProducts = val; }, // Функция-сеттер для установки allProducts
+        userNameElement: userNameElement // DOM элемент для отображения названия магазина
+    });
+    
+    // Делаем loadData и updateShopNameInHeader доступными через window для обратной совместимости с admin.js
+    window.loadData = loadData;
+    window.updateShopNameInHeader = updateShopNameInHeader;
     
     // 6. Настраиваем обработчики модальных окон
     setupModals();
@@ -380,118 +365,6 @@ window.updateShopNameInHeader = async function updateShopNameInHeader() {
         await updateCartUI();
     }, 500);
 });
-
-// Загрузка данных (категории и товары)
-window.loadData = async function loadData() {
-    console.log('🚀 loadData() called');
-    console.log('🚀 appContext:', appContext);
-    
-    if (!appContext) {
-        console.error('❌ loadData: appContext is null!');
-        productsGrid.innerHTML = '<p class="loading">Ошибка: контекст не загружен</p>';
-        return;
-    }
-
-    console.log('📦 Starting data load for shop_owner_id:', appContext.shop_owner_id);
-    productsGrid.innerHTML = '<p class="loading">Загрузка товаров...</p>';
-    
-    try {
-        console.log('📦 Loading data for shop_owner_id:', appContext.shop_owner_id);
-        console.log('📦 API_BASE:', API_BASE);
-        
-        // Загружаем категории для магазина (shop_owner_id)
-        // Используем bot_id из контекста для независимых магазинов
-        // bot_id может быть числом (например, 2) или null/undefined
-        let botId = null;
-        if (appContext.bot_id !== undefined && appContext.bot_id !== null) {
-            botId = appContext.bot_id;
-        }
-        console.log('📂 Step 1: Fetching categories...');
-        console.log('📂 appContext.bot_id:', appContext.bot_id, 'type:', typeof appContext.bot_id);
-        console.log('📂 Final botId:', botId, 'type:', typeof botId);
-        const categoriesUrl = `${API_BASE}/api/categories/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}`;
-        console.log('📂 Categories URL:', categoriesUrl);
-        // Загружаем категории с иерархией (flat=false для отображения)
-        const categories = await fetchCategories(appContext.shop_owner_id, botId, false);
-        console.log('✅ Step 1 complete: Categories loaded:', categories.length);
-        console.log('📂 Categories structure:', JSON.stringify(categories, null, 2));
-        if (categories && categories.length > 0) {
-            console.log('📂 First category:', categories[0]);
-            if (categories[0].subcategories) {
-                console.log('📂 First category subcategories:', categories[0].subcategories);
-            }
-        }
-        renderCategories(categories);
-        
-        // Загружаем товары для магазина (shop_owner_id)
-        // ВАЖНО: Загружаем ВСЕ товары без фильтрации по категории для работы фильтров
-        console.log('📦 Step 2: Fetching products...');
-        const productsUrl = `${API_BASE}/api/products/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}`;
-        console.log('📦 Products URL:', productsUrl);
-        console.log('📦 Using botId:', botId, 'for products');
-        const products = await fetchProducts(appContext.shop_owner_id, null, botId); // Загружаем все товары
-        console.log('✅ Step 2 complete: Products loaded:', products.length);
-        // Сохраняем все товары для фильтрации
-        allProducts = products;
-        // Обновляем опции фильтра на основе доступных товаров
-        updateProductFilterOptions();
-        // Применяем фильтры (если они активны)
-        applyFilters();
-        
-        // Отслеживаем общее посещение магазина (только для клиентов, не для владельца)
-        if (appContext && appContext.role === 'client' && appContext.shop_owner_id) {
-            trackShopVisit(appContext.shop_owner_id).catch(err => {
-                console.warn('Failed to track shop visit:', err);
-            });
-        }
-        
-        // Обновляем корзину
-        console.log('🛒 Step 3: Updating cart...');
-        await updateCartUI();
-        console.log('✅ Step 3 complete: Cart updated');
-        
-        console.log('✅✅✅ loadData() completed successfully!');
-    } catch (e) {
-        console.error("❌❌❌ Load Error:", e);
-        console.error("❌ Error details:", {
-            message: e.message,
-            stack: e.stack,
-            name: e.name
-        });
-        
-        // Формируем понятное сообщение об ошибке
-        let errorMessage = 'Ошибка загрузки магазина';
-        if (e.message) {
-            errorMessage = e.message;
-        } else if (e.name === 'TypeError' && e.message.includes('fetch')) {
-            errorMessage = 'Ошибка сети: не удалось подключиться к серверу. Проверьте подключение к интернету.';
-        } else if (e.message.includes('401') || e.message.includes('авторизац')) {
-            errorMessage = 'Ошибка авторизации. Убедитесь, что приложение открыто через Telegram-бота.';
-        } else if (e.message.includes('404') || e.message.includes('не найден')) {
-            errorMessage = 'Магазин не найден.';
-        }
-        
-        productsGrid.innerHTML = `<p class="loading">${errorMessage}</p>`;
-    }
-}
-
-// Показ модального окна товара
-
-
-// Функция showEditProductModal вынесена в product-edit.js
-
-// Сохранение изменений товара
-// Показ изображения в модальном окне
-
-// Настройка модальных окон
-
-// Функция setupAdminButton удалена - теперь используется setupProfileButton из profile.js
-
-
-
-
-
-// Удалить товар
 
 
 
