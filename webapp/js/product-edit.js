@@ -359,9 +359,16 @@ export async function saveProductEdit(productId) {
     // Для товаров с флагом продажа не парсим обычные поля
     let newPrice, newDiscount, newQuantity, newQuantityUnitGeneral, newMadeToOrder, quantityShowEnabledToSave;
     if (!isForSale) {
-        newPrice = parseFloat(editPriceInput.value);
-        newDiscount = parseFloat(editDiscountInput.value);
-        newQuantity = parseInt(editQuantityInput.value, 10);
+        // Парсим значения: если поле пустое или только пробелы, сохраняем null
+        // Если parseFloat/parseInt возвращает NaN, тоже сохраняем null
+        const priceVal = editPriceInput.value.trim();
+        newPrice = priceVal ? (isNaN(parseFloat(priceVal)) ? null : parseFloat(priceVal)) : null;
+        
+        const discountVal = editDiscountInput.value.trim();
+        newDiscount = discountVal ? (isNaN(parseFloat(discountVal)) ? null : parseFloat(discountVal)) : null;
+        
+        const quantityVal = editQuantityInput.value.trim();
+        newQuantity = quantityVal ? (isNaN(parseInt(quantityVal, 10)) ? null : parseInt(quantityVal, 10)) : null;
         // Получаем единицу измерения для обычных товаров
         newQuantityUnitGeneral = editQuantityUnitGeneralInput ? editQuantityUnitGeneralInput.value || null : null;
         // Получаем значение тумблера "Показ количества"
@@ -408,11 +415,21 @@ export async function saveProductEdit(productId) {
         const editQuantityUnitInput = document.getElementById('edit-quantity-unit');
         
         newPriceType = editPriceTypeRangeRadio && editPriceTypeRangeRadio.checked ? 'range' : 'fixed';
-        newPriceFrom = editPriceFromInput.value ? parseFloat(editPriceFromInput.value) : null;
-        newPriceTo = editPriceToInput.value ? parseFloat(editPriceToInput.value) : null;
-        newPriceFixed = editPriceFixedInput.value ? parseFloat(editPriceFixedInput.value) : null;
-        newQuantityFrom = editQuantityFromInput.value ? parseInt(editQuantityFromInput.value, 10) : null;
-        newQuantityUnit = editQuantityUnitInput.value || null;
+        // Парсим значения: если поле пустое или только пробелы, сохраняем null
+        // Если parseFloat/parseInt возвращает NaN, тоже сохраняем null
+        const priceFromVal = editPriceFromInput.value.trim();
+        newPriceFrom = priceFromVal ? (isNaN(parseFloat(priceFromVal)) ? null : parseFloat(priceFromVal)) : null;
+        
+        const priceToVal = editPriceToInput.value.trim();
+        newPriceTo = priceToVal ? (isNaN(parseFloat(priceToVal)) ? null : parseFloat(priceToVal)) : null;
+        
+        const priceFixedVal = editPriceFixedInput.value.trim();
+        newPriceFixed = priceFixedVal ? (isNaN(parseFloat(priceFixedVal)) ? null : parseFloat(priceFixedVal)) : null;
+        
+        const quantityFromVal = editQuantityFromInput.value.trim();
+        newQuantityFrom = quantityFromVal ? (isNaN(parseInt(quantityFromVal, 10)) ? null : parseInt(quantityFromVal, 10)) : null;
+        
+        newQuantityUnit = editQuantityUnitInput.value.trim() || null;
     }
     
     // Валидация
@@ -423,8 +440,9 @@ export async function saveProductEdit(productId) {
     
     // Валидация для обычных товаров
     if (!isForSale) {
-        if (isNaN(newPrice) || newPrice <= 0) {
-            alert('❌ Введите корректную цену (больше 0)');
+        // Разрешаем пустое значение (null) для цены - будет отображаться "Цена по запросу"
+        if (newPrice !== null && (isNaN(newPrice) || newPrice <= 0)) {
+            alert('❌ Введите корректную цену (больше 0) или оставьте пустым для "Цена по запросу"');
             return;
         }
         
@@ -453,8 +471,10 @@ export async function saveProductEdit(productId) {
                 return;
             }
         } else if (newPriceType === 'fixed') {
-            if (newPriceFixed === null || isNaN(newPriceFixed) || newPriceFixed < 0) {
-                alert('❌ Введите корректную фиксированную цену (0 или больше)');
+            // Разрешаем пустое значение (null) для фиксированной цены - будет отображаться "Цена по запросу"
+            // Если значение указано, проверяем что это валидное число >= 0
+            if (newPriceFixed !== null && (isNaN(newPriceFixed) || newPriceFixed < 0)) {
+                alert('❌ Введите корректную фиксированную цену (0 или больше) или оставьте пустым для "Цена по запросу"');
                 return;
             }
         }

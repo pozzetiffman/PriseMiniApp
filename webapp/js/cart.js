@@ -1,5 +1,7 @@
 // Модуль корзины
 import { API_BASE, fetchReservationsHistory, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, getMyPurchasesAPI, getOrdersHistoryAPI, getPurchasesHistoryAPI } from './api.js';
+// ========== REFACTORING STEP 1.1: priceUtils.js ==========
+import { getProductPriceDisplay } from './utils/priceUtils.js';
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -304,6 +306,11 @@ export async function loadCart() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
+                // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
+                const priceDisplay = getProductPriceDisplay(product);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Функция для формирования отображения цены с учетом is_for_sale
                 const getProductPriceDisplay = (prod) => {
                     const isForSale = prod.is_for_sale === true || 
@@ -359,6 +366,8 @@ export async function loadCart() {
                 };
                 
                 const priceDisplay = getProductPriceDisplay(product);
+                */
+                // ========== END REFACTORING STEP 1.1 ==========
                 
                 const cartItem = document.createElement('div');
                 cartItem.className = 'cart-item';
@@ -933,6 +942,11 @@ export async function loadOrders() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
+                // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
+                const priceDisplay = getProductPriceDisplay(product);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Функция для формирования отображения цены с учетом is_for_sale
                 const getProductPriceDisplay = (prod) => {
                     const isForSale = prod.is_for_sale === true || 
@@ -988,6 +1002,8 @@ export async function loadOrders() {
                 };
                 
                 const priceDisplay = getProductPriceDisplay(product);
+                */
+                // ========== END REFACTORING STEP 1.1 ==========
                 
                 const orderItem = document.createElement('div');
                 orderItem.className = 'cart-item';
@@ -1361,6 +1377,11 @@ export async function loadReservationsHistory() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
+                // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
+                const priceDisplay = getProductPriceDisplay(product);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Функция для формирования отображения цены с учетом is_for_sale
                 const getProductPriceDisplay = (prod) => {
                     const isForSale = prod.is_for_sale === true || 
@@ -1416,6 +1437,8 @@ export async function loadReservationsHistory() {
                 };
                 
                 const priceDisplay = getProductPriceDisplay(product);
+                */
+                // ========== END REFACTORING STEP 1.1 ==========
                 
                 const historyItem = document.createElement('div');
                 historyItem.className = 'cart-item';
@@ -1614,6 +1637,11 @@ export async function loadOrdersHistory() {
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
                 
+                // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
+                const priceDisplay = getProductPriceDisplay(product);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Функция для формирования отображения цены с учетом is_for_sale
                 const getProductPriceDisplay = (prod) => {
                     const isForSale = prod.is_for_sale === true || 
@@ -1669,6 +1697,8 @@ export async function loadOrdersHistory() {
                 };
                 
                 const priceDisplay = getProductPriceDisplay(product);
+                */
+                // ========== END REFACTORING STEP 1.1 ==========
                 
                 const historyItem = document.createElement('div');
                 historyItem.className = 'cart-item';

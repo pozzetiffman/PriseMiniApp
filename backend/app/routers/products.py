@@ -2135,16 +2135,20 @@ def update_price_discount(
             ).first()
             shop_name = shop_settings.shop_name if shop_settings and shop_settings.shop_name else "магазин"
             
-            final_price = price_discount_update.price * (1 - price_discount_update.discount / 100)
-            
             message = f"🔔 **Обновление в {shop_name}**\n\n"
             message += f"📦 Товар: {db_product.name}\n\n"
             
             if price_changed:
-                message += f"💰 **Новая цена:** {price_discount_update.price} ₽"
-                if old_price:
-                    message += f" (было: {old_price} ₽)"
-                message += "\n"
+                if price_discount_update.price is not None:
+                    message += f"💰 **Новая цена:** {price_discount_update.price} ₽"
+                    if old_price is not None:
+                        message += f" (было: {old_price} ₽)"
+                    message += "\n"
+                else:
+                    message += f"💰 **Цена:** Цена по запросу"
+                    if old_price is not None:
+                        message += f" (было: {old_price} ₽)"
+                    message += "\n"
             
             if discount_changed:
                 message += f"🎯 **Скидка:** {price_discount_update.discount}%"
@@ -2152,7 +2156,9 @@ def update_price_discount(
                     message += f" (было: {old_discount}%)"
                 message += "\n"
             
-            if price_discount_update.discount > 0:
+            # Вычисляем цену со скидкой только если цена указана
+            if price_discount_update.discount > 0 and price_discount_update.price is not None:
+                final_price = price_discount_update.price * (1 - price_discount_update.discount / 100)
                 message += f"\n💵 **Цена со скидкой:** {final_price:.0f} ₽"
             
             # Отправляем уведомления всем пользователям

@@ -5,6 +5,7 @@
 import { getCurrentShopSettings } from './admin.js';
 import { API_BASE, toggleHotOffer, trackShopVisit } from './api.js';
 import { getTelegramInstance } from './telegram.js';
+import { getProductPriceDisplay } from './utils/priceUtils.js';
 
 // Зависимости, которые будут переданы из app.js
 let productsGridElement = null;
@@ -517,47 +518,22 @@ export function renderProducts(products) {
         const priceSpan = document.createElement('span');
         priceSpan.className = 'product-price';
         
+        // Используем функцию из priceUtils.js для форматирования цены
+        const priceDisplay = getProductPriceDisplay(prod);
+        priceSpan.textContent = priceDisplay;
+        
+        // Старая цена при скидке (только для обычных товаров)
         const isForSaleCard = prod.is_for_sale === true || 
                          prod.is_for_sale === 1 || 
                          prod.is_for_sale === '1' ||
                          prod.is_for_sale === 'true' ||
                          String(prod.is_for_sale).toLowerCase() === 'true';
         
-        if (isForSaleCard) {
-            // Если включена функция продажа, показываем цену продажи
-            const priceType = prod.price_type || 'range';
-            if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
-                priceSpan.textContent = `${prod.price_fixed}р`;
-        } else if (priceType === 'range') {
-            // Проверяем, что значения не null и не undefined (но могут быть 0)
-            const priceFrom = (prod.price_from !== null && prod.price_from !== undefined) ? prod.price_from : null;
-            const priceTo = (prod.price_to !== null && prod.price_to !== undefined) ? prod.price_to : null;
-            
-            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
-            if (priceFrom !== null && priceTo !== null) {
-                priceSpan.textContent = `от ${priceFrom} до ${priceTo} р`;
-            } else if (priceFrom !== null) {
-                priceSpan.textContent = `от ${priceFrom} р`;
-            } else if (priceTo !== null) {
-                priceSpan.textContent = `до ${priceTo} р`;
-            } else {
-                priceSpan.textContent = 'Цена по запросу';
-            }
-            } else {
-                priceSpan.textContent = 'Цена по запросу';
-            }
-        } else {
-            // Обычная цена со скидкой
-            const finalPrice = prod.discount > 0 ? Math.round(prod.price * (1 - prod.discount / 100)) : prod.price;
-            priceSpan.textContent = `${finalPrice} ₽`;
-            
-            // Старая цена при скидке
-            if (prod.discount > 0) {
-                const oldPriceSpan = document.createElement('span');
-                oldPriceSpan.className = 'old-price';
-                oldPriceSpan.textContent = `${prod.price} ₽`;
-                priceContainer.appendChild(oldPriceSpan);
-            }
+        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
+            const oldPriceSpan = document.createElement('span');
+            oldPriceSpan.className = 'old-price';
+            oldPriceSpan.textContent = `${prod.price} ₽`;
+            priceContainer.appendChild(oldPriceSpan);
         }
         
         priceContainer.appendChild(priceSpan);
@@ -732,45 +708,22 @@ export function showProductModal(prod, finalPrice, fullImages) {
     const priceSpan = document.createElement('span');
     priceSpan.className = 'product-price';
     
-    // Определяем цену для отображения в модальном окне
+    // Используем функцию из priceUtils.js для форматирования цены
+    const priceDisplay = getProductPriceDisplay(prod);
+    priceSpan.textContent = priceDisplay;
+    
+    // Старая цена при скидке (только для обычных товаров)
     const isForSaleModal = prod.is_for_sale === true || 
                      prod.is_for_sale === 1 || 
                      prod.is_for_sale === '1' ||
                      prod.is_for_sale === 'true' ||
                      String(prod.is_for_sale).toLowerCase() === 'true';
     
-    if (isForSaleModal) {
-        // Если включена функция покупка, показываем цену покупки
-        const priceType = prod.price_type || 'range';
-        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
-            priceSpan.textContent = `${prod.price_fixed}р`;
-        } else if (priceType === 'range') {
-            const priceFrom = prod.price_from !== null && prod.price_from !== undefined ? prod.price_from : '';
-            const priceTo = prod.price_to !== null && prod.price_to !== undefined ? prod.price_to : '';
-            if (priceFrom && priceTo) {
-                priceSpan.textContent = `${priceFrom}-${priceTo}р`;
-            } else if (priceFrom) {
-                priceSpan.textContent = `${priceFrom}р`;
-            } else if (priceTo) {
-                priceSpan.textContent = `${priceTo}р`;
-            } else {
-                priceSpan.textContent = 'Цена по запросу';
-            }
-        } else {
-            priceSpan.textContent = 'Цена по запросу';
-        }
-    } else {
-        // Обычная цена со скидкой
-        const finalPrice = prod.discount > 0 ? Math.round(prod.price * (1 - prod.discount / 100)) : prod.price;
-        priceSpan.textContent = `${finalPrice} ₽`;
-        
-        // Старая цена при скидке
-        if (prod.discount > 0) {
-            const oldPriceSpan = document.createElement('span');
-            oldPriceSpan.className = 'old-price';
-            oldPriceSpan.textContent = `${prod.price} ₽`;
-            modalPriceContainer.appendChild(oldPriceSpan);
-        }
+    if (!isForSaleModal && prod.discount > 0 && prod.price != null && prod.price > 0) {
+        const oldPriceSpan = document.createElement('span');
+        oldPriceSpan.className = 'old-price';
+        oldPriceSpan.textContent = `${prod.price} ₽`;
+        modalPriceContainer.appendChild(oldPriceSpan);
     }
     
     modalPriceContainer.appendChild(priceSpan);

@@ -21,7 +21,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     description = Column(Text, nullable=True)
-    price = Column(Float)
+    price = Column(Float, nullable=True)  # Разрешаем null для "Цена по запросу"
     image_url = Column(String, nullable=True)  # Оставляем для обратной совместимости
     images_urls = Column(Text, nullable=True)  # JSON массив URL изображений (до 5 фото)
     discount = Column(Float, default=0.0)  # Скидка в процентах

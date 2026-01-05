@@ -4,7 +4,7 @@ from typing import Optional, List
 class ProductBase(BaseModel):
     name: str
     description: Optional[str] = None
-    price: float
+    price: Optional[float] = None  # Разрешаем null для "Цена по запросу"
     image_url: Optional[str] = None  # Для обратной совместимости
     images_urls: Optional[List[str]] = None  # Массив URL изображений (до 5 фото)
     discount: float = 0.0
@@ -36,8 +36,8 @@ class HotOfferUpdate(BaseModel):
     is_hot_offer: bool
 
 class PriceDiscountUpdate(BaseModel):
-    price: float
-    discount: float
+    price: Optional[float] = None  # Разрешаем null для "Цена по запросу"
+    discount: float = 0.0
 
 class NameDescriptionUpdate(BaseModel):
     name: str

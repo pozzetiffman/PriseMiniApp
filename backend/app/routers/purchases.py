@@ -72,11 +72,12 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
     return TELEGRAM_BOT_TOKEN
 
-def get_product_price_for_display(product: models.Product) -> float:
+def get_product_price_for_display(product: models.Product) -> Optional[float]:
     """
     Получить правильную цену товара для отображения.
     Для товаров с is_for_sale использует price_fixed или price_from.
     Для обычных товаров использует price со скидкой.
+    Возвращает None если цена не указана (Цена по запросу).
     """
     if product.is_for_sale:
         price_type = product.price_type or 'range'
@@ -86,10 +87,12 @@ def get_product_price_for_display(product: models.Product) -> float:
             return product.price_from
         elif price_type == 'range' and product.price_to is not None:
             return product.price_to
-        # Если нет цены для продажи, возвращаем обычную цену
+        # Если нет цены для продажи, возвращаем обычную цену (может быть None)
         return product.price
     else:
         # Обычная цена со скидкой
+        if product.price is None:
+            return None  # Цена по запросу
         if product.discount and product.discount > 0:
             return round(product.price * (1 - product.discount / 100), 2)
         return product.price
