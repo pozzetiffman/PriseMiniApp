@@ -2,6 +2,8 @@
 import { API_BASE, fetchReservationsHistory, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, getMyPurchasesAPI, getOrdersHistoryAPI, getPurchasesHistoryAPI } from './api.js';
 // ========== REFACTORING STEP 1.1: priceUtils.js ==========
 import { getProductPriceDisplay } from './utils/priceUtils.js';
+// ========== REFACTORING STEP 2.1, 2.2: imageUtils.js ==========
+import { createImageContainer, getProductImageUrl } from './utils/imageUtils.js';
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -293,6 +295,11 @@ export async function loadCart() {
                     }
                 }
                 
+                // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
+                const imageUrl = getProductImageUrl(product, API_BASE);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Определяем URL изображения
                 let imageUrl = null;
                 if (product.images_urls && product.images_urls.length > 0) {
@@ -305,6 +312,8 @@ export async function loadCart() {
                         ? product.image_url 
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
+                */
+                // ========== END REFACTORING STEP 2.1 ==========
                 
                 // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
                 const priceDisplay = getProductPriceDisplay(product);
@@ -372,6 +381,11 @@ export async function loadCart() {
                 const cartItem = document.createElement('div');
                 cartItem.className = 'cart-item';
                 
+                // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
+                const imageContainer = createImageContainer(imageUrl, product.name, '[CART IMG]');
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Создаем контейнер для изображения
                 const imageContainer = document.createElement('div');
                 imageContainer.className = 'cart-item-image-container';
@@ -427,6 +441,8 @@ export async function loadCart() {
                     placeholder.textContent = '📦';
                     imageContainer.appendChild(placeholder);
                 }
+                */
+                // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Показываем кнопку отмены только для активных резерваций
                 const cancelButton = diffMs > 0
@@ -929,6 +945,11 @@ export async function loadOrders() {
                 
                 const product = await productResponse.json();
                 
+                // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
+                const imageUrl = getProductImageUrl(product, API_BASE);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Определяем URL изображения
                 let imageUrl = null;
                 if (product.images_urls && product.images_urls.length > 0) {
@@ -941,6 +962,8 @@ export async function loadOrders() {
                         ? product.image_url 
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
+                */
+                // ========== END REFACTORING STEP 2.1 ==========
                 
                 // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
                 const priceDisplay = getProductPriceDisplay(product);
@@ -1008,6 +1031,11 @@ export async function loadOrders() {
                 const orderItem = document.createElement('div');
                 orderItem.className = 'cart-item';
                 
+                // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
+                const imageContainer = createImageContainer(imageUrl, product.name, '[ORDERS IMG]');
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Создаем контейнер для изображения
                 const imageContainer = document.createElement('div');
                 imageContainer.className = 'cart-item-image-container';
@@ -1060,6 +1088,8 @@ export async function loadOrders() {
                     placeholder.textContent = '📦';
                     imageContainer.appendChild(placeholder);
                 }
+                */
+                // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус заказа
                 let statusText = '';
@@ -1167,6 +1197,11 @@ export async function loadPurchases() {
                     continue;
                 }
                 
+                // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
+                const imageUrl = getProductImageUrl(product, API_BASE);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Определяем URL изображения
                 let imageUrl = null;
                 if (product.images_urls && product.images_urls.length > 0) {
@@ -1179,10 +1214,17 @@ export async function loadPurchases() {
                         ? product.image_url 
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
+                */
+                // ========== END REFACTORING STEP 2.1 ==========
                 
                 const purchaseItem = document.createElement('div');
                 purchaseItem.className = 'cart-item';
                 
+                // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
+                const imageContainer = createImageContainer(imageUrl, product.name, '[PURCHASES IMG]');
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 // Создаем контейнер для изображения
                 const imageContainer = document.createElement('div');
                 imageContainer.className = 'cart-item-image-container';
@@ -1235,6 +1277,8 @@ export async function loadPurchases() {
                     placeholder.textContent = '📦';
                     imageContainer.appendChild(placeholder);
                 }
+                */
+                // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус продажи
                 let statusText = '';
@@ -1365,6 +1409,11 @@ export async function loadReservationsHistory() {
                 
                 const product = await productResponse.json();
                 
+                // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
+                const imageUrl = getProductImageUrl(product, API_BASE);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 let imageUrl = null;
                 if (product.images_urls && product.images_urls.length > 0) {
                     const firstImage = product.images_urls[0];
@@ -1376,6 +1425,8 @@ export async function loadReservationsHistory() {
                         ? product.image_url 
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
+                */
+                // ========== END REFACTORING STEP 2.1 ==========
                 
                 // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
                 const priceDisplay = getProductPriceDisplay(product);
@@ -1443,6 +1494,11 @@ export async function loadReservationsHistory() {
                 const historyItem = document.createElement('div');
                 historyItem.className = 'cart-item';
                 
+                // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
+                const imageContainer = createImageContainer(imageUrl, product.name);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 const imageContainer = document.createElement('div');
                 imageContainer.className = 'cart-item-image-container';
                 
@@ -1484,6 +1540,8 @@ export async function loadReservationsHistory() {
                     placeholder.textContent = '📦';
                     imageContainer.appendChild(placeholder);
                 }
+                */
+                // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус резервации
                 let statusText = '';
@@ -1625,6 +1683,11 @@ export async function loadOrdersHistory() {
                 
                 const product = await productResponse.json();
                 
+                // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
+                const imageUrl = getProductImageUrl(product, API_BASE);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 let imageUrl = null;
                 if (product.images_urls && product.images_urls.length > 0) {
                     const firstImage = product.images_urls[0];
@@ -1636,6 +1699,8 @@ export async function loadOrdersHistory() {
                         ? product.image_url 
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
+                */
+                // ========== END REFACTORING STEP 2.1 ==========
                 
                 // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
                 const priceDisplay = getProductPriceDisplay(product);
@@ -1703,6 +1768,11 @@ export async function loadOrdersHistory() {
                 const historyItem = document.createElement('div');
                 historyItem.className = 'cart-item';
                 
+                // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
+                const imageContainer = createImageContainer(imageUrl, product.name);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 const imageContainer = document.createElement('div');
                 imageContainer.className = 'cart-item-image-container';
                 
@@ -1744,6 +1814,8 @@ export async function loadOrdersHistory() {
                     placeholder.textContent = '📦';
                     imageContainer.appendChild(placeholder);
                 }
+                */
+                // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус заказа
                 let statusText = '';
@@ -1872,6 +1944,11 @@ export async function loadPurchasesHistory() {
                     continue;
                 }
                 
+                // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
+                const imageUrl = getProductImageUrl(product, API_BASE);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 let imageUrl = null;
                 if (product.images_urls && product.images_urls.length > 0) {
                     const firstImage = product.images_urls[0];
@@ -1883,10 +1960,17 @@ export async function loadPurchasesHistory() {
                         ? product.image_url 
                         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
                 }
+                */
+                // ========== END REFACTORING STEP 2.1 ==========
                 
                 const historyItem = document.createElement('div');
                 historyItem.className = 'cart-item';
                 
+                // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
+                const imageContainer = createImageContainer(imageUrl, product.name);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                /*
                 const imageContainer = document.createElement('div');
                 imageContainer.className = 'cart-item-image-container';
                 
@@ -1928,6 +2012,8 @@ export async function loadPurchasesHistory() {
                     placeholder.textContent = '📦';
                     imageContainer.appendChild(placeholder);
                 }
+                */
+                // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус продажи
                 let statusText = '';
