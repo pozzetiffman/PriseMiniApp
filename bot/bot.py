@@ -33,24 +33,55 @@ if not TOKEN:
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# ========== REFACTORING STEP 2.1: get_bot_username ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .utils import get_bot_username
+except ImportError:
+    from utils import get_bot_username
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 # Кэш для username бота
 _bot_username = None
 
 async def get_bot_username():
-    """Получить username бота"""
+    \"\"\"Получить username бота\"\"\"
     global _bot_username
     if _bot_username is None:
         bot_info = await bot.get_me()
         _bot_username = bot_info.username
     return _bot_username
+"""
+# ========== END REFACTORING STEP 2.1 ==========
 
+# ========== REFACTORING STEP 2.2: get_bot_deeplink ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .utils import get_bot_deeplink
+except ImportError:
+    from utils import get_bot_deeplink
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 async def get_bot_deeplink(user_id: int):
-    """Получить deep link на бота с параметром для открытия витрины"""
+    \"\"\"Получить deep link на бота с параметром для открытия витрины\"\"\"
     username = await get_bot_username()
     return f"https://t.me/{username}?start=store_{user_id}"
+"""
+# ========== END REFACTORING STEP 2.2 ==========
 
+# ========== REFACTORING STEP 2.3: get_shop_name ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .utils import get_shop_name
+except ImportError:
+    from utils import get_shop_name
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 async def get_shop_name(user_id: int) -> str:
-    """Получить название магазина для пользователя"""
+    \"\"\"Получить название магазина для пользователя\"\"\"
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
@@ -61,9 +92,20 @@ async def get_shop_name(user_id: int) -> str:
                     return 'магазин'
     except:
         return 'магазин'
+"""
+# ========== END REFACTORING STEP 2.3 ==========
 
+# ========== REFACTORING STEP 2.4: get_shop_settings ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .utils import get_shop_settings
+except ImportError:
+    from utils import get_shop_settings
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 async def get_shop_settings(user_id: int) -> dict:
-    """Получить настройки магазина для пользователя"""
+    \"\"\"Получить настройки магазина для пользователя\"\"\"
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{API_URL}/shop-settings/", params={"shop_owner_id": user_id}) as resp:
@@ -73,13 +115,24 @@ async def get_shop_settings(user_id: int) -> dict:
                     return {}
     except:
         return {}
+"""
+# ========== END REFACTORING STEP 2.4 ==========
 
+# ========== REFACTORING STEP 2.5: send_shop_message ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .utils import send_shop_message
+except ImportError:
+    from utils import send_shop_message
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 async def send_shop_message(bot_or_message, chat_id_or_message, msg: str, reply_markup, shop_owner_id: int):
-    """
+    \"\"\"
     Отправить сообщение о магазине с фото, если оно есть.
     bot_or_message - объект bot или message
     chat_id_or_message - chat_id (для bot.send_message) или message (для message.answer)
-    """
+    \"\"\"
     shop_settings = await get_shop_settings(shop_owner_id)
     welcome_image_url = shop_settings.get('welcome_image_url')
     
@@ -116,12 +169,33 @@ async def send_shop_message(bot_or_message, chat_id_or_message, msg: str, reply_
                 reply_markup=reply_markup,
                 parse_mode="Markdown"
             )
+"""
+# ========== END REFACTORING STEP 2.5 ==========
 
-# Состояния для категорий и товаров
+# ========== REFACTORING STEP 1.1: AddCategory ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .states import AddCategory
+except ImportError:
+    from states import AddCategory
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 class AddCategory(StatesGroup):
     name = State()
     parent_choice = State()  # Выбор родительской категории (для подкатегорий)
+"""
+# ========== END REFACTORING STEP 1.1 ==========
 
+# ========== REFACTORING STEP 1.2: AddProduct ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .states import AddProduct
+except ImportError:
+    from states import AddProduct
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 class AddProduct(StatesGroup):
     name = State()
     product_type = State()  # Тип товара: обычный, под заказ, для покупки
@@ -139,31 +213,110 @@ class AddProduct(StatesGroup):
     is_hot_offer = State()  # Горящее предложение
     quantity_show_enabled = State()  # Показ количества товара
     photos = State()  # Состояние для загрузки нескольких фото
+"""
+# ========== END REFACTORING STEP 1.2 ==========
 
+# ========== REFACTORING STEP 1.3: AddChannel ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .states import AddChannel
+except ImportError:
+    from states import AddChannel
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 class AddChannel(StatesGroup):
     waiting_for_channel = State()
+"""
+# ========== END REFACTORING STEP 1.3 ==========
 
+# ========== REFACTORING STEP 1.4: SetShopName ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .states import SetShopName
+except ImportError:
+    from states import SetShopName
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 class SetShopName(StatesGroup):
     name = State()
+"""
+# ========== END REFACTORING STEP 1.4 ==========
 
+# ========== REFACTORING STEP 1.5: SetWelcomeImage ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .states import SetWelcomeImage
+except ImportError:
+    from states import SetWelcomeImage
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 class SetWelcomeImage(StatesGroup):
     image = State()
+"""
+# ========== END REFACTORING STEP 1.5 ==========
 
+# ========== REFACTORING STEP 1.6: SetWelcomeDescription ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .states import SetWelcomeDescription
+except ImportError:
+    from states import SetWelcomeDescription
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 class SetWelcomeDescription(StatesGroup):
     description = State()
+"""
+# ========== END REFACTORING STEP 1.6 ==========
 
+# ========== REFACTORING STEP 1.7: ConnectBot ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .states import ConnectBot
+except ImportError:
+    from states import ConnectBot
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 class ConnectBot(StatesGroup):
     token = State()
     web_app_name = State()  # Название Web App (создается через /newapp в BotFather)
+"""
+# ========== END REFACTORING STEP 1.7 ==========
 
+# Состояния для категорий и товаров
+
+# ========== REFACTORING STEP 2.6: is_command ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .utils import is_command
+except ImportError:
+    from utils import is_command
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 def is_command(text: str) -> bool:
-    """Проверяет, является ли текст командой"""
+    \"\"\"Проверяет, является ли текст командой\"\"\"
     if not text:
         return False
     return text.startswith('/') or text in ['/cancel', '/start', '/manage', '/post', '/mylink', '/getlink', '/connect']
+"""
+# ========== END REFACTORING STEP 2.6 ==========
 
+# ========== REFACTORING STEP 2.7: is_menu_button ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .utils import is_menu_button
+except ImportError:
+    from utils import is_menu_button
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 def is_menu_button(text: str) -> bool:
-    """Проверяет, является ли текст кнопкой меню"""
+    \"\"\"Проверяет, является ли текст кнопкой меню\"\"\"
     if not text:
         return False
     menu_buttons = [
@@ -180,12 +333,23 @@ def is_menu_button(text: str) -> bool:
         "🔗 Мои ссылки"
     ]
     return text in menu_buttons
+"""
+# ========== END REFACTORING STEP 2.7 ==========
 
+# ========== REFACTORING STEP 2.8: clear_state_if_needed ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .utils import clear_state_if_needed
+except ImportError:
+    from utils import clear_state_if_needed
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 async def clear_state_if_needed(message: Message, state: FSMContext, current_state=None):
-    """
+    \"\"\"
     Проверяет и очищает состояние FSM, если пользователь использует другую команду.
     Возвращает True, если состояние было очищено.
-    """
+    \"\"\"
     current_fsm_state = await state.get_state()
     
     # Если есть активное состояние и это не текущее состояние команды
@@ -197,7 +361,7 @@ async def clear_state_if_needed(message: Message, state: FSMContext, current_sta
         if "ConnectBot" in state_str:
             await state.clear()
             await message.answer(
-                "ℹ️ Процесс подключения бота отменен.\n\n"
+                "ℹ️ Процесс подключения бота отменен.\\n\\n"
                 "Вы можете начать заново, используя команду <code>/connect</code> или кнопку <b>🤖 Подключить бота</b>.",
                 parse_mode="HTML"
             )
@@ -238,6 +402,8 @@ async def clear_state_if_needed(message: Message, state: FSMContext, current_sta
             return True
     
     return False
+"""
+# ========== END REFACTORING STEP 2.8 ==========
 
 @dp.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
