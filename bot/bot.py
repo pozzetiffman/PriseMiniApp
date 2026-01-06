@@ -1937,6 +1937,24 @@ async def manage_channels(message: Message, state: FSMContext):
     await message.answer(text)
     await message.answer("Отправьте @username канала или перешлите сообщение из канала/группы:")
 
+# ========== REFACTORING STEP 5.19: delete_product_start ==========
+# TODO: REFACTORING STEP 5.19 - delete_product_start
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import delete_product_start
+except ImportError:
+    from handlers.products import delete_product_start
+
+# Удаление товара
+@dp.message(F.text == "🗑️ Удалить товар")
+async def delete_product_start_handler(message: Message, state: FSMContext):
+    """Обработчик начала удаления товара - вызывает функцию из handlers/products.py"""
+    await delete_product_start(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 # Удаление товара
 @dp.message(F.text == "🗑️ Удалить товар")
 async def delete_product_start(message: Message, state: FSMContext):
@@ -1971,7 +1989,26 @@ async def delete_product_start(message: Message, state: FSMContext):
     
     builder.adjust(1)
     await message.answer(text, reply_markup=builder.as_markup())
+"""
+# ========== END REFACTORING STEP 5.19 ==========
 
+# ========== REFACTORING STEP 5.20: delete_product_confirm ==========
+# TODO: REFACTORING STEP 5.20 - delete_product_confirm
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import delete_product_confirm
+except ImportError:
+    from handlers.products import delete_product_confirm
+
+@dp.callback_query(F.data.startswith("del_product_"))
+async def delete_product_confirm_handler(callback: types.CallbackQuery):
+    """Обработчик подтверждения удаления товара - вызывает функцию из handlers/products.py"""
+    await delete_product_confirm(callback)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(F.data.startswith("del_product_"))
 async def delete_product_confirm(callback: types.CallbackQuery):
     product_id = int(callback.data.split("_")[2])
@@ -1992,6 +2029,8 @@ async def delete_product_confirm(callback: types.CallbackQuery):
             else:
                 error_text = await resp.text()
                 await callback.answer(f"❌ Ошибка: {error_text}", show_alert=True)
+"""
+# ========== END REFACTORING STEP 5.20 ==========
 
 # Обработка добавления канала через @username
 @dp.message(F.text.startswith("@"))
@@ -2249,6 +2288,23 @@ async def delete_channel(callback: types.CallbackQuery):
                 error_text = await resp.text()
                 await callback.answer(f"❌ Ошибка: {error_text}", show_alert=True)
 
+# ========== REFACTORING STEP 5.1: start_add_product ==========
+# TODO: REFACTORING STEP 5.1 - start_add_product
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import start_add_product
+except ImportError:
+    from handlers.products import start_add_product
+
+@dp.message(F.text == "➕ Добавить товар")
+async def start_add_product_handler(message: Message, state: FSMContext):
+    """Обработчик для начала добавления товара - вызывает функцию из handlers/products.py"""
+    await start_add_product(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(F.text == "➕ Добавить товар")
 async def start_add_product(message: Message, state: FSMContext):
     # Проверяем и очищаем состояние, если пользователь был в процессе подключения бота
@@ -2256,7 +2312,26 @@ async def start_add_product(message: Message, state: FSMContext):
     await state.update_data(user_id=message.from_user.id)
     await state.set_state(AddProduct.name)
     await message.answer("Введите название товара:", reply_markup=types.ReplyKeyboardRemove())
+"""
+# ========== END REFACTORING STEP 5.1 ==========
 
+# ========== REFACTORING STEP 5.2: process_name ==========
+# TODO: REFACTORING STEP 5.2 - process_name
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_name
+except ImportError:
+    from handlers.products import process_name
+
+@dp.message(AddProduct.name)
+async def process_name_handler(message: Message, state: FSMContext):
+    """Обработчик названия товара - вызывает функцию из handlers/products.py"""
+    await process_name(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.name)
 async def process_name(message: Message, state: FSMContext):
     # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
@@ -2281,7 +2356,26 @@ async def process_name(message: Message, state: FSMContext):
         reply_markup=builder.as_markup(),
         parse_mode="HTML"
     )
+"""
+# ========== END REFACTORING STEP 5.2 ==========
 
+# ========== REFACTORING STEP 5.3: process_product_type ==========
+# TODO: REFACTORING STEP 5.3 - process_product_type
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_product_type
+except ImportError:
+    from handlers.products import process_product_type
+
+@dp.callback_query(StateFilter(AddProduct.product_type), F.data.startswith("product_type_"))
+async def process_product_type_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик типа товара - вызывает функцию из handlers/products.py"""
+    await process_product_type(callback, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(StateFilter(AddProduct.product_type), F.data.startswith("product_type_"))
 async def process_product_type(callback: types.CallbackQuery, state: FSMContext):
     product_type = callback.data.replace("product_type_", "")
@@ -2322,7 +2416,26 @@ async def process_product_type(callback: types.CallbackQuery, state: FSMContext)
         )
     
     await callback.answer()
+"""
+# ========== END REFACTORING STEP 5.3 ==========
 
+# ========== REFACTORING STEP 5.4: process_price_type ==========
+# TODO: REFACTORING STEP 5.4 - process_price_type
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_price_type
+except ImportError:
+    from handlers.products import process_price_type
+
+@dp.callback_query(StateFilter(AddProduct.price_type), F.data.startswith("price_type_"))
+async def process_price_type_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик типа цены - вызывает функцию из handlers/products.py"""
+    await process_price_type(callback, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(StateFilter(AddProduct.price_type), F.data.startswith("price_type_"))
 async def process_price_type(callback: types.CallbackQuery, state: FSMContext):
     price_type = callback.data.replace("price_type_", "")
@@ -2336,7 +2449,26 @@ async def process_price_type(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.answer("Введите фиксированную цену (число):")
     
     await callback.answer()
+"""
+# ========== END REFACTORING STEP 5.4 ==========
 
+# ========== REFACTORING STEP 5.5: process_price_from ==========
+# TODO: REFACTORING STEP 5.5 - process_price_from
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_price_from
+except ImportError:
+    from handlers.products import process_price_from
+
+@dp.message(AddProduct.price_from)
+async def process_price_from_handler(message: Message, state: FSMContext):
+    """Обработчик цены 'от' - вызывает функцию из handlers/products.py"""
+    await process_price_from(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.price_from)
 async def process_price_from(message: Message, state: FSMContext):
     if is_command(message.text or "") or is_menu_button(message.text or ""):
@@ -2349,7 +2481,26 @@ async def process_price_from(message: Message, state: FSMContext):
         await message.answer("Введите цену ДО (число):")
     except ValueError:
         await message.answer("Пожалуйста, введите число.")
+"""
+# ========== END REFACTORING STEP 5.5 ==========
 
+# ========== REFACTORING STEP 5.6: process_price_to ==========
+# TODO: REFACTORING STEP 5.6 - process_price_to
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_price_to
+except ImportError:
+    from handlers.products import process_price_to
+
+@dp.message(AddProduct.price_to)
+async def process_price_to_handler(message: Message, state: FSMContext):
+    """Обработчик цены 'до' - вызывает функцию из handlers/products.py"""
+    await process_price_to(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.price_to)
 async def process_price_to(message: Message, state: FSMContext):
     if is_command(message.text or "") or is_menu_button(message.text or ""):
@@ -2386,7 +2537,26 @@ async def process_price_to(message: Message, state: FSMContext):
         await message.answer("Выберите единицу измерения:", reply_markup=builder.as_markup())
     except ValueError:
         await message.answer("Пожалуйста, введите число.")
+"""
+# ========== END REFACTORING STEP 5.6 ==========
 
+# ========== REFACTORING STEP 5.7: process_price_fixed ==========
+# TODO: REFACTORING STEP 5.7 - process_price_fixed
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_price_fixed
+except ImportError:
+    from handlers.products import process_price_fixed
+
+@dp.message(AddProduct.price_fixed)
+async def process_price_fixed_handler(message: Message, state: FSMContext):
+    """Обработчик фиксированной цены - вызывает функцию из handlers/products.py"""
+    await process_price_fixed(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.price_fixed)
 async def process_price_fixed(message: Message, state: FSMContext):
     if is_command(message.text or "") or is_menu_button(message.text or ""):
@@ -2416,7 +2586,26 @@ async def process_price_fixed(message: Message, state: FSMContext):
         await message.answer("Выберите единицу измерения:", reply_markup=builder.as_markup())
     except ValueError:
         await message.answer("Пожалуйста, введите число.")
+"""
+# ========== END REFACTORING STEP 5.7 ==========
 
+# ========== REFACTORING STEP 5.8: process_quantity_from ==========
+# TODO: REFACTORING STEP 5.8 - process_quantity_from
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_quantity_from
+except ImportError:
+    from handlers.products import process_quantity_from
+
+@dp.message(AddProduct.quantity_from)
+async def process_quantity_from_handler(message: Message, state: FSMContext):
+    """Обработчик количества 'от' - вызывает функцию из handlers/products.py"""
+    await process_quantity_from(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.quantity_from)
 async def process_quantity_from(message: Message, state: FSMContext):
     if is_command(message.text or "") or is_menu_button(message.text or ""):
@@ -2450,7 +2639,26 @@ async def process_quantity_from(message: Message, state: FSMContext):
         )
     except ValueError:
         await message.answer("Пожалуйста, введите целое число.")
+"""
+# ========== END REFACTORING STEP 5.8 ==========
 
+# ========== REFACTORING STEP 5.9: process_quantity_unit ==========
+# TODO: REFACTORING STEP 5.9 - process_quantity_unit
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_quantity_unit
+except ImportError:
+    from handlers.products import process_quantity_unit
+
+@dp.callback_query(StateFilter(AddProduct.quantity_unit), F.data.startswith("unit_"))
+async def process_quantity_unit_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик единицы измерения - вызывает функцию из handlers/products.py"""
+    await process_quantity_unit(callback, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(StateFilter(AddProduct.quantity_unit), F.data.startswith("unit_"))
 async def process_quantity_unit(callback: types.CallbackQuery, state: FSMContext):
     unit = callback.data.replace("unit_", "")
@@ -2488,6 +2696,8 @@ async def process_quantity_unit(callback: types.CallbackQuery, state: FSMContext
         await callback.message.answer("Введите количество товара на складе:")
     
     await callback.answer()
+"""
+# ========== END REFACTORING STEP 5.9 ==========
 
 # ========== REFACTORING STEP 4.8: show_category_selection ==========
 # TODO: REFACTORING STEP 4.8 - show_category_selection
@@ -2557,6 +2767,23 @@ async def show_category_selection(callback_or_message, state: FSMContext):
 """
 # ========== END REFACTORING STEP 4.8 ==========
 
+# ========== REFACTORING STEP 5.10: process_quantity_show_enabled ==========
+# TODO: REFACTORING STEP 5.10 - process_quantity_show_enabled
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_quantity_show_enabled
+except ImportError:
+    from handlers.products import process_quantity_show_enabled
+
+@dp.callback_query(StateFilter(AddProduct.quantity_show_enabled), F.data.startswith("quantity_show_"))
+async def process_quantity_show_enabled_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик показа количества - вызывает функцию из handlers/products.py"""
+    await process_quantity_show_enabled(callback, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(StateFilter(AddProduct.quantity_show_enabled), F.data.startswith("quantity_show_"))
 async def process_quantity_show_enabled(callback: types.CallbackQuery, state: FSMContext):
     show_type = callback.data.replace("quantity_show_", "")
@@ -2584,7 +2811,26 @@ async def process_quantity_show_enabled(callback: types.CallbackQuery, state: FS
         await callback.message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
     
     await callback.answer()
+"""
+# ========== END REFACTORING STEP 5.10 ==========
 
+# ========== REFACTORING STEP 5.11: process_price ==========
+# TODO: REFACTORING STEP 5.11 - process_price
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_price
+except ImportError:
+    from handlers.products import process_price
+
+@dp.message(AddProduct.price)
+async def process_price_handler(message: Message, state: FSMContext):
+    """Обработчик цены - вызывает функцию из handlers/products.py"""
+    await process_price(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.price)
 async def process_price(message: Message, state: FSMContext):
     # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
@@ -2646,7 +2892,26 @@ async def process_price(message: Message, state: FSMContext):
         await message.answer("Выберите категорию или подкатегорию:", reply_markup=builder.as_markup())
     except ValueError:
         await message.answer("Пожалуйста, введите число.")
+"""
+# ========== END REFACTORING STEP 5.11 ==========
 
+# ========== REFACTORING STEP 5.12: process_category ==========
+# TODO: REFACTORING STEP 5.12 - process_category
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_category
+except ImportError:
+    from handlers.products import process_category
+
+@dp.callback_query(StateFilter(AddProduct.category))
+async def process_category_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик категории - вызывает функцию из handlers/products.py"""
+    await process_category(callback, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(StateFilter(AddProduct.category))
 async def process_category(callback: types.CallbackQuery, state: FSMContext):
     cat_id = int(callback.data.split("_")[1])
@@ -2664,7 +2929,26 @@ async def process_category(callback: types.CallbackQuery, state: FSMContext):
         reply_markup=builder.as_markup()
     )
     await callback.answer()
+"""
+# ========== END REFACTORING STEP 5.12 ==========
 
+# ========== REFACTORING STEP 5.13: process_hot_offer ==========
+# TODO: REFACTORING STEP 5.13 - process_hot_offer
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_hot_offer
+except ImportError:
+    from handlers.products import process_hot_offer
+
+@dp.callback_query(StateFilter(AddProduct.is_hot_offer), F.data.startswith("hot_offer_"))
+async def process_hot_offer_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик горящего предложения - вызывает функцию из handlers/products.py"""
+    await process_hot_offer(callback, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(StateFilter(AddProduct.is_hot_offer), F.data.startswith("hot_offer_"))
 async def process_hot_offer(callback: types.CallbackQuery, state: FSMContext):
     is_hot_offer = callback.data == "hot_offer_yes"
@@ -2685,7 +2969,26 @@ async def process_hot_offer(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.answer("Введите скидку на товар в % (если нет, введите 0):")
     
     await callback.answer()
+"""
+# ========== END REFACTORING STEP 5.13 ==========
 
+# ========== REFACTORING STEP 5.14: process_discount ==========
+# TODO: REFACTORING STEP 5.14 - process_discount
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_discount
+except ImportError:
+    from handlers.products import process_discount
+
+@dp.message(AddProduct.discount)
+async def process_discount_handler(message: Message, state: FSMContext):
+    """Обработчик скидки - вызывает функцию из handlers/products.py"""
+    await process_discount(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.discount)
 async def process_discount(message: Message, state: FSMContext):
     # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
@@ -2699,7 +3002,26 @@ async def process_discount(message: Message, state: FSMContext):
         await message.answer("Введите описание товара (или отправьте /skip чтобы пропустить):")
     except ValueError:
         await message.answer("Пожалуйста, введите число (например, 10 или 0).")
+"""
+# ========== END REFACTORING STEP 5.14 ==========
 
+# ========== REFACTORING STEP 5.15: process_description ==========
+# TODO: REFACTORING STEP 5.15 - process_description
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_description
+except ImportError:
+    from handlers.products import process_description
+
+@dp.message(AddProduct.description)
+async def process_description_handler(message: Message, state: FSMContext):
+    """Обработчик описания - вызывает функцию из handlers/products.py"""
+    await process_description(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.description)
 async def process_description(message: Message, state: FSMContext):
     # Если пользователь отправил команду (кроме /skip) или кнопку меню, не обрабатываем её здесь
@@ -2749,7 +3071,26 @@ async def process_description(message: Message, state: FSMContext):
             builder.adjust(3)  # По 3 кнопки в ряд
             
             await message.answer("Выберите единицу измерения:", reply_markup=builder.as_markup())
+"""
+# ========== END REFACTORING STEP 5.15 ==========
 
+# ========== REFACTORING STEP 5.16: process_quantity ==========
+# TODO: REFACTORING STEP 5.16 - process_quantity
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_quantity
+except ImportError:
+    from handlers.products import process_quantity
+
+@dp.message(AddProduct.quantity)
+async def process_quantity_handler(message: Message, state: FSMContext):
+    """Обработчик количества - вызывает функцию из handlers/products.py"""
+    await process_quantity(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.quantity)
 async def process_quantity(message: Message, state: FSMContext):
     # Если пользователь отправил команду или кнопку меню, не обрабатываем её здесь (обработчик команды/кнопки сбросит состояние)
@@ -2797,7 +3138,26 @@ async def process_quantity(message: Message, state: FSMContext):
             await message.answer("Отправьте фото товара (можно до 5 фото). После каждого фото напишите /done чтобы закончить, или /skip чтобы пропустить фото:")
     except ValueError:
         await message.answer("Пожалуйста, введите целое число (например, 10 или 0).")
+"""
+# ========== END REFACTORING STEP 5.16 ==========
 
+# ========== REFACTORING STEP 5.17: process_photos ==========
+# TODO: REFACTORING STEP 5.17 - process_photos
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_photos
+except ImportError:
+    from handlers.products import process_photos
+
+@dp.message(AddProduct.photos, F.photo)
+async def process_photos_handler(message: Message, state: FSMContext):
+    """Обработчик фото - вызывает функцию из handlers/products.py"""
+    await process_photos(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.photos, F.photo)
 async def process_photos(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -2874,7 +3234,26 @@ async def process_photos(message: Message, state: FSMContext):
             logging.error(f"Exception in process_photos: {e}", exc_info=True)
             await message.answer(f"❌ Ошибка при обработке фото: {str(e)}")
             break  # Для других ошибок не повторяем
+"""
+# ========== END REFACTORING STEP 5.17 ==========
 
+# ========== REFACTORING STEP 5.18: process_photos_done ==========
+# TODO: REFACTORING STEP 5.18 - process_photos_done
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_photos_done
+except ImportError:
+    from handlers.products import process_photos_done
+
+@dp.message(AddProduct.photos)
+async def process_photos_done_handler(message: Message, state: FSMContext):
+    """Обработчик завершения обработки фото - вызывает функцию из handlers/products.py"""
+    await process_photos_done(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(AddProduct.photos)
 async def process_photos_done(message: Message, state: FSMContext):
     # Если пользователь отправил команду (кроме /done и /skip) или кнопку меню, не обрабатываем её здесь
@@ -3010,6 +3389,8 @@ async def process_photos_done(message: Message, state: FSMContext):
             await cmd_manage(message, state)
     else:
         await message.answer("Отправьте фото товара, /done чтобы закончить, или /skip чтобы пропустить фото:")
+"""
+# ========== END REFACTORING STEP 5.18 ==========
 
 async def send_reservation_notification(product_owner_id: int, product_id: int, reserved_by_user_id: int, reserved_until: str, product_name: str):
     """Отправляет уведомление владельцу магазина о резервации товара"""
