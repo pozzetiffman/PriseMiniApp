@@ -26,6 +26,15 @@ const switchCartSubtab = switchCartSubtabFromModule;
 const updateCartTabsVisibility = updateCartTabsVisibilityFromModule;
 export { switchCartSubtab, switchCartTab, updateCartTabsVisibility };
 // ========== END REFACTORING STEP 6.1, 6.2, 6.3 ==========
+// ========== REFACTORING STEP 7.1, 7.2, 7.3: cartInit.js ==========
+// НОВЫЙ КОД (используется сейчас)
+    import { initCart as initCartFromModule, setupCartButton as setupCartButtonFromModule, setupCartModal as setupCartModalFromModule } from './cart/cartInit.js';
+// Используем функции внутри модуля
+const initCart = initCartFromModule;
+const setupCartButton = setupCartButtonFromModule;
+const setupCartModal = setupCartModalFromModule;
+export { initCart, setupCartButton, setupCartModal };
+// ========== END REFACTORING STEP 7.1, 7.2, 7.3 ==========
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -356,6 +365,12 @@ export async function loadCart() {
 */
 // ========== END REFACTORING STEP 5.1 ==========
 
+// ========== REFACTORING STEP 7.1: cartInit.js ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartInit.js
+// См. импорт в начале файла: import { initCart as initCartFromModule } from './cart/cartInit.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Инициализация корзины
 let cartInitInterval = null;
 
@@ -400,7 +415,15 @@ export function initCart() {
     
     console.log('🛒 ========== initCart END ==========');
 }
+*/
+// ========== END REFACTORING STEP 7.1 ==========
 
+// ========== REFACTORING STEP 7.2: cartInit.js ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartInit.js
+// См. импорт в начале файла: import { setupCartButton as setupCartButtonFromModule } from './cart/cartInit.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Настройка кнопки корзины
 export function setupCartButton() {
     initCartElements();
@@ -444,7 +467,15 @@ export function setupCartButton() {
         setTimeout(setupCartButton, 100);
     }
 }
+*/
+// ========== END REFACTORING STEP 7.2 ==========
 
+// ========== REFACTORING STEP 7.3: cartInit.js ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartInit.js
+// См. импорт в начале файла: import { setupCartModal as setupCartModalFromModule } from './cart/cartInit.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Настройка модального окна корзины
 export function setupCartModal() {
     const modal = document.getElementById('cart-modal');
@@ -511,6 +542,8 @@ export function setupCartModal() {
     
     console.log('✅ Cart modal initialized');
 }
+*/
+// ========== END REFACTORING STEP 7.3 ==========
 
 // ========== REFACTORING STEP 6.3: updateCartTabsVisibility() ==========
 // НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartTabs.js
