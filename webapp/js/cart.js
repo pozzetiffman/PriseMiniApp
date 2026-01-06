@@ -1,9 +1,31 @@
 // Модуль корзины
-import { API_BASE, fetchReservationsHistory, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, getMyPurchasesAPI, getOrdersHistoryAPI, getPurchasesHistoryAPI } from './api.js';
+import { fetchReservationsHistory, fetchUserReservations, getMyOrdersAPI, getMyPurchasesAPI, getOrdersHistoryAPI, getPurchasesHistoryAPI } from './api.js';
 // ========== REFACTORING STEP 1.1: priceUtils.js ==========
-import { getProductPriceDisplay } from './utils/priceUtils.js';
 // ========== REFACTORING STEP 2.1, 2.2: imageUtils.js ==========
-import { createImageContainer, getProductImageUrl } from './utils/imageUtils.js';
+// ========== REFACTORING STEP 3.1, 3.2: dateUtils.js ==========
+// ========== REFACTORING STEP 4.1, 4.2, 4.3: cartHistory.js ==========
+// НОВЫЙ КОД (используется сейчас)
+import { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory } from './cart/cartHistory.js';
+export { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory };
+// ========== END REFACTORING STEP 4.1, 4.2, 4.3 ==========
+// ========== REFACTORING STEP 5.1, 5.2, 5.3: cartActive.js ==========
+// НОВЫЙ КОД (используется сейчас)
+    import { loadCart as loadCartFromModule, loadOrders as loadOrdersFromModule, loadPurchases as loadPurchasesFromModule } from './cart/cartActive.js';
+// Используем функции внутри модуля
+const loadCart = loadCartFromModule;
+const loadOrders = loadOrdersFromModule;
+const loadPurchases = loadPurchasesFromModule;
+export { loadCart, loadOrders, loadPurchases };
+// ========== END REFACTORING STEP 5.1, 5.2, 5.3 ==========
+// ========== REFACTORING STEP 6.1, 6.2, 6.3: cartTabs.js ==========
+// НОВЫЙ КОД (используется сейчас)
+    import { switchCartSubtab as switchCartSubtabFromModule, switchCartTab as switchCartTabFromModule, updateCartTabsVisibility as updateCartTabsVisibilityFromModule } from './cart/cartTabs.js';
+// Используем функции внутри модуля
+const switchCartTab = switchCartTabFromModule;
+const switchCartSubtab = switchCartSubtabFromModule;
+const updateCartTabsVisibility = updateCartTabsVisibilityFromModule;
+export { switchCartSubtab, switchCartTab, updateCartTabsVisibility };
+// ========== END REFACTORING STEP 6.1, 6.2, 6.3 ==========
 
 // Элементы DOM корзины
 let cartButton = null;
@@ -196,6 +218,12 @@ export async function updateCartUI() {
     console.log('🛒🛒🛒 ========== updateCartUI END ==========');
 }
 
+// ========== REFACTORING STEP 5.1: cartActive.js ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartActive.js
+// См. импорт в начале файла: import { loadCart as loadCartFromModule } from './cart/cartActive.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Загрузка содержимого корзины
 export async function loadCart() {
     const cartItems = document.getElementById('cart-items');
@@ -255,194 +283,28 @@ export async function loadCart() {
                 const product = await productResponse.json();
                 console.log('🛒 loadCart: Found product:', product.name, 'id:', product.id);
                 
-                // Backend возвращает время в UTC через isoformat()
-                // Парсим время правильно (если нет Z в конце, добавляем его для UTC)
-                let reservedUntilStr = reservation.reserved_until;
-                if (reservedUntilStr && !reservedUntilStr.endsWith('Z') && !reservedUntilStr.includes('+') && !reservedUntilStr.includes('-', 10)) {
-                    // Если время без указания часового пояса, считаем его UTC
-                    reservedUntilStr = reservedUntilStr + 'Z';
-                }
-                const reservedUntil = new Date(reservedUntilStr);
-                const now = new Date();
-                const diffMs = reservedUntil.getTime() - now.getTime();
+                // Использование импортированных функций (все уже вынесены в утилиты)
+                const timeText = calculateReservationTimeLeft(reservation.reserved_until);
                 
-                // Объявляем переменную timeText
-                let timeText;
-                
-                // Проверяем, что время еще не истекло
-                if (diffMs <= 0) {
-                    timeText = 'Резервация истекла';
-                } else {
-                    // Вычисляем точное оставшееся время
-                    const totalSeconds = Math.floor(diffMs / 1000);
-                    const totalMinutes = Math.floor(totalSeconds / 60);
-                    const hoursLeft = Math.floor(totalMinutes / 60);
-                    const minutesLeft = totalMinutes % 60;
-                    
-                    // Показываем точное время до истечения резервации
-                    if (hoursLeft >= 1) {
-                        // Если есть минуты, показываем их тоже
-                        if (minutesLeft > 0) {
-                            timeText = `${hoursLeft} ${hoursLeft === 1 ? 'час' : hoursLeft < 5 ? 'часа' : 'часов'} ${minutesLeft} ${minutesLeft === 1 ? 'минута' : minutesLeft < 5 ? 'минуты' : 'минут'}`;
-                        } else {
-                            timeText = `${hoursLeft} ${hoursLeft === 1 ? 'час' : hoursLeft < 5 ? 'часа' : 'часов'}`;
-                        }
-                    } else if (totalMinutes > 0) {
-                        // Если меньше часа, показываем минуты
-                        timeText = `${totalMinutes} ${totalMinutes === 1 ? 'минута' : totalMinutes < 5 ? 'минуты' : 'минут'}`;
-                    } else {
-                        timeText = 'менее минуты';
+                // Вычисляем diffMs отдельно для кнопки отмены (нужно для проверки, показывать ли кнопку)
+                let diffMs = 0;
+                if (reservation.reserved_until) {
+                    let reservedUntilStr = reservation.reserved_until;
+                    if (!reservedUntilStr.endsWith('Z') && !reservedUntilStr.includes('+') && !reservedUntilStr.includes('-', 10)) {
+                        reservedUntilStr = reservedUntilStr + 'Z';
                     }
+                    const reservedUntil = new Date(reservedUntilStr);
+                    const now = new Date();
+                    diffMs = reservedUntil.getTime() - now.getTime();
                 }
                 
-                // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
                 const imageUrl = getProductImageUrl(product, API_BASE);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                // Определяем URL изображения
-                let imageUrl = null;
-                if (product.images_urls && product.images_urls.length > 0) {
-                    const firstImage = product.images_urls[0];
-                    imageUrl = firstImage.startsWith('http') 
-                        ? firstImage 
-                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
-                } else if (product.image_url) {
-                    imageUrl = product.image_url.startsWith('http') 
-                        ? product.image_url 
-                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
-                }
-                */
-                // ========== END REFACTORING STEP 2.1 ==========
-                
-                // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
                 const priceDisplay = getProductPriceDisplay(product);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                // Функция для формирования отображения цены с учетом is_for_sale
-                const getProductPriceDisplay = (prod) => {
-                    const isForSale = prod.is_for_sale === true || 
-                                     prod.is_for_sale === 1 || 
-                                     prod.is_for_sale === '1' ||
-                                     prod.is_for_sale === 'true' ||
-                                     String(prod.is_for_sale).toLowerCase() === 'true';
-                    
-                    if (isForSale) {
-                        const priceType = prod.price_type || 'range';
-                        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
-                            return `${prod.price_fixed}р`;
-                        } else if (priceType === 'range') {
-                            // Для диапазона цен показываем "от X до Y р"
-                            // Обрабатываем значения: могут быть числами, строками, null, undefined
-                            let priceFrom = null;
-                            let priceTo = null;
-                            
-                            // Обрабатываем price_from: конвертируем в число, если возможно
-                            if (prod.price_from != null && prod.price_from !== '') {
-                                const fromNum = Number(prod.price_from);
-                                if (!isNaN(fromNum) && isFinite(fromNum)) {
-                                    priceFrom = fromNum;
-                                }
-                            }
-                            
-                            // Обрабатываем price_to: конвертируем в число, если возможно
-                            if (prod.price_to != null && prod.price_to !== '') {
-                                const toNum = Number(prod.price_to);
-                                if (!isNaN(toNum) && isFinite(toNum)) {
-                                    priceTo = toNum;
-                                }
-                            }
-                            
-                            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
-                            if (priceFrom != null && priceTo != null) {
-                                return `от ${priceFrom} до ${priceTo} р`;
-                            } else if (priceFrom != null) {
-                                return `от ${priceFrom} р`;
-                            } else if (priceTo != null) {
-                                return `до ${priceTo} р`;
-                            }
-                        }
-                        // Если нет цены, возвращаем "Цена по запросу"
-                        return 'Цена по запросу';
-                    } else {
-                        // Обычная цена со скидкой
-                        const finalPrice = prod.discount > 0 
-                            ? Math.round(prod.price * (1 - prod.discount / 100)) 
-                            : prod.price;
-                        return `${finalPrice} ₽`;
-                    }
-                };
-                
-                const priceDisplay = getProductPriceDisplay(product);
-                */
-                // ========== END REFACTORING STEP 1.1 ==========
                 
                 const cartItem = document.createElement('div');
                 cartItem.className = 'cart-item';
                 
-                // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
                 const imageContainer = createImageContainer(imageUrl, product.name, '[CART IMG]');
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                // Создаем контейнер для изображения
-                const imageContainer = document.createElement('div');
-                imageContainer.className = 'cart-item-image-container';
-                
-                if (imageUrl) {
-                    // Показываем placeholder во время загрузки
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '⏳';
-                    imageContainer.appendChild(placeholder);
-                    
-                    // Загружаем изображение через fetch для обхода блокировки Telegram WebView
-                    fetch(imageUrl, {
-                        headers: {
-                            'ngrok-skip-browser-warning': '69420'
-                        }
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.blob();
-                    })
-                    .then(blob => {
-                        const blobUrl = URL.createObjectURL(blob);
-                        const img = document.createElement('img');
-                        img.src = blobUrl;
-                        img.alt = product.name;
-                        img.className = 'cart-item-image';
-                        img.onerror = () => {
-                            URL.revokeObjectURL(blobUrl);
-                            placeholder.textContent = '📦';
-                            placeholder.style.display = 'flex';
-                            if (img.parentNode) {
-                                img.remove();
-                            }
-                        };
-                        img.onload = () => {
-                            if (placeholder.parentNode) {
-                                placeholder.remove();
-                            }
-                        };
-                        imageContainer.appendChild(img);
-                    })
-                    .catch(error => {
-                        console.error('[CART IMG] Fetch error:', error);
-                        placeholder.textContent = '📦';
-                    });
-                } else {
-                    // Нет изображения - показываем placeholder
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '📦';
-                    imageContainer.appendChild(placeholder);
-                }
-                */
-                // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Показываем кнопку отмены только для активных резерваций
                 const cancelButton = diffMs > 0
@@ -451,23 +313,7 @@ export async function loadCart() {
                        </div>`
                     : '';
 
-                // Дата создания резервации
-                let dateText = '';
-                if (reservation.created_at) {
-                    let dateStr = reservation.created_at;
-                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
-                        dateStr = dateStr + 'Z';
-                    }
-                    const createdDate = new Date(dateStr);
-                    dateText = createdDate.toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Europe/Moscow'
-                    });
-                }
+                const dateText = formatDateToMoscow(reservation.created_at);
 
                 cartItem.innerHTML = `
                     <div class="cart-item-info">
@@ -507,6 +353,8 @@ export async function loadCart() {
         cartItems.innerHTML = '<p class="loading">Ошибка загрузки корзины: ' + e.message + '</p>';
     }
 }
+*/
+// ========== END REFACTORING STEP 5.1 ==========
 
 // Инициализация корзины
 let cartInitInterval = null;
@@ -528,7 +376,9 @@ export function initCart() {
     // Обновляем корзину сразу
     updateCartUI().then(() => {
         console.log('✅ Cart initialized successfully');
-        loadCart();
+        // ========== REFACTORING STEP 5.1: Использование импортированной функции ==========
+        loadCart(updateCartUI);
+        // ========== END REFACTORING STEP 5.1 ==========
         
         // Очищаем предыдущий интервал, если был
         if (cartInitInterval) {
@@ -539,7 +389,9 @@ export function initCart() {
         cartInitInterval = setInterval(() => {
             console.log('🛒 Периодическое обновление корзины...');
             updateCartUI();
-            loadCart();
+            // ========== REFACTORING STEP 5.1: Использование импортированной функции ==========
+            loadCart(updateCartUI);
+            // ========== END REFACTORING STEP 5.1 ==========
         }, 30000);
     }).catch(err => {
         console.error('❌ Error initializing cart:', err);
@@ -554,23 +406,37 @@ export function setupCartButton() {
     initCartElements();
     if (cartButton) {
         cartButton.onclick = async () => {
-            if (cartModal) {
-                // Обновляем видимость вкладок перед открытием
-                const tabsData = await updateCartTabsVisibility();
-                
-                // Выбираем первую доступную вкладку
-                let defaultTab = 'reservations';
-                if (tabsData.hasReservations) {
-                    defaultTab = 'reservations';
-                } else if (tabsData.hasOrders) {
-                    defaultTab = 'orders';
-                } else if (tabsData.hasPurchases) {
-                    defaultTab = 'purchases';
+            try {
+                if (cartModal) {
+                    // Обновляем видимость вкладок перед открытием
+                    const tabsData = await updateCartTabsVisibility();
+                    
+                    // Выбираем первую доступную вкладку
+                    let defaultTab = 'reservations';
+                    if (tabsData.hasReservations) {
+                        defaultTab = 'reservations';
+                    } else if (tabsData.hasOrders) {
+                        defaultTab = 'orders';
+                    } else if (tabsData.hasPurchases) {
+                        defaultTab = 'purchases';
+                    }
+                    
+                    // Сначала открываем модальное окно, чтобы элементы DOM были доступны
+                    cartModal.style.display = 'block';
+                    
+                    // Затем инициализируем активную вкладку (после небольшой задержки для рендеринга)
+                    setTimeout(() => {
+                        try {
+                            switchCartTab(defaultTab);
+                        } catch (err) {
+                            console.error('❌ Error in switchCartTab:', err);
+                        }
+                    }, 50);
+                } else {
+                    console.error('❌ Cart modal not found');
                 }
-                
-                // Инициализируем активную вкладку при открытии корзины
-                switchCartTab(defaultTab);
-                cartModal.style.display = 'block';
+            } catch (err) {
+                console.error('❌ Error opening cart:', err);
             }
         };
         console.log('✅ Cart button click handler set up');
@@ -646,6 +512,12 @@ export function setupCartModal() {
     console.log('✅ Cart modal initialized');
 }
 
+// ========== REFACTORING STEP 6.3: updateCartTabsVisibility() ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartTabs.js
+// См. импорт в начале файла: import { updateCartTabsVisibility as updateCartTabsVisibilityFromModule } from './cart/cartTabs.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Проверка наличия данных и обновление видимости вкладок
 export async function updateCartTabsVisibility() {
     console.log('🛒 updateCartTabsVisibility: Checking data availability...');
@@ -767,7 +639,15 @@ export async function updateCartTabsVisibility() {
         return { hasReservations: true, hasOrders: true, hasPurchases: true }; // По умолчанию показываем все
     }
 }
+*/
+// ========== END REFACTORING STEP 6.3 ==========
 
+// ========== REFACTORING STEP 6.1: switchCartTab() ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartTabs.js
+// См. импорт в начале файла: import { switchCartTab as switchCartTabFromModule } from './cart/cartTabs.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Переключение вкладок корзины
 function switchCartTab(tabName) {
     console.log(`🛒 switchCartTab: switching to tab "${tabName}"`);
@@ -826,9 +706,17 @@ function switchCartTab(tabName) {
         switchCartSubtab('purchases-active');
     }
 }
+*/
+// ========== END REFACTORING STEP 6.1 ==========
 
+// ========== REFACTORING STEP 6.2: switchCartSubtab() ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartTabs.js
+// См. импорт в начале файла: import { switchCartSubtab as switchCartSubtabFromModule } from './cart/cartTabs.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Переключение подвкладок корзины
-function switchCartSubtab(subtabName) {
+export function switchCartSubtab(subtabName) {
     console.log(`🛒 switchCartSubtab: switching to subtab "${subtabName}"`);
     
     // Определяем основную вкладку по имени подвкладки
@@ -876,10 +764,20 @@ function switchCartSubtab(subtabName) {
         // Загружаем данные
         if (mainTab === 'reservations') {
             console.log('🛒 Loading active reservations...');
-            loadCart();
+            // ========== REFACTORING STEP 5.1: Использование импортированной функции ==========
+            try {
+                loadCart().catch(err => {
+                    console.error('❌ Error in loadCart:', err);
+                });
+            } catch (err) {
+                console.error('❌ Error calling loadCart:', err);
+            }
+            // ========== END REFACTORING STEP 5.1 ==========
         } else if (mainTab === 'orders') {
             console.log('🛒 Loading active orders...');
+            // ========== REFACTORING STEP 5.2: Использование импортированной функции ==========
             loadOrders();
+            // ========== END REFACTORING STEP 5.2 ==========
         } else if (mainTab === 'purchases') {
             console.log('🛒 Loading active sales...');
             loadPurchases();
@@ -901,7 +799,15 @@ function switchCartSubtab(subtabName) {
         }
     }
 }
+*/
+// ========== END REFACTORING STEP 6.2 ==========
 
+// ========== REFACTORING STEP 5.2: loadOrders() ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartActive.js
+// См. импорт в начале файла: import { loadOrders as loadOrdersFromModule } from './cart/cartActive.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Загрузка заказов
 export async function loadOrders() {
     console.log('🛒 loadOrders: Starting...');
@@ -945,151 +851,14 @@ export async function loadOrders() {
                 
                 const product = await productResponse.json();
                 
-                // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
+                // Использование импортированных функций (все уже вынесены в утилиты)
                 const imageUrl = getProductImageUrl(product, API_BASE);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                // Определяем URL изображения
-                let imageUrl = null;
-                if (product.images_urls && product.images_urls.length > 0) {
-                    const firstImage = product.images_urls[0];
-                    imageUrl = firstImage.startsWith('http') 
-                        ? firstImage 
-                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
-                } else if (product.image_url) {
-                    imageUrl = product.image_url.startsWith('http') 
-                        ? product.image_url 
-                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
-                }
-                */
-                // ========== END REFACTORING STEP 2.1 ==========
-                
-                // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
                 const priceDisplay = getProductPriceDisplay(product);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                // Функция для формирования отображения цены с учетом is_for_sale
-                const getProductPriceDisplay = (prod) => {
-                    const isForSale = prod.is_for_sale === true || 
-                                     prod.is_for_sale === 1 || 
-                                     prod.is_for_sale === '1' ||
-                                     prod.is_for_sale === 'true' ||
-                                     String(prod.is_for_sale).toLowerCase() === 'true';
-                    
-                    if (isForSale) {
-                        const priceType = prod.price_type || 'range';
-                        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
-                            return `${prod.price_fixed}р`;
-                        } else if (priceType === 'range') {
-                            // Для диапазона цен показываем "от X до Y р"
-                            // Обрабатываем значения: могут быть числами, строками, null, undefined
-                            let priceFrom = null;
-                            let priceTo = null;
-                            
-                            // Обрабатываем price_from: конвертируем в число, если возможно
-                            if (prod.price_from != null && prod.price_from !== '') {
-                                const fromNum = Number(prod.price_from);
-                                if (!isNaN(fromNum) && isFinite(fromNum)) {
-                                    priceFrom = fromNum;
-                                }
-                            }
-                            
-                            // Обрабатываем price_to: конвертируем в число, если возможно
-                            if (prod.price_to != null && prod.price_to !== '') {
-                                const toNum = Number(prod.price_to);
-                                if (!isNaN(toNum) && isFinite(toNum)) {
-                                    priceTo = toNum;
-                                }
-                            }
-                            
-                            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
-                            if (priceFrom != null && priceTo != null) {
-                                return `от ${priceFrom} до ${priceTo} р`;
-                            } else if (priceFrom != null) {
-                                return `от ${priceFrom} р`;
-                            } else if (priceTo != null) {
-                                return `до ${priceTo} р`;
-                            }
-                        }
-                        // Если нет цены, возвращаем "Цена по запросу"
-                        return 'Цена по запросу';
-                    } else {
-                        // Обычная цена со скидкой
-                        const finalPrice = prod.discount > 0 
-                            ? Math.round(prod.price * (1 - prod.discount / 100)) 
-                            : prod.price;
-                        return `${finalPrice} ₽`;
-                    }
-                };
-                
-                const priceDisplay = getProductPriceDisplay(product);
-                */
-                // ========== END REFACTORING STEP 1.1 ==========
                 
                 const orderItem = document.createElement('div');
                 orderItem.className = 'cart-item';
                 
-                // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
                 const imageContainer = createImageContainer(imageUrl, product.name, '[ORDERS IMG]');
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                // Создаем контейнер для изображения
-                const imageContainer = document.createElement('div');
-                imageContainer.className = 'cart-item-image-container';
-                
-                if (imageUrl) {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '⏳';
-                    imageContainer.appendChild(placeholder);
-                    
-                    fetch(imageUrl, {
-                        headers: {
-                            'ngrok-skip-browser-warning': '69420'
-                        }
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.blob();
-                    })
-                    .then(blob => {
-                        const blobUrl = URL.createObjectURL(blob);
-                        const img = document.createElement('img');
-                        img.src = blobUrl;
-                        img.alt = product.name;
-                        img.className = 'cart-item-image';
-                        img.onerror = () => {
-                            URL.revokeObjectURL(blobUrl);
-                            placeholder.textContent = '📦';
-                            placeholder.style.display = 'flex';
-                            if (img.parentNode) {
-                                img.remove();
-                            }
-                        };
-                        img.onload = () => {
-                            if (placeholder.parentNode) {
-                                placeholder.remove();
-                            }
-                        };
-                        imageContainer.appendChild(img);
-                    })
-                    .catch(error => {
-                        console.error('[ORDERS IMG] Fetch error:', error);
-                        placeholder.textContent = '📦';
-                    });
-                } else {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '📦';
-                    imageContainer.appendChild(placeholder);
-                }
-                */
-                // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус заказа
                 let statusText = '';
@@ -1112,23 +881,8 @@ export async function loadOrders() {
                        </div>`
                     : '';
                 
-                // Дата создания заказа
-                let dateText = '';
-                if (order.created_at) {
-                    let dateStr = order.created_at;
-                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
-                        dateStr = dateStr + 'Z';
-                    }
-                    const orderDate = new Date(dateStr);
-                    dateText = orderDate.toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Europe/Moscow'
-                    });
-                }
+                // Использование импортированной функции для форматирования даты
+                const dateText = formatDateToMoscow(order.created_at);
                 
                 orderItem.innerHTML = `
                     <div class="cart-item-info">
@@ -1155,8 +909,17 @@ export async function loadOrders() {
         ordersItems.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
     }
 }
+*/
+// ========== END REFACTORING STEP 5.2 ==========
 
 // Загрузка продаж
+// ========== REFACTORING STEP 5.3: loadPurchases() ==========
+// НОВЫЙ КОД (используется сейчас)
+// См. импорт в начале файла: import { loadPurchases } from './cart/cartActive.js';
+// Функция экспортируется через: export { loadPurchases };
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 export async function loadPurchases() {
     console.log('🛒 loadPurchases: Starting...');
     const purchasesItems = document.getElementById('purchases-items');
@@ -1201,20 +964,18 @@ export async function loadPurchases() {
                 const imageUrl = getProductImageUrl(product, API_BASE);
                 
                 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
                 // Определяем URL изображения
-                let imageUrl = null;
-                if (product.images_urls && product.images_urls.length > 0) {
-                    const firstImage = product.images_urls[0];
-                    imageUrl = firstImage.startsWith('http') 
-                        ? firstImage 
-                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
-                } else if (product.image_url) {
-                    imageUrl = product.image_url.startsWith('http') 
-                        ? product.image_url 
-                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
-                }
-                */
+                // let imageUrl = null;
+                // if (product.images_urls && product.images_urls.length > 0) {
+                //     const firstImage = product.images_urls[0];
+                //     imageUrl = firstImage.startsWith('http') 
+                //         ? firstImage 
+                //         : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
+                // } else if (product.image_url) {
+                //     imageUrl = product.image_url.startsWith('http') 
+                //         ? product.image_url 
+                //         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
+                // }
                 // ========== END REFACTORING STEP 2.1 ==========
                 
                 const purchaseItem = document.createElement('div');
@@ -1224,60 +985,58 @@ export async function loadPurchases() {
                 const imageContainer = createImageContainer(imageUrl, product.name, '[PURCHASES IMG]');
                 
                 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
                 // Создаем контейнер для изображения
-                const imageContainer = document.createElement('div');
-                imageContainer.className = 'cart-item-image-container';
-                
-                if (imageUrl) {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '⏳';
-                    imageContainer.appendChild(placeholder);
-                    
-                    fetch(imageUrl, {
-                        headers: {
-                            'ngrok-skip-browser-warning': '69420'
-                        }
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.blob();
-                    })
-                    .then(blob => {
-                        const blobUrl = URL.createObjectURL(blob);
-                        const img = document.createElement('img');
-                        img.src = blobUrl;
-                        img.alt = product.name;
-                        img.className = 'cart-item-image';
-                        img.onerror = () => {
-                            URL.revokeObjectURL(blobUrl);
-                            placeholder.textContent = '📦';
-                            placeholder.style.display = 'flex';
-                            if (img.parentNode) {
-                                img.remove();
-                            }
-                        };
-                        img.onload = () => {
-                            if (placeholder.parentNode) {
-                                placeholder.remove();
-                            }
-                        };
-                        imageContainer.appendChild(img);
-                    })
-                    .catch(error => {
-                        console.error('[PURCHASES IMG] Fetch error:', error);
-                        placeholder.textContent = '📦';
-                    });
-                } else {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '📦';
-                    imageContainer.appendChild(placeholder);
-                }
-                */
+                // const imageContainer = document.createElement('div');
+                // imageContainer.className = 'cart-item-image-container';
+                // 
+                // if (imageUrl) {
+                //     const placeholder = document.createElement('div');
+                //     placeholder.className = 'cart-item-image-placeholder';
+                //     placeholder.textContent = '⏳';
+                //     imageContainer.appendChild(placeholder);
+                //     
+                //     fetch(imageUrl, {
+                //         headers: {
+                //             'ngrok-skip-browser-warning': '69420'
+                //         }
+                //     })
+                //     .then(response => {
+                //         if (!response.ok) {
+                //             throw new Error(`HTTP error! status: ${response.status}`);
+                //         }
+                //         return response.blob();
+                //     })
+                //     .then(blob => {
+                //         const blobUrl = URL.createObjectURL(blob);
+                //         const img = document.createElement('img');
+                //         img.src = blobUrl;
+                //         img.alt = product.name;
+                //         img.className = 'cart-item-image';
+                //         img.onerror = () => {
+                //             URL.revokeObjectURL(blobUrl);
+                //             placeholder.textContent = '📦';
+                //             placeholder.style.display = 'flex';
+                //             if (img.parentNode) {
+                //                 img.remove();
+                //             }
+                //         };
+                //         img.onload = () => {
+                //             if (placeholder.parentNode) {
+                //                 placeholder.remove();
+                //             }
+                //         };
+                //         imageContainer.appendChild(img);
+                //     })
+                //     .catch(error => {
+                //         console.error('[PURCHASES IMG] Fetch error:', error);
+                //         placeholder.textContent = '📦';
+                //     });
+                // } else {
+                //     const placeholder = document.createElement('div');
+                //     placeholder.className = 'cart-item-image-placeholder';
+                //     placeholder.textContent = '📦';
+                //     imageContainer.appendChild(placeholder);
+                // }
                 // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус продажи
@@ -1301,23 +1060,29 @@ export async function loadPurchases() {
                        </div>`
                     : '';
                 
+                // ========== REFACTORING STEP 3.1: formatDateToMoscow ==========
+                // НОВЫЙ КОД (используется сейчас)
+                const dateText = formatDateToMoscow(purchase.created_at);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
                 // Дата создания продажи
-                let dateText = '';
-                if (purchase.created_at) {
-                    let dateStr = purchase.created_at;
-                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
-                        dateStr = dateStr + 'Z';
-                    }
-                    const purchaseDate = new Date(dateStr);
-                    dateText = purchaseDate.toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Europe/Moscow'
-                    });
-                }
+                // let dateText = '';
+                // if (purchase.created_at) {
+                //     let dateStr = purchase.created_at;
+                //     if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                //         dateStr = dateStr + 'Z';
+                //     }
+                //     const purchaseDate = new Date(dateStr);
+                //     dateText = purchaseDate.toLocaleString('ru-RU', {
+                //         day: '2-digit',
+                //         month: '2-digit',
+                //         year: 'numeric',
+                //         hour: '2-digit',
+                //         minute: '2-digit',
+                //         timeZone: 'Europe/Moscow'
+                //     });
+                // }
+                // ========== END REFACTORING STEP 3.1 ==========
                 
                 purchaseItem.innerHTML = `
                     <div class="cart-item-info">
@@ -1343,7 +1108,13 @@ export async function loadPurchases() {
         purchasesItems.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
     }
 }
+*/
+// ========== END REFACTORING STEP 5.3 ==========
 
+// ========== REFACTORING STEP 4.1: cartHistory.js ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+// Функция перенесена в cart/cartHistory.js
+/*
 // Загрузка истории резерваций
 export async function loadReservationsHistory() {
     console.log('🛒 loadReservationsHistory: Starting...');
@@ -1411,84 +1182,10 @@ export async function loadReservationsHistory() {
                 
                 // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
                 const imageUrl = getProductImageUrl(product, API_BASE);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                let imageUrl = null;
-                if (product.images_urls && product.images_urls.length > 0) {
-                    const firstImage = product.images_urls[0];
-                    imageUrl = firstImage.startsWith('http') 
-                        ? firstImage 
-                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
-                } else if (product.image_url) {
-                    imageUrl = product.image_url.startsWith('http') 
-                        ? product.image_url 
-                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
-                }
-                */
                 // ========== END REFACTORING STEP 2.1 ==========
                 
                 // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
                 const priceDisplay = getProductPriceDisplay(product);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                // Функция для формирования отображения цены с учетом is_for_sale
-                const getProductPriceDisplay = (prod) => {
-                    const isForSale = prod.is_for_sale === true || 
-                                     prod.is_for_sale === 1 || 
-                                     prod.is_for_sale === '1' ||
-                                     prod.is_for_sale === 'true' ||
-                                     String(prod.is_for_sale).toLowerCase() === 'true';
-                    
-                    if (isForSale) {
-                        const priceType = prod.price_type || 'range';
-                        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
-                            return `${prod.price_fixed}р`;
-                        } else if (priceType === 'range') {
-                            // Для диапазона цен показываем "от X до Y р"
-                            // Обрабатываем значения: могут быть числами, строками, null, undefined
-                            let priceFrom = null;
-                            let priceTo = null;
-                            
-                            // Обрабатываем price_from: конвертируем в число, если возможно
-                            if (prod.price_from != null && prod.price_from !== '') {
-                                const fromNum = Number(prod.price_from);
-                                if (!isNaN(fromNum) && isFinite(fromNum)) {
-                                    priceFrom = fromNum;
-                                }
-                            }
-                            
-                            // Обрабатываем price_to: конвертируем в число, если возможно
-                            if (prod.price_to != null && prod.price_to !== '') {
-                                const toNum = Number(prod.price_to);
-                                if (!isNaN(toNum) && isFinite(toNum)) {
-                                    priceTo = toNum;
-                                }
-                            }
-                            
-                            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
-                            if (priceFrom != null && priceTo != null) {
-                                return `от ${priceFrom} до ${priceTo} р`;
-                            } else if (priceFrom != null) {
-                                return `от ${priceFrom} р`;
-                            } else if (priceTo != null) {
-                                return `до ${priceTo} р`;
-                            }
-                        }
-                        // Если нет цены, возвращаем "Цена по запросу"
-                        return 'Цена по запросу';
-                    } else {
-                        // Обычная цена со скидкой
-                        const finalPrice = prod.discount > 0 
-                            ? Math.round(prod.price * (1 - prod.discount / 100)) 
-                            : prod.price;
-                        return `${finalPrice} ₽`;
-                    }
-                };
-                
-                const priceDisplay = getProductPriceDisplay(product);
-                */
                 // ========== END REFACTORING STEP 1.1 ==========
                 
                 const historyItem = document.createElement('div');
@@ -1496,51 +1193,6 @@ export async function loadReservationsHistory() {
                 
                 // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
                 const imageContainer = createImageContainer(imageUrl, product.name);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                const imageContainer = document.createElement('div');
-                imageContainer.className = 'cart-item-image-container';
-                
-                if (imageUrl) {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '⏳';
-                    imageContainer.appendChild(placeholder);
-                    
-                    fetch(imageUrl, {
-                        headers: {
-                            'ngrok-skip-browser-warning': '69420'
-                        }
-                    })
-                    .then(response => response.blob())
-                    .then(blob => {
-                        const blobUrl = URL.createObjectURL(blob);
-                        const img = document.createElement('img');
-                        img.src = blobUrl;
-                        img.alt = product.name;
-                        img.className = 'cart-item-image';
-                        img.onerror = () => {
-                            URL.revokeObjectURL(blobUrl);
-                            placeholder.textContent = '📦';
-                            placeholder.style.display = 'flex';
-                            if (img.parentNode) img.remove();
-                        };
-                        img.onload = () => {
-                            if (placeholder.parentNode) placeholder.remove();
-                        };
-                        imageContainer.appendChild(img);
-                    })
-                    .catch(() => {
-                        placeholder.textContent = '📦';
-                    });
-                } else {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '📦';
-                    imageContainer.appendChild(placeholder);
-                }
-                */
                 // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус резервации
@@ -1560,26 +1212,9 @@ export async function loadReservationsHistory() {
                     statusColor = '#4CAF50';
                 }
                 
-                // Дата создания
-                let dateText = '';
-                if (reservation.created_at) {
-                    // Время приходит в UTC, нужно явно указать это и конвертировать в московское время
-                    let dateStr = reservation.created_at;
-                    // Если строка не заканчивается на Z или +/-, добавляем Z для указания UTC
-                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
-                        dateStr = dateStr + 'Z';
-                    }
-                    const createdDate = new Date(dateStr);
-                    // Используем timeZone для автоматической конвертации UTC в московское время
-                    dateText = createdDate.toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Europe/Moscow'
-                    });
-                }
+                // ========== REFACTORING STEP 3.1: formatDateToMoscow ==========
+                const dateText = formatDateToMoscow(reservation.created_at);
+                // ========== END REFACTORING STEP 3.1 ==========
                 
                 historyItem.innerHTML = `
                     <div class="cart-item-info">
@@ -1617,7 +1252,13 @@ export async function loadReservationsHistory() {
         historyItems.appendChild(errorMessage);
     }
 }
+*/
+// ========== END REFACTORING STEP 4.1 ==========
 
+// ========== REFACTORING STEP 4.2: cartHistory.js ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+// Функция перенесена в cart/cartHistory.js
+/*
 // Загрузка истории заказов
 export async function loadOrdersHistory() {
     console.log('🛒 loadOrdersHistory: Starting...');
@@ -1685,84 +1326,10 @@ export async function loadOrdersHistory() {
                 
                 // ========== REFACTORING STEP 2.1: Использование импортированной функции ==========
                 const imageUrl = getProductImageUrl(product, API_BASE);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                let imageUrl = null;
-                if (product.images_urls && product.images_urls.length > 0) {
-                    const firstImage = product.images_urls[0];
-                    imageUrl = firstImage.startsWith('http') 
-                        ? firstImage 
-                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
-                } else if (product.image_url) {
-                    imageUrl = product.image_url.startsWith('http') 
-                        ? product.image_url 
-                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
-                }
-                */
                 // ========== END REFACTORING STEP 2.1 ==========
                 
                 // ========== REFACTORING STEP 1.1: Использование импортированной функции ==========
                 const priceDisplay = getProductPriceDisplay(product);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                // Функция для формирования отображения цены с учетом is_for_sale
-                const getProductPriceDisplay = (prod) => {
-                    const isForSale = prod.is_for_sale === true || 
-                                     prod.is_for_sale === 1 || 
-                                     prod.is_for_sale === '1' ||
-                                     prod.is_for_sale === 'true' ||
-                                     String(prod.is_for_sale).toLowerCase() === 'true';
-                    
-                    if (isForSale) {
-                        const priceType = prod.price_type || 'range';
-                        if (priceType === 'fixed' && prod.price_fixed !== null && prod.price_fixed !== undefined) {
-                            return `${prod.price_fixed}р`;
-                        } else if (priceType === 'range') {
-                            // Для диапазона цен показываем "от X до Y р"
-                            // Обрабатываем значения: могут быть числами, строками, null, undefined
-                            let priceFrom = null;
-                            let priceTo = null;
-                            
-                            // Обрабатываем price_from: конвертируем в число, если возможно
-                            if (prod.price_from != null && prod.price_from !== '') {
-                                const fromNum = Number(prod.price_from);
-                                if (!isNaN(fromNum) && isFinite(fromNum)) {
-                                    priceFrom = fromNum;
-                                }
-                            }
-                            
-                            // Обрабатываем price_to: конвертируем в число, если возможно
-                            if (prod.price_to != null && prod.price_to !== '') {
-                                const toNum = Number(prod.price_to);
-                                if (!isNaN(toNum) && isFinite(toNum)) {
-                                    priceTo = toNum;
-                                }
-                            }
-                            
-                            // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
-                            if (priceFrom != null && priceTo != null) {
-                                return `от ${priceFrom} до ${priceTo} р`;
-                            } else if (priceFrom != null) {
-                                return `от ${priceFrom} р`;
-                            } else if (priceTo != null) {
-                                return `до ${priceTo} р`;
-                            }
-                        }
-                        // Если нет цены, возвращаем "Цена по запросу"
-                        return 'Цена по запросу';
-                    } else {
-                        // Обычная цена со скидкой
-                        const finalPrice = prod.discount > 0 
-                            ? Math.round(prod.price * (1 - prod.discount / 100)) 
-                            : prod.price;
-                        return `${finalPrice} ₽`;
-                    }
-                };
-                
-                const priceDisplay = getProductPriceDisplay(product);
-                */
                 // ========== END REFACTORING STEP 1.1 ==========
                 
                 const historyItem = document.createElement('div');
@@ -1770,51 +1337,6 @@ export async function loadOrdersHistory() {
                 
                 // ========== REFACTORING STEP 2.2: Использование импортированной функции ==========
                 const imageContainer = createImageContainer(imageUrl, product.name);
-                
-                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                const imageContainer = document.createElement('div');
-                imageContainer.className = 'cart-item-image-container';
-                
-                if (imageUrl) {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '⏳';
-                    imageContainer.appendChild(placeholder);
-                    
-                    fetch(imageUrl, {
-                        headers: {
-                            'ngrok-skip-browser-warning': '69420'
-                        }
-                    })
-                    .then(response => response.blob())
-                    .then(blob => {
-                        const blobUrl = URL.createObjectURL(blob);
-                        const img = document.createElement('img');
-                        img.src = blobUrl;
-                        img.alt = product.name;
-                        img.className = 'cart-item-image';
-                        img.onerror = () => {
-                            URL.revokeObjectURL(blobUrl);
-                            placeholder.textContent = '📦';
-                            placeholder.style.display = 'flex';
-                            if (img.parentNode) img.remove();
-                        };
-                        img.onload = () => {
-                            if (placeholder.parentNode) placeholder.remove();
-                        };
-                        imageContainer.appendChild(img);
-                    })
-                    .catch(() => {
-                        placeholder.textContent = '📦';
-                    });
-                } else {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '📦';
-                    imageContainer.appendChild(placeholder);
-                }
-                */
                 // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус заказа
@@ -1831,26 +1353,9 @@ export async function loadOrdersHistory() {
                     statusColor = '#FFA500';
                 }
                 
-                // Дата создания
-                let dateText = '';
-                if (order.created_at) {
-                    // Время приходит в UTC, нужно явно указать это и конвертировать в московское время
-                    let dateStr = order.created_at;
-                    // Если строка не заканчивается на Z или +/-, добавляем Z для указания UTC
-                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
-                        dateStr = dateStr + 'Z';
-                    }
-                    const orderDate = new Date(dateStr);
-                    // Используем timeZone для автоматической конвертации UTC в московское время
-                    dateText = orderDate.toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Europe/Moscow'
-                    });
-                }
+                // ========== REFACTORING STEP 3.1: formatDateToMoscow ==========
+                const dateText = formatDateToMoscow(order.created_at);
+                // ========== END REFACTORING STEP 3.1 ==========
                 
                 historyItem.innerHTML = `
                     <div class="cart-item-info">
@@ -1888,8 +1393,16 @@ export async function loadOrdersHistory() {
         historyItems.appendChild(errorMessage);
     }
 }
+*/
+// ========== END REFACTORING STEP 4.2 ==========
 
 // Загрузка истории продаж
+// ========== REFACTORING STEP 4.3: loadPurchasesHistory ==========
+// НОВЫЙ КОД (используется сейчас) - функция импортируется из cart/cartHistory.js
+// См. импорт в начале файла: import { loadPurchasesHistory } from './cart/cartHistory.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 export async function loadPurchasesHistory() {
     console.log('🛒 loadPurchasesHistory: Starting...');
     const historyItems = document.getElementById('purchases-history-items');
@@ -1948,19 +1461,19 @@ export async function loadPurchasesHistory() {
                 const imageUrl = getProductImageUrl(product, API_BASE);
                 
                 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                let imageUrl = null;
-                if (product.images_urls && product.images_urls.length > 0) {
-                    const firstImage = product.images_urls[0];
-                    imageUrl = firstImage.startsWith('http') 
-                        ? firstImage 
-                        : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
-                } else if (product.image_url) {
-                    imageUrl = product.image_url.startsWith('http') 
-                        ? product.image_url 
-                        : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
-                }
-                */
+                //
+                // let imageUrl = null;
+                // if (product.images_urls && product.images_urls.length > 0) {
+                //     const firstImage = product.images_urls[0];
+                //     imageUrl = firstImage.startsWith('http') 
+                //         ? firstImage 
+                //         : `${API_BASE}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`;
+                // } else if (product.image_url) {
+                //     imageUrl = product.image_url.startsWith('http') 
+                //         ? product.image_url 
+                //         : `${API_BASE}${product.image_url.startsWith('/') ? '' : '/'}${product.image_url}`;
+                // }
+                //
                 // ========== END REFACTORING STEP 2.1 ==========
                 
                 const historyItem = document.createElement('div');
@@ -1970,49 +1483,49 @@ export async function loadPurchasesHistory() {
                 const imageContainer = createImageContainer(imageUrl, product.name);
                 
                 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
-                /*
-                const imageContainer = document.createElement('div');
-                imageContainer.className = 'cart-item-image-container';
-                
-                if (imageUrl) {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '⏳';
-                    imageContainer.appendChild(placeholder);
-                    
-                    fetch(imageUrl, {
-                        headers: {
-                            'ngrok-skip-browser-warning': '69420'
-                        }
-                    })
-                    .then(response => response.blob())
-                    .then(blob => {
-                        const blobUrl = URL.createObjectURL(blob);
-                        const img = document.createElement('img');
-                        img.src = blobUrl;
-                        img.alt = product.name;
-                        img.className = 'cart-item-image';
-                        img.onerror = () => {
-                            URL.revokeObjectURL(blobUrl);
-                            placeholder.textContent = '📦';
-                            placeholder.style.display = 'flex';
-                            if (img.parentNode) img.remove();
-                        };
-                        img.onload = () => {
-                            if (placeholder.parentNode) placeholder.remove();
-                        };
-                        imageContainer.appendChild(img);
-                    })
-                    .catch(() => {
-                        placeholder.textContent = '📦';
-                    });
-                } else {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cart-item-image-placeholder';
-                    placeholder.textContent = '📦';
-                    imageContainer.appendChild(placeholder);
-                }
-                */
+                //
+                // const imageContainer = document.createElement('div');
+                // imageContainer.className = 'cart-item-image-container';
+                //
+                // if (imageUrl) {
+                //     const placeholder = document.createElement('div');
+                //     placeholder.className = 'cart-item-image-placeholder';
+                //     placeholder.textContent = '⏳';
+                //     imageContainer.appendChild(placeholder);
+                //
+                //     fetch(imageUrl, {
+                //         headers: {
+                //             'ngrok-skip-browser-warning': '69420'
+                //         }
+                //     })
+                //     .then(response => response.blob())
+                //     .then(blob => {
+                //         const blobUrl = URL.createObjectURL(blob);
+                //         const img = document.createElement('img');
+                //         img.src = blobUrl;
+                //         img.alt = product.name;
+                //         img.className = 'cart-item-image';
+                //         img.onerror = () => {
+                //             URL.revokeObjectURL(blobUrl);
+                //             placeholder.textContent = '📦';
+                //             placeholder.style.display = 'flex';
+                //             if (img.parentNode) img.remove();
+                //         };
+                //         img.onload = () => {
+                //             if (placeholder.parentNode) placeholder.remove();
+                //         };
+                //         imageContainer.appendChild(img);
+                //     })
+                //     .catch(() => {
+                //         placeholder.textContent = '📦';
+                //     });
+                // } else {
+                //     const placeholder = document.createElement('div');
+                //     placeholder.className = 'cart-item-image-placeholder';
+                //     placeholder.textContent = '📦';
+                //     imageContainer.appendChild(placeholder);
+                // }
+                //
                 // ========== END REFACTORING STEP 2.2 ==========
                 
                 // Статус продажи
@@ -2029,26 +1542,34 @@ export async function loadPurchasesHistory() {
                     statusColor = '#FFA500';
                 }
                 
-                // Дата создания
-                let dateText = '';
-                if (purchase.created_at) {
-                    // Время приходит в UTC, нужно явно указать это и конвертировать в московское время
-                    let dateStr = purchase.created_at;
-                    // Если строка не заканчивается на Z или +/-, добавляем Z для указания UTC
-                    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
-                        dateStr = dateStr + 'Z';
-                    }
-                    const purchaseDate = new Date(dateStr);
-                    // Используем timeZone для автоматической конвертации UTC в московское время
-                    dateText = purchaseDate.toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Europe/Moscow'
-                    });
-                }
+                // ========== REFACTORING STEP 3.1: formatDateToMoscow ==========
+                // НОВЫЙ КОД (используется сейчас)
+                const dateText = formatDateToMoscow(purchase.created_at);
+                
+                // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                //
+                // // Дата создания
+                // let dateText = '';
+                // if (purchase.created_at) {
+                //     // Время приходит в UTC, нужно явно указать это и конвертировать в московское время
+                //     let dateStr = purchase.created_at;
+                //     // Если строка не заканчивается на Z или +/-, добавляем Z для указания UTC
+                //     if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                //         dateStr = dateStr + 'Z';
+                //     }
+                //     const purchaseDate = new Date(dateStr);
+                //     // Используем timeZone для автоматической конвертации UTC в московское время
+                //     dateText = purchaseDate.toLocaleString('ru-RU', {
+                //         day: '2-digit',
+                //         month: '2-digit',
+                //         year: 'numeric',
+                //         hour: '2-digit',
+                //         minute: '2-digit',
+                //         timeZone: 'Europe/Moscow'
+                //     });
+                // }
+                //
+                // ========== END REFACTORING STEP 3.1 ==========
                 
                 historyItem.innerHTML = `
                     <div class="cart-item-info">
@@ -2085,4 +1606,6 @@ export async function loadPurchasesHistory() {
         historyItems.appendChild(errorMessage);
     }
 }
+*/
+// ========== END REFACTORING STEP 4.3 ==========
 
