@@ -10,6 +10,8 @@ from typing import List, Optional, Any, Union
 from ..db import models, database
 from ..models import product as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
+from ..utils.products_utils import get_bot_token_for_notifications, make_full_url, str_to_bool
+from ..utils.products_sync import sync_product_to_all_bots_with_rename, sync_product_to_all_bots
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -19,8 +21,15 @@ API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "https://unmaneuvered-chronogrammat
 # Telegram Bot Token для отправки уведомлений (основной бот)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
+# ========== REFACTORING STEP 1.1: get_bot_token_for_notifications ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/utils/products_utils.py
+# Импорт: from ..utils.products_utils import get_bot_token_for_notifications
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
-    """
+    \"\"\"
     Получает токен бота для отправки уведомлений.
     Если у владельца магазина есть подключенный бот, использует его токен.
     Иначе использует токен основного бота.
@@ -31,7 +40,7 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
         
     Returns:
         Токен бота для отправки уведомлений
-    """
+    \"\"\"
     # Ищем подключенного бота для этого владельца магазина
     connected_bot = db.query(models.Bot).filter(
         models.Bot.owner_user_id == shop_owner_id,
@@ -45,12 +54,21 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     # Если подключенного бота нет, используем основной токен
     print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
     return TELEGRAM_BOT_TOKEN
+"""
+# ========== END REFACTORING STEP 1.1 ==========
 
+# ========== REFACTORING STEP 1.2: make_full_url ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/utils/products_utils.py
+# Импорт: from ..utils.products_utils import make_full_url
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 def make_full_url(path: str) -> str:
-    """
+    \"\"\"
     Преобразует относительный путь в полный HTTPS URL.
     Использует /api/images/ вместо /static/uploads/ для обхода блокировки Telegram WebView.
-    """
+    \"\"\"
     if not path:
         return ""
     
@@ -72,9 +90,18 @@ def make_full_url(path: str) -> str:
         return API_PUBLIC_URL + '/' + path
     
     return API_PUBLIC_URL + path
+"""
+# ========== END REFACTORING STEP 1.2 ==========
 
+# ========== REFACTORING STEP 2.1: sync_product_to_all_bots_with_rename ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/utils/products_sync.py
+# Импорт: from ..utils.products_sync import sync_product_to_all_bots_with_rename
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session, old_name: str, old_price: float):
-    """
+    \"\"\"
     Синхронизирует товар во все боты пользователя при переименовании.
     Использует sync_product_id для надежной связи товаров.
     
@@ -83,7 +110,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
         db: Сессия базы данных
         old_name: Старое имя товара (для fallback поиска)
         old_price: Старая цена товара (для fallback поиска)
-    """
+    \"\"\"
     user_id = db_product.user_id
     
     # Находим все подключенные боты пользователя
@@ -351,15 +378,23 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 if sync_id and not matching.sync_product_id:
                     matching.sync_product_id = sync_id
                 print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+"""
+# ========== END REFACTORING STEP 2.1 ==========
 
+# ========== REFACTORING STEP 2.2: sync_product_to_all_bots ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/utils/products_sync.py
+# Импорт: from ..utils.products_sync import sync_product_to_all_bots
 
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 def sync_product_to_all_bots(db_product: models.Product, db: Session, action: str = "create"):
-    """
+    \"\"\"
     Синхронизирует товар во все боты пользователя (двусторонняя синхронизация).
     Использует sync_product_id для надежной связи товаров между магазинами.
     
     action: "create", "update", "delete"
-    """
+    \"\"\"
     user_id = db_product.user_id
     
     # Находим все подключенные боты пользователя
@@ -946,6 +981,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
             for matching in matching_products:
                 db.delete(matching)
                 print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) from main bot to bot {bot.id} (DELETE)")
+"""
+# ========== END REFACTORING STEP 2.2 ==========
 
 @router.post("/sync-all")
 async def sync_all_products(
@@ -1769,11 +1806,20 @@ def get_products(
     
     return result
 
+# ========== REFACTORING STEP 1.3: str_to_bool ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/utils/products_utils.py
+# Импорт: from ..utils.products_utils import str_to_bool
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 def str_to_bool(value: str) -> bool:
-    """Конвертирует строку в boolean"""
+    \"\"\"Конвертирует строку в boolean\"\"\"
     if isinstance(value, bool):
         return value
     return value.lower() in ('true', '1', 'yes', 'on')
+"""
+# ========== END REFACTORING STEP 1.3 ==========
 
 @router.post("/", response_model=schemas.Product)
 async def create_product(
