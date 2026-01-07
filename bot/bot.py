@@ -3722,8 +3722,19 @@ async def process_photos_done(message: Message, state: FSMContext):
 """
 # ========== END REFACTORING STEP 5.18 ==========
 
+# ========== REFACTORING STEP 9.1: send_reservation_notification ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.notifications import send_reservation_notification
+except ImportError:
+    from handlers.notifications import send_reservation_notification
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 async def send_reservation_notification(product_owner_id: int, product_id: int, reserved_by_user_id: int, reserved_until: str, product_name: str):
-    """Отправляет уведомление владельцу магазина о резервации товара"""
+    \"\"\"Отправляет уведомление владельцу магазина о резервации товара\"\"\"
     try:
         # Получаем информацию о пользователе, который зарезервировал
         try:
@@ -3772,6 +3783,8 @@ async def send_reservation_notification(product_owner_id: int, product_id: int, 
         logging.info(f"Reservation notification sent to user {product_owner_id} for product {product_id}")
     except Exception as e:
         logging.error(f"Error sending reservation notification: {e}", exc_info=True)
+"""
+# ========== END REFACTORING STEP 9.1 ==========
 
 async def main():
     # Проверка токена
