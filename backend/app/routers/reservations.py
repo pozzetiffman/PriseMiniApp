@@ -327,10 +327,14 @@ async def create_reservation(
                 else:
                     print(f"WARNING: getChat failed with status {resp.status_code}")
                     reserved_by_name = f"Пользователь (ID: {reserved_by_user_id})"
+            except requests.exceptions.Timeout:
+                print(f"⚠️ Timeout getting user info for user {reserved_by_user_id} (Telegram API timeout)")
+                reserved_by_name = f"Пользователь (ID: {reserved_by_user_id})"
+            except requests.exceptions.ConnectionError as e:
+                print(f"⚠️ Connection error getting user info for user {reserved_by_user_id}: {str(e)[:100]}")
+                reserved_by_name = f"Пользователь (ID: {reserved_by_user_id})"
             except Exception as e:
-                print(f"ERROR: Exception getting user info: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"⚠️ Error getting user info for user {reserved_by_user_id}: {type(e).__name__}: {str(e)[:100]}")
                 reserved_by_name = f"Пользователь (ID: {reserved_by_user_id})"
             
             # Формируем время резервации

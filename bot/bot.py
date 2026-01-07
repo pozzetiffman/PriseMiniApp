@@ -12,7 +12,7 @@ from aiogram.types import Message, WebAppInfo, ReplyKeyboardMarkup, KeyboardButt
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.exceptions import TelegramNetworkError, TelegramAPIError
+from aiogram.exceptions import TelegramNetworkError, TelegramAPIError, TelegramServerError
 
 # Загружаем .env
 load_dotenv(dotenv_path="../.env")
@@ -3846,8 +3846,20 @@ async def main():
         await dp.start_polling(bot)
     except KeyboardInterrupt:
         print("\n⚠️ Получен сигнал остановки (Ctrl+C)")
+    except TelegramServerError as e:
+        print(f"⚠️ Ошибка Telegram сервера (Bad Gateway/временная проблема): {e}")
+        print("💡 Это временная проблема Telegram API. Бот будет перезапущен через несколько секунд.")
+        logging.warning(f"Telegram server error (temporary): {e}")
+        # Не выводим полный traceback для временных ошибок сервера
+    except TelegramNetworkError as e:
+        print(f"⚠️ Ошибка сети Telegram: {e}")
+        print("💡 Проблема с подключением к Telegram API. Проверьте интернет-соединение.")
+        logging.warning(f"Telegram network error: {e}")
+    except TelegramAPIError as e:
+        print(f"❌ Ошибка Telegram API: {e}")
+        logging.error(f"Telegram API error: {e}", exc_info=True)
     except Exception as e:
-        print(f"❌ Ошибка во время работы бота: {e}")
+        print(f"❌ Неожиданная ошибка во время работы бота: {e}")
         logging.error(f"Bot error: {e}", exc_info=True)
     finally:
         await bot.session.close()

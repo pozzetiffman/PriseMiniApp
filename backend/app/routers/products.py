@@ -16,6 +16,7 @@ from ..handlers.products_sold import get_sold_products as get_sold_products_hand
 from ..handlers.products_read import get_product_by_id as get_product_by_id_handler, get_products as get_products_handler
 from ..handlers.products_create import create_product as create_product_handler, sync_all_products as sync_all_products_handler
 from ..handlers.products_update import update_product as update_product_handler, toggle_hot_offer as toggle_hot_offer_handler, update_price_discount as update_price_discount_handler, update_name_description as update_name_description_handler, update_quantity as update_quantity_handler, update_made_to_order as update_made_to_order_handler, update_for_sale as update_for_sale_handler, update_quantity_show_enabled as update_quantity_show_enabled_handler, bulk_update_made_to_order as bulk_update_made_to_order_handler
+from ..handlers.products_delete import delete_product as delete_product_handler, mark_product_sold as mark_product_sold_handler
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -2860,6 +2861,22 @@ async def bulk_update_made_to_order(
 """
 # ========== END REFACTORING STEP 6.9 ==========
 
+# ========== REFACTORING STEP 7.1: delete_product ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_delete.py
+# Импорт: from ..handlers.products_delete import delete_product as delete_product_handler
+
+@router.delete("/{product_id}")
+async def delete_product(
+    product_id: int,
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    return await delete_product_handler(product_id, user_id, x_telegram_init_data, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @router.delete("/{product_id}")
 async def delete_product(
     product_id: int,
@@ -2945,7 +2962,14 @@ async def delete_product(
                 print(f"DEBUG: Image file {file_path} is not used by any other product, but preserved for safety (can be manually deleted later)")
     
     return {"message": "Product deleted"}
-    
+"""
+# ========== END REFACTORING STEP 7.1 ==========
+
+# ========== REFACTORING STEP 7.2: mark_product_sold ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_delete.py
+# Импорт: from ..handlers.products_delete import mark_product_sold as mark_product_sold_handler
+
 @router.post("/{product_id}/mark-sold")
 async def mark_product_sold(
     product_id: int,
@@ -2954,7 +2978,19 @@ async def mark_product_sold(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
 ):
-    """Помечает товар как проданный: уменьшает quantity и добавляет в историю продаж"""
+    return await mark_product_sold_handler(product_id, user_id, quantity, x_telegram_init_data, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.post("/{product_id}/mark-sold")
+async def mark_product_sold(
+    product_id: int,
+    user_id: int = Query(...),
+    quantity: int = Query(1, ge=1),  # Количество для продажи (по умолчанию 1)
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Помечает товар как проданный: уменьшает quantity и добавляет в историю продаж\"\"\"
     # Проверяем авторизацию через initData
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
@@ -3040,3 +3076,5 @@ async def mark_product_sold(
         "quantity": db_product.quantity,
         "message": f"Продано {quantity} шт. товара"
     }
+"""
+# ========== END REFACTORING STEP 7.2 ==========
