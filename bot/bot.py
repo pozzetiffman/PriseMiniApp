@@ -906,11 +906,27 @@ async def connect_bot_button(message: Message, state: FSMContext):
     await clear_state_if_needed(message, state, ConnectBot.token)
     await cmd_connect(message, state)
 
+# ========== REFACTORING STEP 6.1: share_store ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.channels import share_store
+except ImportError:
+    from handlers.channels import share_store
+
+@dp.message(F.text == "📤 Поделиться витриной")
+async def share_store_handler(message: Message, state: FSMContext):
+    """Обработчик кнопки 'Поделиться витриной'"""
+    await share_store(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(F.text == "📤 Поделиться витриной")
 async def share_store(message: Message, state: FSMContext):
     # Проверяем и очищаем состояние, если пользователь был в процессе подключения бота
     await clear_state_if_needed(message, state)
-    """Показать список каналов для отправки витрины"""
+    \"\"\"Показать список каналов для отправки витрины\"\"\"
     user_id = message.from_user.id
     
     # Получаем список каналов пользователя
@@ -952,6 +968,8 @@ async def share_store(message: Message, state: FSMContext):
         "📤 Выберите канал или группу для отправки витрины:",
         reply_markup=builder.as_markup()
     )
+"""
+# ========== END REFACTORING STEP 6.1 ==========
 
 # ========== REFACTORING STEP 3.5: cmd_post ==========
 # Дата начала: 2024-12-19
@@ -2012,7 +2030,23 @@ async def process_welcome_description(message: Message, state: FSMContext):
 """
 # ========== END REFACTORING STEP 5.7 ==========
 
+# ========== REFACTORING STEP 6.2: manage_channels ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.channels import manage_channels
+except ImportError:
+    from handlers.channels import manage_channels
+
 # Управление каналами
+@dp.message(F.text == "📢 Управление каналами")
+async def manage_channels_handler(message: Message, state: FSMContext):
+    """Обработчик кнопки 'Управление каналами'"""
+    await manage_channels(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(F.text == "📢 Управление каналами")
 async def manage_channels(message: Message, state: FSMContext):
     # Сбрасываем состояние FSM при использовании этой кнопки
@@ -2062,6 +2096,8 @@ async def manage_channels(message: Message, state: FSMContext):
     
     await message.answer(text)
     await message.answer("Отправьте @username канала или перешлите сообщение из канала/группы:")
+"""
+# ========== END REFACTORING STEP 6.2 ==========
 
 # ========== REFACTORING STEP 5.19: delete_product_start ==========
 # TODO: REFACTORING STEP 5.19 - delete_product_start
@@ -2158,7 +2194,23 @@ async def delete_product_confirm(callback: types.CallbackQuery):
 """
 # ========== END REFACTORING STEP 5.20 ==========
 
+# ========== REFACTORING STEP 6.3: add_channel_by_username ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.channels import add_channel_by_username
+except ImportError:
+    from handlers.channels import add_channel_by_username
+
 # Обработка добавления канала через @username
+@dp.message(F.text.startswith("@"))
+async def add_channel_by_username_handler(message: Message):
+    """Обработчик добавления канала по username"""
+    await add_channel_by_username(message)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(F.text.startswith("@"))
 async def add_channel_by_username(message: Message):
     username = message.text.strip("@").lower()
@@ -2202,8 +2254,26 @@ async def add_channel_by_username(message: Message):
             )
         else:
             await message.answer(f"❌ Ошибка: {error_msg}")
+"""
+# ========== END REFACTORING STEP 6.3 ==========
+
+# ========== REFACTORING STEP 6.4: add_channel_by_forward ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.channels import add_channel_by_forward
+except ImportError:
+    from handlers.channels import add_channel_by_forward
 
 # Обработка добавления канала через пересылку
+@dp.message(F.forward_from_chat)
+async def add_channel_by_forward_handler(message: Message):
+    """Обработчик добавления канала через пересылку"""
+    await add_channel_by_forward(message)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(F.forward_from_chat)
 async def add_channel_by_forward(message: Message):
     user_id = message.from_user.id
@@ -2243,10 +2313,28 @@ async def add_channel_by_forward(message: Message):
         error_msg = str(e)
         logging.error(f"Error adding channel by forward: {error_msg}")
         await message.answer(f"❌ Ошибка при добавлении канала: {error_msg}")
+"""
+# ========== END REFACTORING STEP 6.4 ==========
 
 
+
+# ========== REFACTORING STEP 6.5: send_store_to_channel ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.channels import send_store_to_channel
+except ImportError:
+    from handlers.channels import send_store_to_channel
 
 # Обработчик callback для отправки витрины в канал
+@dp.callback_query(F.data.startswith("share_"))
+async def send_store_to_channel_handler(callback: types.CallbackQuery):
+    """Обработчик отправки витрины в канал"""
+    await send_store_to_channel(callback)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(F.data.startswith("share_"))
 async def send_store_to_channel(callback: types.CallbackQuery):
     channel_id = int(callback.data.split("_")[1])
@@ -2348,6 +2436,8 @@ async def send_store_to_channel(callback: types.CallbackQuery):
             error_text = f"❌ Ошибка: {error_msg}"
         
         await callback.answer(error_text, show_alert=True)
+"""
+# ========== END REFACTORING STEP 6.5 ==========
 
 
 
@@ -2395,7 +2485,23 @@ async def delete_bot_callback(callback: types.CallbackQuery):
         logging.error(f"Exception deleting bot: {e}")
         await callback.answer(f"❌ Произошла ошибка: {str(e)}", show_alert=True)
 
+# ========== REFACTORING STEP 6.6: delete_channel ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.channels import delete_channel
+except ImportError:
+    from handlers.channels import delete_channel
+
 # Обработчик callback для удаления канала
+@dp.callback_query(F.data.startswith("del_channel_"))
+async def delete_channel_handler(callback: types.CallbackQuery):
+    """Обработчик удаления канала"""
+    await delete_channel(callback)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.callback_query(F.data.startswith("del_channel_"))
 async def delete_channel(callback: types.CallbackQuery):
     channel_id = int(callback.data.split("_")[2])
@@ -2413,6 +2519,8 @@ async def delete_channel(callback: types.CallbackQuery):
             else:
                 error_text = await resp.text()
                 await callback.answer(f"❌ Ошибка: {error_text}", show_alert=True)
+"""
+# ========== END REFACTORING STEP 6.6 ==========
 
 # ========== REFACTORING STEP 5.1: start_add_product ==========
 # TODO: REFACTORING STEP 5.1 - start_add_product
