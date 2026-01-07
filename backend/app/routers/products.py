@@ -13,6 +13,7 @@ from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data
 from ..utils.products_utils import get_bot_token_for_notifications, make_full_url, str_to_bool
 from ..utils.products_sync import sync_product_to_all_bots_with_rename, sync_product_to_all_bots
 from ..handlers.products_sold import get_sold_products as get_sold_products_handler, delete_sold_product as delete_sold_product_handler, delete_sold_products as delete_sold_products_handler
+from ..handlers.products_read import get_product_by_id as get_product_by_id_handler, get_products as get_products_handler
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -1499,12 +1500,27 @@ async def delete_sold_products(
 """
 # ========== END REFACTORING STEP 3.3 ==========
 
+# ========== REFACTORING STEP 4.1: get_product_by_id ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_read.py
+# Импорт: from ..handlers.products_read import get_product_by_id as get_product_by_id_handler
+
 @router.get("/{product_id}", response_model=schemas.Product)
 def get_product_by_id(
     product_id: int,
     db: Session = Depends(database.get_db)
 ):
     """Получить товар по его ID (из любого магазина)"""
+    return get_product_by_id_handler(product_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.get("/{product_id}", response_model=schemas.Product)
+def get_product_by_id(
+    product_id: int,
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Получить товар по его ID (из любого магазина)\"\"\"
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -1564,7 +1580,26 @@ def get_product_by_id(
         "quantity_unit": getattr(product, 'quantity_unit', None),
         "has_active_reservation": active_reservation is not None
     }
+"""
+# ========== END REFACTORING STEP 4.1 ==========
 
+# ========== REFACTORING STEP 4.2: get_products ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_read.py
+# Импорт: from ..handlers.products_read import get_products as get_products_handler
+
+@router.get("/", response_model=List[schemas.Product])
+def get_products(
+    user_id: int,
+    category_id: Optional[int] = None,
+    bot_id: Optional[int] = Query(None, description="ID бота для независимых магазинов"),
+    db: Session = Depends(database.get_db)
+):
+    """Получить список товаров с автоматической синхронизацией между основным магазином и ботами"""
+    return get_products_handler(user_id, category_id, bot_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @router.get("/", response_model=List[schemas.Product])
 def get_products(
     user_id: int,
@@ -1862,6 +1897,8 @@ def get_products(
         })
     
     return result
+"""
+# ========== END REFACTORING STEP 4.2 ==========
 
 # ========== REFACTORING STEP 1.3: str_to_bool ==========
 # НОВЫЙ КОД (используется сейчас)
