@@ -1617,6 +1617,22 @@ async def delete_category_confirm(callback: types.CallbackQuery):
 """
 # ========== END REFACTORING STEP 4.7 ==========
 
+# ========== REFACTORING STEP 5.1: manage_shop_name ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.shop_settings import manage_shop_name
+except ImportError:
+    from handlers.shop_settings import manage_shop_name
+
+@dp.message(F.text == "🏷️ Название магазина")
+async def manage_shop_name_handler(message: Message, state: FSMContext):
+    """Обработчик управления названием магазина"""
+    await manage_shop_name(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 # Управление названием магазина
 @dp.message(F.text == "🏷️ Название магазина")
 async def manage_shop_name(message: Message, state: FSMContext):
@@ -1645,7 +1661,25 @@ async def manage_shop_name(message: Message, state: FSMContext):
     await message.answer(text, parse_mode="Markdown")
     # Устанавливаем состояние для получения нового названия
     await state.set_state(SetShopName.name)
+"""
+# ========== END REFACTORING STEP 5.1 ==========
 
+# ========== REFACTORING STEP 5.2: process_shop_name ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.shop_settings import process_shop_name
+except ImportError:
+    from handlers.shop_settings import process_shop_name
+
+@dp.message(SetShopName.name)
+async def process_shop_name_handler(message: Message, state: FSMContext):
+    """Обработчик обработки названия магазина"""
+    await process_shop_name(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(SetShopName.name)
 async def process_shop_name(message: Message, state: FSMContext):
     # Если пользователь отправил команду (кроме /clear и /cancel) или кнопку меню, не обрабатываем её здесь
@@ -1695,7 +1729,25 @@ async def process_shop_name(message: Message, state: FSMContext):
     
     await state.clear()
     await _cmd_manage_impl(message)
+"""
+# ========== END REFACTORING STEP 5.2 ==========
 
+# ========== REFACTORING STEP 5.3: manage_welcome_image ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.shop_settings import manage_welcome_image
+except ImportError:
+    from handlers.shop_settings import manage_welcome_image
+
+@dp.message(F.text == "🖼️ Логотип магазина")
+async def manage_welcome_image_handler(message: Message, state: FSMContext):
+    """Обработчик управления логотипом магазина"""
+    await manage_welcome_image(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 # Управление логотипом магазина
 @dp.message(F.text == "🖼️ Логотип магазина")
 async def manage_welcome_image(message: Message, state: FSMContext):
@@ -1725,7 +1777,25 @@ async def manage_welcome_image(message: Message, state: FSMContext):
     
     await message.answer(text, parse_mode="Markdown")
     await state.set_state(SetWelcomeImage.image)
+"""
+# ========== END REFACTORING STEP 5.3 ==========
 
+# ========== REFACTORING STEP 5.4: process_welcome_image ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.shop_settings import process_welcome_image
+except ImportError:
+    from handlers.shop_settings import process_welcome_image
+
+@dp.message(SetWelcomeImage.image, F.photo)
+async def process_welcome_image_handler(message: Message, state: FSMContext):
+    """Обработчик обработки логотипа (фото)"""
+    await process_welcome_image(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(SetWelcomeImage.image, F.photo)
 async def process_welcome_image(message: Message, state: FSMContext):
     user_id = message.from_user.id
@@ -1771,7 +1841,25 @@ async def process_welcome_image(message: Message, state: FSMContext):
     
     await state.clear()
     await _cmd_manage_impl(message)
+"""
+# ========== END REFACTORING STEP 5.4 ==========
 
+# ========== REFACTORING STEP 5.5: process_welcome_image_text ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.shop_settings import process_welcome_image_text
+except ImportError:
+    from handlers.shop_settings import process_welcome_image_text
+
+@dp.message(SetWelcomeImage.image)
+async def process_welcome_image_text_handler(message: Message, state: FSMContext):
+    """Обработчик обработки логотипа (текст)"""
+    await process_welcome_image_text(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(SetWelcomeImage.image)
 async def process_welcome_image_text(message: Message, state: FSMContext):
     # Если пользователь отправил команду (кроме /clear и /cancel) или кнопку меню, не обрабатываем её здесь
@@ -1802,7 +1890,25 @@ async def process_welcome_image_text(message: Message, state: FSMContext):
     
     await state.clear()
     await _cmd_manage_impl(message)
+"""
+# ========== END REFACTORING STEP 5.5 ==========
 
+# ========== REFACTORING STEP 5.6: manage_welcome_description ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.shop_settings import manage_welcome_description
+except ImportError:
+    from handlers.shop_settings import manage_welcome_description
+
+@dp.message(F.text == "📝 Описание магазина")
+async def manage_welcome_description_handler(message: Message, state: FSMContext):
+    """Обработчик управления описанием магазина"""
+    await manage_welcome_description(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 # Управление описанием магазина
 @dp.message(F.text == "📝 Описание магазина")
 async def manage_welcome_description(message: Message, state: FSMContext):
@@ -1833,7 +1939,25 @@ async def manage_welcome_description(message: Message, state: FSMContext):
     
     await message.answer(text, parse_mode="Markdown")
     await state.set_state(SetWelcomeDescription.description)
+"""
+# ========== END REFACTORING STEP 5.6 ==========
 
+# ========== REFACTORING STEP 5.7: process_welcome_description ==========
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.shop_settings import process_welcome_description
+except ImportError:
+    from handlers.shop_settings import process_welcome_description
+
+@dp.message(SetWelcomeDescription.description)
+async def process_welcome_description_handler(message: Message, state: FSMContext):
+    """Обработчик обработки описания магазина"""
+    await process_welcome_description(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(SetWelcomeDescription.description)
 async def process_welcome_description(message: Message, state: FSMContext):
     # Если пользователь отправил команду (кроме /clear и /cancel) или кнопку меню, не обрабатываем её здесь
@@ -1885,6 +2009,8 @@ async def process_welcome_description(message: Message, state: FSMContext):
     
     await state.clear()
     await _cmd_manage_impl(message)
+"""
+# ========== END REFACTORING STEP 5.7 ==========
 
 # Управление каналами
 @dp.message(F.text == "📢 Управление каналами")
