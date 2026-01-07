@@ -59,8 +59,16 @@ function setupGlobalFunctions() {
             await safeAlert(`✅ История заказов очищена (удалено ${result.deleted_count || 0} записей)`);
             
             // Перезагружаем историю
+            // ========== REFACTORING STEP 4.2: cartHistory.js ==========
+            // НОВЫЙ КОД (используется сейчас)
+            const { loadOrdersHistory } = await import('./cart/cartHistory.js');
+            await loadOrdersHistory();
+            // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+            /*
             const { loadOrdersHistory } = await import('./cart.js');
             await loadOrdersHistory();
+            */
+            // ========== END REFACTORING STEP 4.2 ==========
         } catch (e) {
             console.error('Clear orders history error:', e);
             await safeAlert(`❌ Ошибка: ${e.message}`);

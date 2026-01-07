@@ -746,11 +746,28 @@ async def cmd_connect(message: Message, state: FSMContext):
 """
 # ========== END REFACTORING STEP 3.4 ==========
 
+# ========== REFACTORING STEP 8.1: process_bot_token ==========
+# TODO: REFACTORING STEP 8.1 - process_bot_token
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.bots import process_bot_token
+except ImportError:
+    from handlers.bots import process_bot_token
+
+@dp.message(ConnectBot.token)
+async def process_bot_token_handler(message: Message, state: FSMContext):
+    """Обработчик токена бота"""
+    await process_bot_token(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @dp.message(ConnectBot.token)
 async def process_bot_token(message: Message, state: FSMContext):
-    """
+    \"\"\"
     Обработать токен бота и сохранить его, затем запросить название Web App.
-    """
+    \"\"\"
     # Если пользователь отправил команду или кнопку меню, сбрасываем состояние и передаем управление соответствующему обработчику
     if is_command(message.text or "") or is_menu_button(message.text or ""):
         # Сбрасываем состояние перед передачей управления
@@ -764,8 +781,8 @@ async def process_bot_token(message: Message, state: FSMContext):
     # Проверяем формат токена (примерно: 123456:ABC-DEF...)
     if not bot_token or ':' not in bot_token:
         await message.answer(
-            "❌ Неверный формат токена.\n\n"
-            "Токен должен быть в формате: <code>123456:ABC-DEF...</code>\n\n"
+            "❌ Неверный формат токена.\\n\\n"
+            "Токен должен быть в формате: <code>123456:ABC-DEF...</code>\\n\\n"
             "Попробуйте еще раз или отправьте <code>/cancel</code> для отмены.",
             parse_mode="HTML"
         )
@@ -776,23 +793,42 @@ async def process_bot_token(message: Message, state: FSMContext):
     
     # Запрашиваем название Web App
     await message.answer(
-        "✅ Токен принят!\n\n"
-        "📝 <b>Теперь укажите название Web App</b>\n\n"
-        "Это название, которое вы указали при создании Web App через <code>/newapp</code> в @BotFather.\n"
-        "Например: <code>shop1</code>, <code>TGshowcase</code>, <code>my_shop</code> и т.д.\n\n"
-        "💡 Если вы еще не создали Web App, укажите любое название (например: <code>shop</code>).\n"
-        "Затем создайте Web App через <code>/newapp</code> в @BotFather с этим же названием.\n\n"
+        "✅ Токен принят!\\n\\n"
+        "📝 <b>Теперь укажите название Web App</b>\\n\\n"
+        "Это название, которое вы указали при создании Web App через <code>/newapp</code> в @BotFather.\\n"
+        "Например: <code>shop1</code>, <code>TGshowcase</code>, <code>my_shop</code> и т.д.\\n\\n"
+        "💡 Если вы еще не создали Web App, укажите любое название (например: <code>shop</code>).\\n"
+        "Затем создайте Web App через <code>/newapp</code> в @BotFather с этим же названием.\\n\\n"
         "<b>Отправьте название Web App:</b>",
         parse_mode="HTML"
     )
     
     await state.set_state(ConnectBot.web_app_name)
+"""
+# ========== END REFACTORING STEP 8.1 ==========
+
+# ========== REFACTORING STEP 8.2: process_web_app_name ==========
+# TODO: REFACTORING STEP 8.2 - process_web_app_name
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.bots import process_web_app_name
+except ImportError:
+    from handlers.bots import process_web_app_name
 
 @dp.message(ConnectBot.web_app_name)
+async def process_web_app_name_handler(message: Message, state: FSMContext):
+    """Обработчик названия Web App"""
+    await process_web_app_name(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@dp.message(ConnectBot.web_app_name)
 async def process_web_app_name(message: Message, state: FSMContext):
-    """
+    \"\"\"
     Обработать название Web App и зарегистрировать бота.
-    """
+    \"\"\"
     # Если пользователь отправил команду или кнопку меню, сбрасываем состояние и передаем управление соответствующему обработчику
     if is_command(message.text or "") or is_menu_button(message.text or ""):
         # Сбрасываем состояние перед передачей управления
@@ -815,8 +851,8 @@ async def process_web_app_name(message: Message, state: FSMContext):
     # Валидация названия Web App (только буквы, цифры, подчеркивания, дефисы)
     if not web_app_name or not web_app_name.replace("_", "").replace("-", "").isalnum():
         await message.answer(
-            "❌ Неверный формат названия Web App.\n\n"
-            "Название может содержать только буквы, цифры, подчеркивания (_) и дефисы (-).\n\n"
+            "❌ Неверный формат названия Web App.\\n\\n"
+            "Название может содержать только буквы, цифры, подчеркивания (_) и дефисы (-).\\n\\n"
             "Попробуйте еще раз или отправьте <code>/cancel</code> для отмены.",
             parse_mode="HTML"
         )
@@ -847,26 +883,26 @@ async def process_web_app_name(message: Message, state: FSMContext):
                     web_app_link = f"t.me/{bot_username}/{saved_web_app_name}"
                     
                     await message.answer(
-                        f"✅ <b>Бот успешно подключен!</b>\n\n"
-                        f"🤖 Бот: @{bot_username}\n"
-                        f"📱 Web App: <code>{saved_web_app_name}</code>\n"
-                        f"🔗 Ссылка: <code>{web_app_link}</code>\n\n"
-                        f"📋 <b>Следующие шаги:</b>\n\n"
-                        f"1️⃣ Откройте @BotFather\n"
-                        f"2️⃣ Отправьте <code>/newapp</code>\n"
-                        f"3️⃣ Выберите вашего бота: @{bot_username}\n"
-                        f"4️⃣ Введите название: <code>{saved_web_app_name}</code>\n"
-                        f"5️⃣ Введите описание\n"
-                        f"6️⃣ Загрузите фото (640x360)\n"
-                        f"7️⃣ URL: <code>https://webapp-eight-vert.vercel.app</code>\n\n"
+                        f"✅ <b>Бот успешно подключен!</b>\\n\\n"
+                        f"🤖 Бот: @{bot_username}\\n"
+                        f"📱 Web App: <code>{saved_web_app_name}</code>\\n"
+                        f"🔗 Ссылка: <code>{web_app_link}</code>\\n\\n"
+                        f"📋 <b>Следующие шаги:</b>\\n\\n"
+                        f"1️⃣ Откройте @BotFather\\n"
+                        f"2️⃣ Отправьте <code>/newapp</code>\\n"
+                        f"3️⃣ Выберите вашего бота: @{bot_username}\\n"
+                        f"4️⃣ Введите название: <code>{saved_web_app_name}</code>\\n"
+                        f"5️⃣ Введите описание\\n"
+                        f"6️⃣ Загрузите фото (640x360)\\n"
+                        f"7️⃣ URL: <code>https://webapp-eight-vert.vercel.app</code>\\n\\n"
                         f"✅ После настройки используйте команду <code>/mylink</code> для получения ссылки!",
                         parse_mode="HTML"
                     )
                 elif resp.status == 409:
                     error_text = await resp.text()
                     await message.answer(
-                        "⚠️ Этот бот уже зарегистрирован.\n\n"
-                        "Если это ваш бот, он уже подключен к системе.\n\n"
+                        "⚠️ Этот бот уже зарегистрирован.\\n\\n"
+                        "Если это ваш бот, он уже подключен к системе.\\n\\n"
                         "Используйте команду <code>/mylink</code> для получения ссылки.",
                         parse_mode="HTML"
                     )
@@ -874,37 +910,77 @@ async def process_web_app_name(message: Message, state: FSMContext):
                     error_text = await resp.text()
                     logging.error(f"Error registering bot: status={resp.status}, error={error_text}")
                     await message.answer(
-                        f"❌ Ошибка при регистрации бота.\n\n"
-                        f"Проверьте:\n"
-                        f"• Правильность токена\n"
-                        f"• Что бот создан в @BotFather\n"
-                        f"• Что бот имеет username\n\n"
+                        f"❌ Ошибка при регистрации бота.\\n\\n"
+                        f"Проверьте:\\n"
+                        f"• Правильность токена\\n"
+                        f"• Что бот создан в @BotFather\\n"
+                        f"• Что бот имеет username\\n\\n"
                         f"Попробуйте еще раз или отправьте <code>/cancel</code> для отмены.",
                         parse_mode="HTML"
                     )
     except Exception as e:
         logging.error(f"Exception registering bot: {e}")
         await message.answer(
-            f"❌ Произошла ошибка: {str(e)}\n\n"
+            f"❌ Произошла ошибка: {str(e)}\\n\\n"
             f"Попробуйте еще раз или отправьте <code>/cancel</code> для отмены.",
             parse_mode="HTML"
         )
     
     await state.clear()
+"""
+# ========== END REFACTORING STEP 8.2 ==========
+
+# ========== REFACTORING STEP 8.3: get_my_links_button ==========
+# TODO: REFACTORING STEP 8.3 - get_my_links_button
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.bots import get_my_links_button
+except ImportError:
+    from handlers.bots import get_my_links_button
 
 @dp.message(F.text == "🔗 Мои ссылки")
-async def get_my_links_button(message: Message, state: FSMContext):
+async def get_my_links_button_handler(message: Message, state: FSMContext):
     """Обработчик кнопки для получения ссылок на Mini App"""
+    await get_my_links_button(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@dp.message(F.text == "🔗 Мои ссылки")
+async def get_my_links_button(message: Message, state: FSMContext):
+    \"\"\"Обработчик кнопки для получения ссылок на Mini App\"\"\"
     # Проверяем и очищаем состояние, если пользователь был в процессе подключения бота
     await clear_state_if_needed(message, state)
     await _cmd_mylink_impl(message)
+"""
+# ========== END REFACTORING STEP 8.3 ==========
+
+# ========== REFACTORING STEP 8.4: connect_bot_button ==========
+# TODO: REFACTORING STEP 8.4 - connect_bot_button
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.bots import connect_bot_button
+except ImportError:
+    from handlers.bots import connect_bot_button
 
 @dp.message(F.text == "🤖 Подключить бота")
-async def connect_bot_button(message: Message, state: FSMContext):
+async def connect_bot_button_handler(message: Message, state: FSMContext):
     """Обработчик кнопки для подключения нового бота"""
+    await connect_bot_button(message, state)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@dp.message(F.text == "🤖 Подключить бота")
+async def connect_bot_button(message: Message, state: FSMContext):
+    \"\"\"Обработчик кнопки для подключения нового бота\"\"\"
     # Сбрасываем предыдущее состояние перед началом новой операции
     await clear_state_if_needed(message, state, ConnectBot.token)
     await cmd_connect(message, state)
+"""
+# ========== END REFACTORING STEP 8.4 ==========
 
 # ========== REFACTORING STEP 6.1: share_store ==========
 # Дата начала: 2024-12-19
@@ -2441,6 +2517,24 @@ async def send_store_to_channel(callback: types.CallbackQuery):
 
 
 
+# ========== REFACTORING STEP 8.5: delete_bot_callback ==========
+# TODO: REFACTORING STEP 8.5 - delete_bot_callback
+# Дата начала: 2024-12-19
+# Статус: В процессе
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.bots import delete_bot_callback
+except ImportError:
+    from handlers.bots import delete_bot_callback
+
+# Обработчик callback для удаления бота
+@dp.callback_query(F.data.startswith("delete_bot_"))
+async def delete_bot_callback_handler(callback: types.CallbackQuery):
+    """Обработчик callback для удаления бота"""
+    await delete_bot_callback(callback)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 # Обработчик callback для удаления бота
 @dp.callback_query(F.data.startswith("delete_bot_"))
 async def delete_bot_callback(callback: types.CallbackQuery):
@@ -2484,6 +2578,8 @@ async def delete_bot_callback(callback: types.CallbackQuery):
     except Exception as e:
         logging.error(f"Exception deleting bot: {e}")
         await callback.answer(f"❌ Произошла ошибка: {str(e)}", show_alert=True)
+"""
+# ========== END REFACTORING STEP 8.5 ==========
 
 # ========== REFACTORING STEP 6.6: delete_channel ==========
 # Дата начала: 2024-12-19

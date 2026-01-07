@@ -231,3 +231,5 @@ grep -c "createImageContainer" webapp/js/cart.js
 3. Сравнение старого и нового кода ✅
 4. Проверку линтера ✅
 
+
+

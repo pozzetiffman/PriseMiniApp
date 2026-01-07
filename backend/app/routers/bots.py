@@ -170,16 +170,112 @@ async def register_bot(
                 detail="Bot is already registered by another user"
             )
         # Бот уже зарегистрирован этим пользователем
+        # Активируем бота, если он был неактивен
+        updated = False
+        if not existing_bot.is_active:
+            existing_bot.is_active = True
+            updated = True
+            print(f"✅ Reactivated bot {existing_bot.id} (@{existing_bot.bot_username})")
+        
         # Если передан новый direct_link_name, обновляем его (даже если текущий None или пустой)
         if request.direct_link_name:
             # Обновляем если значение отличается или если текущее значение None/пустое
             if (not existing_bot.direct_link_name or 
                 existing_bot.direct_link_name != request.direct_link_name):
                 existing_bot.direct_link_name = request.direct_link_name
-                existing_bot.updated_at = datetime.utcnow()
-                db.commit()
-                db.refresh(existing_bot)
+                updated = True
                 print(f"✅ Updated direct_link_name for bot {existing_bot.id} (@{existing_bot.bot_username}) to '{request.direct_link_name}'")
+        
+        if updated:
+            existing_bot.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(existing_bot)
+        
+        # Проверяем, есть ли данные магазина для этого бота
+        bot_settings = db.query(models.ShopSettings).filter(
+            models.ShopSettings.user_id == final_owner_user_id,
+            models.ShopSettings.bot_id == existing_bot.id
+        ).first()
+        
+        bot_categories = db.query(models.Category).filter(
+            models.Category.user_id == final_owner_user_id,
+            models.Category.bot_id == existing_bot.id
+        ).count()
+        
+        # Если данных нет, копируем их из основного бота
+        if not bot_settings or bot_categories == 0:
+            print(f"📦 Copying shop data from main bot to existing bot {existing_bot.id} (user {final_owner_user_id})...")
+            
+            # Копируем настройки магазина (если их нет)
+            if not bot_settings:
+                main_bot_settings = db.query(models.ShopSettings).filter(
+                    models.ShopSettings.user_id == final_owner_user_id,
+                    models.ShopSettings.bot_id == None
+                ).first()
+                
+                if main_bot_settings:
+                    new_settings = models.ShopSettings(
+                        user_id=final_owner_user_id,
+                        bot_id=existing_bot.id,
+                        reservations_enabled=main_bot_settings.reservations_enabled,
+                        quantity_enabled=main_bot_settings.quantity_enabled,
+                        shop_name=main_bot_settings.shop_name,
+                        welcome_image_url=main_bot_settings.welcome_image_url,
+                        welcome_description=main_bot_settings.welcome_description
+                    )
+                    db.add(new_settings)
+                    print(f"✅ Copied shop settings to bot {existing_bot.id}")
+            
+            # Копируем категории (если их нет)
+            if bot_categories == 0:
+                main_categories = db.query(models.Category).filter(
+                    models.Category.user_id == final_owner_user_id,
+                    models.Category.bot_id == None
+                ).all()
+                
+                category_mapping = {}
+                for main_category in main_categories:
+                    new_category = models.Category(
+                        name=main_category.name,
+                        user_id=final_owner_user_id,
+                        bot_id=existing_bot.id
+                    )
+                    db.add(new_category)
+                    db.flush()
+                    category_mapping[main_category.id] = new_category.id
+                    print(f"✅ Copied category '{main_category.name}' to bot {existing_bot.id}")
+                
+                db.commit()
+                
+                # Копируем товары
+                main_products = db.query(models.Product).filter(
+                    models.Product.user_id == final_owner_user_id,
+                    models.Product.bot_id == None
+                ).all()
+                
+                copied_products = 0
+                for main_product in main_products:
+                    new_category_id = category_mapping.get(main_product.category_id)
+                    new_product = models.Product(
+                        name=main_product.name,
+                        description=main_product.description,
+                        price=main_product.price,
+                        image_url=main_product.image_url,
+                        images_urls=main_product.images_urls,
+                        discount=main_product.discount,
+                        user_id=final_owner_user_id,
+                        bot_id=existing_bot.id,
+                        is_hot_offer=main_product.is_hot_offer,
+                        quantity=main_product.quantity,
+                        is_sold=False,
+                        is_made_to_order=main_product.is_made_to_order,
+                        category_id=new_category_id
+                    )
+                    db.add(new_product)
+                    copied_products += 1
+                
+                db.commit()
+                print(f"✅ Bot {existing_bot.id} ready: {len(main_categories)} categories, {copied_products} products copied")
         
         return BotResponse(
             id=existing_bot.id,

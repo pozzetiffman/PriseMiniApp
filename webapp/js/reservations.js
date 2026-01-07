@@ -58,8 +58,16 @@ function setupGlobalFunctions() {
             await safeAlert(`✅ История резерваций очищена (удалено ${result.deleted_count || 0} записей)`);
             
             // Перезагружаем историю
+            // ========== REFACTORING STEP 4.1: cartHistory.js ==========
+            // НОВЫЙ КОД (используется сейчас)
+            const { loadReservationsHistory } = await import('./cart/cartHistory.js');
+            await loadReservationsHistory();
+            // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+            /*
             const { loadReservationsHistory } = await import('./cart.js');
             await loadReservationsHistory();
+            */
+            // ========== END REFACTORING STEP 4.1 ==========
         } catch (e) {
             console.error('Clear reservations history error:', e);
             await safeAlert(`❌ Ошибка: ${e.message}`);

@@ -52,7 +52,7 @@ function setupGlobalFunctions() {
             await safeAlert(`✅ История продаж очищена (удалено ${result.deleted_count || 0} записей)`);
             
             // Перезагружаем историю
-            const { loadPurchasesHistory } = await import('./cart.js');
+            const { loadPurchasesHistory } = await import('./cart/cartHistory.js');
             await loadPurchasesHistory();
         } catch (e) {
             console.error('Clear purchases history error:', e);
