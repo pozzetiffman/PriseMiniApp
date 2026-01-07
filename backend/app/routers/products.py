@@ -14,6 +14,7 @@ from ..utils.products_utils import get_bot_token_for_notifications, make_full_ur
 from ..utils.products_sync import sync_product_to_all_bots_with_rename, sync_product_to_all_bots
 from ..handlers.products_sold import get_sold_products as get_sold_products_handler, delete_sold_product as delete_sold_product_handler, delete_sold_products as delete_sold_products_handler
 from ..handlers.products_read import get_product_by_id as get_product_by_id_handler, get_products as get_products_handler
+from ..handlers.products_create import create_product as create_product_handler, sync_all_products as sync_all_products_handler
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -986,6 +987,11 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
 """
 # ========== END REFACTORING STEP 2.2 ==========
 
+# ========== REFACTORING STEP 5.2: sync_all_products ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_create.py
+# Импорт: from ..handlers.products_create import sync_all_products as sync_all_products_handler
+
 @router.post("/sync-all")
 async def sync_all_products(
     user_id: int = Query(...),
@@ -996,6 +1002,24 @@ async def sync_all_products(
     Синхронизирует все существующие товары между основным ботом и подключенными ботами.
     Используется для синхронизации товаров, которые были созданы до добавления автоматической синхронизации.
     """
+    return await sync_all_products_handler(
+        user_id=user_id,
+        x_telegram_init_data=x_telegram_init_data,
+        db=db
+    )
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.post("/sync-all")
+async def sync_all_products(
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"
+    Синхронизирует все существующие товары между основным ботом и подключенными ботами.
+    Используется для синхронизации товаров, которые были созданы до добавления автоматической синхронизации.
+    \"\"\"
     # Проверяем авторизацию
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
@@ -1272,6 +1296,8 @@ async def sync_all_products(
         "synced_count": synced_count,
         "deleted_count": deleted_count
     }
+"""
+# ========== END REFACTORING STEP 5.2 ==========
 
 # ========== REFACTORING STEP 3.1: get_sold_products ==========
 # НОВЫЙ КОД (используется сейчас)
@@ -1915,6 +1941,62 @@ def str_to_bool(value: str) -> bool:
 """
 # ========== END REFACTORING STEP 1.3 ==========
 
+# ========== REFACTORING STEP 5.1: create_product ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_create.py
+# Импорт: from ..handlers.products_create import create_product as create_product_handler
+
+@router.post("/", response_model=schemas.Product)
+async def create_product(
+    name: str = Form(...),
+    price: float = Form(...),
+    category_id: int = Form(...),
+    user_id: int = Form(...),
+    description: Optional[str] = Form(None),
+    discount: float = Form(0.0),
+    is_hot_offer: str = Form("false"),
+    quantity: int = Form(0),
+    is_made_to_order: str = Form("false"),
+    is_for_sale: str = Form("false"),
+    price_from: Optional[float] = Form(None),
+    price_to: Optional[float] = Form(None),
+    price_fixed: Optional[float] = Form(None),
+    price_type: str = Form('range'),
+    quantity_from: Optional[int] = Form(None),
+    quantity_unit: Optional[str] = Form(None),
+    quantity_show_enabled: Optional[str] = Form(None),
+    bot_id: Optional[int] = Form(None, description="ID бота для независимых магазинов"),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    images: List[UploadFile] = File(default_factory=list),
+    db: Session = Depends(database.get_db)
+):
+    """Эндпоинт для создания товара - вызывает обработчик из products_create.py"""
+    return await create_product_handler(
+        name=name,
+        price=price,
+        category_id=category_id,
+        user_id=user_id,
+        description=description,
+        discount=discount,
+        is_hot_offer=is_hot_offer,
+        quantity=quantity,
+        is_made_to_order=is_made_to_order,
+        is_for_sale=is_for_sale,
+        price_from=price_from,
+        price_to=price_to,
+        price_fixed=price_fixed,
+        price_type=price_type,
+        quantity_from=quantity_from,
+        quantity_unit=quantity_unit,
+        quantity_show_enabled=quantity_show_enabled,
+        bot_id=bot_id,
+        x_telegram_init_data=x_telegram_init_data,
+        images=images,
+        db=db
+    )
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @router.post("/", response_model=schemas.Product)
 async def create_product(
     name: str = Form(...),
@@ -2101,6 +2183,8 @@ async def create_product(
         "is_hot_offer": getattr(db_product, 'is_hot_offer', False),
         "quantity": getattr(db_product, 'quantity', 0)
     }
+"""
+# ========== END REFACTORING STEP 5.1 ==========
 
 @router.put("/{product_id}", response_model=schemas.Product)
 def update_product(
