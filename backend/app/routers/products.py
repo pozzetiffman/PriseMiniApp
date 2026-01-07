@@ -12,6 +12,7 @@ from ..models import product as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
 from ..utils.products_utils import get_bot_token_for_notifications, make_full_url, str_to_bool
 from ..utils.products_sync import sync_product_to_all_bots_with_rename, sync_product_to_all_bots
+from ..handlers.products_sold import get_sold_products as get_sold_products_handler, delete_sold_product as delete_sold_product_handler, delete_sold_products as delete_sold_products_handler
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -1271,6 +1272,11 @@ async def sync_all_products(
         "deleted_count": deleted_count
     }
 
+# ========== REFACTORING STEP 3.1: get_sold_products ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_sold.py
+# Импорт: from ..handlers.products_sold import get_sold_products as get_sold_products_handler
+
 @router.get("/sold")
 async def get_sold_products(
     user_id: int = Query(...),
@@ -1278,6 +1284,17 @@ async def get_sold_products(
     db: Session = Depends(database.get_db)
 ):
     """Получает список проданных товаров (история продаж)"""
+    return await get_sold_products_handler(user_id=user_id, x_telegram_init_data=x_telegram_init_data, db=db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.get("/sold")
+async def get_sold_products(
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Получает список проданных товаров (история продаж)\"\"\"
     # Проверяем авторизацию через initData
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
@@ -1338,6 +1355,13 @@ async def get_sold_products(
         })
     
     return result
+"""
+# ========== END REFACTORING STEP 3.1 ==========
+
+# ========== REFACTORING STEP 3.2: delete_sold_product ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_sold.py
+# Импорт: from ..handlers.products_sold import delete_sold_product as delete_sold_product_handler
 
 @router.delete("/sold/{sold_id}")
 async def delete_sold_product(
@@ -1347,6 +1371,18 @@ async def delete_sold_product(
     db: Session = Depends(database.get_db)
 ):
     """Удалить запись о проданном товаре"""
+    return await delete_sold_product_handler(sold_id=sold_id, user_id=user_id, x_telegram_init_data=x_telegram_init_data, db=db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.delete("/sold/{sold_id}")
+async def delete_sold_product(
+    sold_id: int,
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Удалить запись о проданном товаре\"\"\"
     # Проверяем авторизацию через initData
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
@@ -1383,6 +1419,13 @@ async def delete_sold_product(
     db.commit()
     
     return {"message": "Запись о проданном товаре удалена", "id": sold_id}
+"""
+# ========== END REFACTORING STEP 3.2 ==========
+
+# ========== REFACTORING STEP 3.3: delete_sold_products ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_sold.py
+# Импорт: from ..handlers.products_sold import delete_sold_products as delete_sold_products_handler
 
 @router.post("/sold/batch-delete")
 async def delete_sold_products(
@@ -1392,6 +1435,18 @@ async def delete_sold_products(
     db: Session = Depends(database.get_db)
 ):
     """Удалить несколько записей о проданных товарах"""
+    return await delete_sold_products_handler(sold_ids=sold_ids, user_id=user_id, x_telegram_init_data=x_telegram_init_data, db=db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.post("/sold/batch-delete")
+async def delete_sold_products(
+    sold_ids: List[int],
+    user_id: int = Query(...),
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Удалить несколько записей о проданных товарах\"\"\"
     # Проверяем авторизацию через initData
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
@@ -1441,6 +1496,8 @@ async def delete_sold_products(
         "deleted_count": deleted_count,
         "deleted_ids": [sp.id for sp in sold_products]
     }
+"""
+# ========== END REFACTORING STEP 3.3 ==========
 
 @router.get("/{product_id}", response_model=schemas.Product)
 def get_product_by_id(
