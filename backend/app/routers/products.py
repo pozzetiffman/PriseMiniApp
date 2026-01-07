@@ -15,6 +15,7 @@ from ..utils.products_sync import sync_product_to_all_bots_with_rename, sync_pro
 from ..handlers.products_sold import get_sold_products as get_sold_products_handler, delete_sold_product as delete_sold_product_handler, delete_sold_products as delete_sold_products_handler
 from ..handlers.products_read import get_product_by_id as get_product_by_id_handler, get_products as get_products_handler
 from ..handlers.products_create import create_product as create_product_handler, sync_all_products as sync_all_products_handler
+from ..handlers.products_update import update_product as update_product_handler, toggle_hot_offer as toggle_hot_offer_handler, update_price_discount as update_price_discount_handler, update_name_description as update_name_description_handler, update_quantity as update_quantity_handler, update_made_to_order as update_made_to_order_handler, update_for_sale as update_for_sale_handler, update_quantity_show_enabled as update_quantity_show_enabled_handler, bulk_update_made_to_order as bulk_update_made_to_order_handler
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -2186,6 +2187,22 @@ async def create_product(
 """
 # ========== END REFACTORING STEP 5.1 ==========
 
+# ========== REFACTORING STEP 6.1: update_product ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import update_product as update_product_handler
+
+@router.put("/{product_id}", response_model=schemas.Product)
+def update_product(
+    product_id: int,
+    product: schemas.ProductCreate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    return update_product_handler(product_id, product, user_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
 @router.put("/{product_id}", response_model=schemas.Product)
 def update_product(
     product_id: int,
@@ -2211,6 +2228,13 @@ def update_product(
     db.commit()
     db.refresh(db_product)
     return db_product
+"""
+# ========== END REFACTORING STEP 6.1 ==========
+
+# ========== REFACTORING STEP 6.2: toggle_hot_offer ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import toggle_hot_offer as toggle_hot_offer_handler
 
 @router.patch("/{product_id}/hot-offer")
 def toggle_hot_offer(
@@ -2220,6 +2244,18 @@ def toggle_hot_offer(
     db: Session = Depends(database.get_db)
 ):
     """Переключение статуса 'горящее предложение' для товара"""
+    return toggle_hot_offer_handler(product_id, hot_offer_update, user_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.patch("/{product_id}/hot-offer")
+def toggle_hot_offer(
+    product_id: int,
+    hot_offer_update: schemas.HotOfferUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Переключение статуса 'горящее предложение' для товара\"\"\"
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -2241,6 +2277,13 @@ def toggle_hot_offer(
         "is_hot_offer": db_product.is_hot_offer,
         "message": f"Горящее предложение {'включено' if db_product.is_hot_offer else 'выключено'}"
     }
+"""
+# ========== END REFACTORING STEP 6.2 ==========
+
+# ========== REFACTORING STEP 6.3: update_price_discount ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import update_price_discount as update_price_discount_handler
 
 @router.patch("/{product_id}/update-price-discount")
 def update_price_discount(
@@ -2250,6 +2293,18 @@ def update_price_discount(
     db: Session = Depends(database.get_db)
 ):
     """Обновление цены и скидки товара с отправкой уведомлений пользователям"""
+    return update_price_discount_handler(product_id, price_discount_update, user_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.patch("/{product_id}/update-price-discount")
+def update_price_discount(
+    product_id: int,
+    price_discount_update: schemas.PriceDiscountUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Обновление цены и скидки товара с отправкой уведомлений пользователям\"\"\"
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -2422,6 +2477,13 @@ def update_price_discount(
         "discount": db_product.discount,
         "message": "Товар обновлен, уведомления отправлены"
     }
+"""
+# ========== END REFACTORING STEP 6.3 ==========
+
+# ========== REFACTORING STEP 6.4: update_name_description ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import update_name_description as update_name_description_handler
 
 @router.patch("/{product_id}/update-name-description")
 def update_name_description(
@@ -2431,6 +2493,18 @@ def update_name_description(
     db: Session = Depends(database.get_db)
 ):
     """Обновление названия и описания товара (без уведомлений)"""
+    return update_name_description_handler(product_id, name_description_update, user_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.patch("/{product_id}/update-name-description")
+def update_name_description(
+    product_id: int,
+    name_description_update: schemas.NameDescriptionUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Обновление названия и описания товара (без уведомлений)\"\"\"
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -2461,6 +2535,13 @@ def update_name_description(
         "description": db_product.description,
         "message": "Название и описание товара обновлены"
     }
+"""
+# ========== END REFACTORING STEP 6.4 ==========
+
+# ========== REFACTORING STEP 6.5: update_quantity ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import update_quantity as update_quantity_handler
 
 @router.patch("/{product_id}/update-quantity")
 def update_quantity(
@@ -2470,6 +2551,18 @@ def update_quantity(
     db: Session = Depends(database.get_db)
 ):
     """Обновление количества товара (без уведомлений)"""
+    return update_quantity_handler(product_id, quantity_update, user_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.patch("/{product_id}/update-quantity")
+def update_quantity(
+    product_id: int,
+    quantity_update: schemas.QuantityUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Обновление количества товара (без уведомлений)\"\"\"
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -2494,6 +2587,13 @@ def update_quantity(
         "quantity": db_product.quantity,
         "message": "Количество товара обновлено"
     }
+"""
+# ========== END REFACTORING STEP 6.5 ==========
+
+# ========== REFACTORING STEP 6.6: update_made_to_order ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import update_made_to_order as update_made_to_order_handler
 
 @router.patch("/{product_id}/update-made-to-order")
 def update_made_to_order(
@@ -2503,6 +2603,18 @@ def update_made_to_order(
     db: Session = Depends(database.get_db)
 ):
     """Обновление статуса 'под заказ' для товара (без уведомлений)"""
+    return update_made_to_order_handler(product_id, made_to_order_update, user_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.patch("/{product_id}/update-made-to-order")
+def update_made_to_order(
+    product_id: int,
+    made_to_order_update: schemas.MadeToOrderUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Обновление статуса 'под заказ' для товара (без уведомлений)\"\"\"
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -2528,6 +2640,13 @@ def update_made_to_order(
         "is_made_to_order": bool(db_product.is_made_to_order),  # Явное преобразование в bool
         "message": "Статус 'под заказ' обновлен"
     }
+"""
+# ========== END REFACTORING STEP 6.6 ==========
+
+# ========== REFACTORING STEP 6.7: update_for_sale ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import update_for_sale as update_for_sale_handler
 
 @router.patch("/{product_id}/update-for-sale")
 def update_for_sale(
@@ -2537,6 +2656,18 @@ def update_for_sale(
     db: Session = Depends(database.get_db)
 ):
     """Обновление функции 'покупка' для товара (без уведомлений)"""
+    return update_for_sale_handler(product_id, for_sale_update, user_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.patch("/{product_id}/update-for-sale")
+def update_for_sale(
+    product_id: int,
+    for_sale_update: schemas.ForSaleUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Обновление функции 'покупка' для товара (без уведомлений)\"\"\"
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -2571,6 +2702,13 @@ def update_for_sale(
         "quantity_unit": db_product.quantity_unit,
         "message": "Функция 'покупка' обновлена"
     }
+"""
+# ========== END REFACTORING STEP 6.7 ==========
+
+# ========== REFACTORING STEP 6.8: update_quantity_show_enabled ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import update_quantity_show_enabled as update_quantity_show_enabled_handler
 
 @router.patch("/{product_id}/update-quantity-show-enabled")
 def update_quantity_show_enabled(
@@ -2580,6 +2718,18 @@ def update_quantity_show_enabled(
     db: Session = Depends(database.get_db)
 ):
     """Обновление индивидуальной настройки показа количества для товара (без уведомлений)"""
+    return update_quantity_show_enabled_handler(product_id, quantity_show_enabled_update, user_id, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.patch("/{product_id}/update-quantity-show-enabled")
+def update_quantity_show_enabled(
+    product_id: int,
+    quantity_show_enabled_update: schemas.QuantityShowEnabledUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"Обновление индивидуальной настройки показа количества для товара (без уведомлений)\"\"\"
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -2606,6 +2756,13 @@ def update_quantity_show_enabled(
         "quantity_show_enabled": db_product.quantity_show_enabled,
         "message": "Настройка показа количества обновлена"
     }
+"""
+# ========== END REFACTORING STEP 6.8 ==========
+
+# ========== REFACTORING STEP 6.9: bulk_update_made_to_order ==========
+# НОВЫЙ КОД (используется сейчас)
+# Функция перенесена в backend/app/handlers/products_update.py
+# Импорт: from ..handlers.products_update import bulk_update_made_to_order as bulk_update_made_to_order_handler
 
 @router.patch("/bulk-update-made-to-order")
 async def bulk_update_made_to_order(
@@ -2617,6 +2774,20 @@ async def bulk_update_made_to_order(
     Массовое обновление статуса 'под заказ' для всех товаров пользователя.
     Требует авторизации через Telegram initData.
     """
+    return await bulk_update_made_to_order_handler(bulk_update, x_telegram_init_data, db)
+
+# СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+"""
+@router.patch("/bulk-update-made-to-order")
+async def bulk_update_made_to_order(
+    bulk_update: schemas.BulkMadeToOrderUpdate,
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
+    db: Session = Depends(database.get_db)
+):
+    \"\"\"
+    Массовое обновление статуса 'под заказ' для всех товаров пользователя.
+    Требует авторизации через Telegram initData.
+    \"\"\"
     # Валидация пользователя через initData
     if not x_telegram_init_data:
         raise HTTPException(
@@ -2686,6 +2857,8 @@ async def bulk_update_made_to_order(
         "is_made_to_order": bulk_update.is_made_to_order,
         "message": f"Обновлено {updated_count} товаров"
     }
+"""
+# ========== END REFACTORING STEP 6.9 ==========
 
 @router.delete("/{product_id}")
 async def delete_product(
