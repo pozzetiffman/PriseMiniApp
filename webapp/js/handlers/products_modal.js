@@ -9,6 +9,10 @@
 import { getCurrentShopSettings } from '../admin.js';
 import { toggleHotOffer, trackShopVisit } from '../api.js';
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
+// ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+// НОВЫЙ КОД (используется сейчас)
+import { showModalImage } from './products_modal_image.js';
+// ========== END REFACTORING STEP 2.1-2.2 ==========
 
 // Зависимости, которые будут переданы из products.js через initProductModalDependencies
 let modalElement = null; // DOM элемент модального окна
@@ -22,7 +26,11 @@ let cancelReservationCallback = null; // Функция для отмены ре
 let showPurchaseModalCallback = null; // Функция для показа модального окна продажи
 let showReservationModalCallback = null; // Функция для показа модального окна резервации
 let showOrderModalCallback = null; // Функция для показа модального окна заказа
-let showModalImageCallback = null; // Функция для показа изображения в модальном окне
+// ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+// let showModalImageCallback = null; // Функция для показа изображения в модальном окне
+// Теперь используем функцию напрямую из products_modal_image.js
+// ========== END REFACTORING STEP 2.1-2.2 ==========
 
 // Инициализация зависимостей для showProductModal
 export function initProductModalDependencies(dependencies) {
@@ -37,7 +45,11 @@ export function initProductModalDependencies(dependencies) {
     showPurchaseModalCallback = dependencies.showPurchaseModal;
     showReservationModalCallback = dependencies.showReservationModal;
     showOrderModalCallback = dependencies.showOrderModal;
-    showModalImageCallback = dependencies.showModalImage; // Функция для показа изображения
+    // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+    // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+    // showModalImageCallback = dependencies.showModalImage; // Функция для показа изображения
+    // Теперь используем функцию напрямую из products_modal_image.js
+    // ========== END REFACTORING STEP 2.1-2.2 ==========
 }
 
 // Показ модального окна товара
@@ -46,9 +58,13 @@ export function showProductModal(prod, finalPrice, fullImages) {
         return;
     }
     
-    if (!showModalImageCallback) {
-        return;
-    }
+    // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+    // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+    // if (!showModalImageCallback) {
+    //     return;
+    // }
+    // Теперь используем функцию напрямую из products_modal_image.js
+    // ========== END REFACTORING STEP 2.1-2.2 ==========
     
     // Сбрасываем ID загрузки при открытии нового товара
     modalState.currentImageLoadId = 0;
@@ -474,12 +490,19 @@ export function showProductModal(prod, finalPrice, fullImages) {
         }
     }
     
+    // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+    // НОВЫЙ КОД (используется сейчас)
     // Показываем первое изображение
-    if (showModalImageCallback) {
-        showModalImageCallback(0);
-    } else {
-        console.error('❌ showModalImageCallback not initialized!');
-    }
+    showModalImage(0);
+    // ========== END REFACTORING STEP 2.1-2.2 ==========
+    // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+    // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+    // if (showModalImageCallback) {
+    //     showModalImageCallback(0);
+    // } else {
+    //     console.error('❌ showModalImageCallback not initialized!');
+    // }
+    // ========== END REFACTORING STEP 2.1-2.2 ==========
     modalElement.style.display = 'block';
 }
 // ========== END REFACTORING STEP 3.1 ==========

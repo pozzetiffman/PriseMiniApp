@@ -4,7 +4,6 @@
 // Импорты зависимостей
 // ========== REFACTORING STEP 1.1: isMobileDevice ==========
 // НОВЫЙ КОД (используется сейчас)
-import { isMobileDevice } from './utils/products_utils.js';
 // ========== END REFACTORING STEP 1.1 ==========
 // ========== REFACTORING STEP 4.1: renderProducts ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -14,6 +13,11 @@ import { initRenderProductsDependencies, renderProducts as renderProductsNew } f
 // НОВЫЙ КОД (используется сейчас)
 import { initProductModalDependencies, showProductModal as showProductModalNew } from './handlers/products_modal.js';
 // ========== END REFACTORING STEP 3.1 ==========
+// ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+// НОВЫЙ КОД (используется сейчас)
+import { initProductModalImageDependencies } from './handlers/products_modal_image.js';
+// Функции showModalImage и updateImageNavigation импортируются напрямую в products_modal.js
+// ========== END REFACTORING STEP 2.1-2.2 ==========
 
 // Зависимости, которые будут переданы из app.js
 let productsGridElement = null;
@@ -35,8 +39,9 @@ let showOrderModalCallback = null; // Функция для показа мод�
 */
 // ========== END REFACTORING STEP 3.1 ==========
 
-// ВАЖНО: modalState используется в showModalImage и updateImageNavigation, которые еще не вынесены
-// Поэтому оставляем эту переменную активной
+// ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+// modalState теперь используется только для передачи в модули через initProductModalImageDependencies
+// ========== END REFACTORING STEP 2.1-2.2 ==========
 let modalState = null; // Объект состояния модального окна { currentImageLoadId, currentProduct, currentImages, currentImageIndex }
 
 // Инициализация зависимостей
@@ -53,15 +58,19 @@ export function initProductsDependencies(dependencies) {
     });
     // ========== END REFACTORING STEP 4.1 ==========
     
+    // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+    // НОВЫЙ КОД (используется сейчас)
+    // Инициализируем зависимости для showModalImage и updateImageNavigation в новом модуле
+    modalState = dependencies.modalState;
+    initProductModalImageDependencies({
+        modalState: dependencies.modalState
+    });
+    // ========== END REFACTORING STEP 2.1-2.2 ==========
+    
     // ========== REFACTORING STEP 3.1: showProductModal ==========
     // НОВЫЙ КОД (используется сейчас)
     // Инициализируем зависимости для showProductModal в новом модуле
-    // ВАЖНО: showModalImage определена позже в файле, но в ES6 модулях export function доступна в момент импорта
-    // Используем функцию напрямую - она будет доступна в момент вызова через замыкание модуля
-    // ВАЖНО: modalState используется в showModalImage и updateImageNavigation, которые еще не вынесены
-    // Поэтому устанавливаем глобальную переменную modalState
-    modalState = dependencies.modalState;
-    
+    // Теперь showModalImage вынесена в отдельный модуль, она импортируется напрямую в products_modal.js
     initProductModalDependencies({
         modal: dependencies.modal,
         modalState: dependencies.modalState,
@@ -73,8 +82,10 @@ export function initProductsDependencies(dependencies) {
         cancelReservation: dependencies.cancelReservation,
         showPurchaseModal: dependencies.showPurchaseModal,
         showReservationModal: dependencies.showReservationModal,
-        showOrderModal: dependencies.showOrderModal,
-        showModalImage: showModalImage // Передаем функцию напрямую - в ES6 модулях она доступна после загрузки модуля
+        showOrderModal: dependencies.showOrderModal
+        // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
+        // showModalImage больше не передается через зависимости, она импортируется напрямую в products_modal.js
+        // ========== END REFACTORING STEP 2.1-2.2 ==========
     });
     // ========== END REFACTORING STEP 3.1 ==========
     
@@ -1074,6 +1085,9 @@ export function showProductModal(prod, finalPrice, fullImages) {
 */
 // ========== END REFACTORING STEP 3.1 ==========
 
+// ========== REFACTORING STEP 2.1: showModalImage ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Показ изображения в модальном окне
 export function showModalImage(index) {
     if (!modalState) {
@@ -1292,7 +1306,12 @@ export function showModalImage(index) {
         img.src = fullImg;
     }
 }
+*/
+// ========== END REFACTORING STEP 2.1 ==========
 
+// ========== REFACTORING STEP 2.2: updateImageNavigation ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление навигации по фото
 export function updateImageNavigation() {
     console.log('[NAV] updateImageNavigation called');
@@ -1492,6 +1511,8 @@ export function updateImageNavigation() {
         }
     }
 }
+*/
+// ========== END REFACTORING STEP 2.2 ==========
 
 // ========== REFACTORING STEP 1.1: isMobileDevice ==========
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
