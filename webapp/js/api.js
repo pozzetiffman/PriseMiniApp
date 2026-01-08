@@ -4,6 +4,8 @@ import { getInitData } from './telegram.js';
 import { fetchProducts, getSoldProductsAPI } from './api/products_read.js';
 // Импорты для рефакторинга модуля products_update.js
 import { toggleHotOffer, updateProductAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI, updateProductMadeToOrderAPI, updateProductQuantityShowEnabledAPI, updateProductForSaleAPI, bulkUpdateAllProductsMadeToOrderAPI } from './api/products_update.js';
+// Импорты для рефакторинга модуля products_delete.js
+import { deleteProductAPI, markProductSoldAPI, deleteSoldProductAPI, deleteSoldProductsAPI } from './api/products_delete.js';
 
 // ========== REFACTORING STEP 1.1: API_BASE ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -758,6 +760,13 @@ export async function bulkUpdateAllProductsMadeToOrderAPI(isMadeToOrder) {
 */
 // ========== END REFACTORING STEP 5.8 ==========
 
+// ========== REFACTORING STEP 6.1: deleteProductAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { deleteProductAPI } from './api/products_delete.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Удаление товара
 export async function deleteProductAPI(productId, shopOwnerId) {
     const url = `${API_BASE}/api/products/${productId}?user_id=${shopOwnerId}`;
@@ -784,7 +793,16 @@ export async function deleteProductAPI(productId, shopOwnerId) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 6.1 ==========
 
+// ========== REFACTORING STEP 6.2: markProductSoldAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { markProductSoldAPI } from './api/products_delete.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Пометить товар как проданный
 export async function markProductSoldAPI(productId, shopOwnerId, quantity = 1) {
     const url = `${API_BASE}/api/products/${productId}/mark-sold?user_id=${shopOwnerId}&quantity=${quantity}`;
@@ -811,6 +829,8 @@ export async function markProductSoldAPI(productId, shopOwnerId, quantity = 1) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 6.2 ==========
 
 // ========== REFACTORING STEP 4.2: getSoldProductsAPI() ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -846,6 +866,13 @@ export async function getSoldProductsAPI(shopOwnerId) {
 */
 // ========== END REFACTORING STEP 4.2 ==========
 
+// ========== REFACTORING STEP 6.3: deleteSoldProductAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { deleteSoldProductAPI } from './api/products_delete.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Удалить запись о проданном товаре
 export async function deleteSoldProductAPI(soldId, shopOwnerId) {
     const url = `${API_BASE}/api/products/sold/${soldId}?user_id=${shopOwnerId}`;
@@ -872,7 +899,16 @@ export async function deleteSoldProductAPI(soldId, shopOwnerId) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 6.3 ==========
 
+// ========== REFACTORING STEP 6.4: deleteSoldProductsAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { deleteSoldProductsAPI } from './api/products_delete.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Удалить несколько записей о проданных товарах
 export async function deleteSoldProductsAPI(soldIds, shopOwnerId) {
     const url = `${API_BASE}/api/products/sold/batch-delete?user_id=${shopOwnerId}`;
@@ -903,6 +939,8 @@ export async function deleteSoldProductsAPI(soldIds, shopOwnerId) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 6.4 ==========
 
 // Создание заказа (ordered_by_user_id определяется на backend из initData)
 export async function createOrderAPI(orderData) {
