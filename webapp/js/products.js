@@ -4,8 +4,11 @@
 // Импорты зависимостей
 import { getCurrentShopSettings } from './admin.js';
 import { API_BASE, toggleHotOffer, trackShopVisit } from './api.js';
-import { getTelegramInstance } from './telegram.js';
 import { getProductPriceDisplay } from './utils/priceUtils.js';
+// ========== REFACTORING STEP 1.1: isMobileDevice ==========
+// НОВЫЙ КОД (используется сейчас)
+import { isMobileDevice } from './utils/products_utils.js';
+// ========== END REFACTORING STEP 1.1 ==========
 
 // Зависимости, которые будут переданы из app.js
 let productsGridElement = null;
@@ -1417,6 +1420,9 @@ export function updateImageNavigation() {
     }
 }
 
+// ========== REFACTORING STEP 1.1: isMobileDevice ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Детекция устройства (мобильное/десктоп)
 // В Telegram WebView на мобильных устройствах нужно использовать blob URL для обхода блокировки
 // На десктопе можно использовать прямые URL
@@ -1430,4 +1436,6 @@ export function isMobileDevice() {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
            (window.innerWidth <= 768);
 }
+*/
+// ========== END REFACTORING STEP 1.1 ==========
 
