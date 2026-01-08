@@ -138,6 +138,13 @@ export async function getContext(shopOwnerId = null) {
 */
 // ========== END REFACTORING STEP 2.1 ==========
 
+// ========== REFACTORING STEP 3.1: fetchCategories() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { fetchCategories } from './api/categories.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Загрузка категорий (не требует авторизации - только просмотр)
 export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
     let url = `${API_BASE}/api/categories/?user_id=${shopOwnerId}`;
@@ -173,6 +180,8 @@ export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
         throw e;
     }
 }
+*/
+// ========== END REFACTORING STEP 3.1 ==========
 
 // Загрузка товаров (не требует авторизации - только просмотр)
 export async function fetchProducts(shopOwnerId, categoryId = null, botId = null) {

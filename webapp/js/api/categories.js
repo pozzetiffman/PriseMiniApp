@@ -1,5 +1,9 @@
+// ========== REFACTORING STEP 3.1: fetchCategories() ==========
 // API для работы с категориями
-import { API_BASE, getBaseHeadersNoAuth, apiRequest } from './client.js';
+// Дата начала: 2024-12-19
+// Статус: В процессе
+
+import { API_BASE, getBaseHeadersNoAuth } from './config.js';
 
 // Загрузка категорий (не требует авторизации - только просмотр)
 export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
@@ -11,25 +15,30 @@ export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
         url += `&flat=true`;
     }
     console.log("📂 Fetching categories from:", url, "botId:", botId, "flat:", flat);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a529e8ef-268e-4207-8623-432f61be7d3f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/categories.js:5',message:'fetchCategories entry',data:{shopOwnerId,botId,flat,url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     
     try {
-        const data = await apiRequest(url, {
+        const response = await fetch(url, {
             headers: getBaseHeadersNoAuth()
         });
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a529e8ef-268e-4207-8623-432f61be7d3f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/categories.js:19',message:'fetchCategories success',data:{count:data?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Categories error:", response.status, errorText);
+            throw new Error(`Ошибка загрузки категорий: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
         console.log("✅ Categories fetched:", data.length);
         return data;
     } catch (e) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a529e8ef-268e-4207-8623-432f61be7d3f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/categories.js:22',message:'fetchCategories error',data:{error:e.message,stack:e.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        console.error("❌ Error fetching categories:", e);
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching categories:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу. Проверьте подключение к интернету.");
+        }
+        // Пробрасываем другие ошибки как есть
         throw e;
     }
 }
+// ========== END REFACTORING STEP 3.1 ==========
 
