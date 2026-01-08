@@ -1,5 +1,5 @@
 // Модуль API вызовов
-import { getInitData, requireTelegram } from './telegram.js';
+import { getInitData } from './telegram.js';
 
 // ========== REFACTORING STEP 1.1: API_BASE ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -63,7 +63,6 @@ export function getBaseHeaders() {
 
 // ========== REFACTORING STEP 1.4: fetchOptions ==========
 // НОВЫЙ КОД (используется сейчас)
-import { fetchOptions } from './api/config.js';
 // Реэкспорт для обратной совместимости
 export { fetchOptions } from './api/config.js';
 
@@ -80,6 +79,13 @@ export const fetchOptions = {
 */
 // ========== END REFACTORING STEP 1.4 ==========
 
+// ========== REFACTORING STEP 2.1: getContext() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { getContext, getShopSettings, updateShopSettings } from './api/context.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Получение контекста магазина
 export async function getContext(shopOwnerId = null) {
     console.log('📡 getContext called, shopOwnerId:', shopOwnerId);
@@ -129,6 +135,8 @@ export async function getContext(shopOwnerId = null) {
         throw e;
     }
 }
+*/
+// ========== END REFACTORING STEP 2.1 ==========
 
 // Загрузка категорий (не требует авторизации - только просмотр)
 export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
@@ -291,6 +299,11 @@ export async function cancelReservationAPI(reservationId) {
     return true;
 }
 
+// ========== REFACTORING STEP 2.2: getShopSettings() ==========
+// НОВЫЙ КОД (используется сейчас) - импорт и реэкспорт уже добавлены выше в STEP 2.1
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Получение настроек магазина
 export async function getShopSettings(shopOwnerId = null) {
     let url = `${API_BASE}/api/shop-settings`;
@@ -313,7 +326,14 @@ export async function getShopSettings(shopOwnerId = null) {
     console.log("✅ Shop settings fetched:", data);
     return data;
 }
+*/
+// ========== END REFACTORING STEP 2.2 ==========
 
+// ========== REFACTORING STEP 2.3: updateShopSettings() ==========
+// НОВЫЙ КОД (используется сейчас) - импорт и реэкспорт уже добавлены выше в STEP 2.1
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление настроек магазина
 export async function updateShopSettings(settingsUpdate) {
     const url = `${API_BASE}/api/shop-settings`;
@@ -341,6 +361,8 @@ export async function updateShopSettings(settingsUpdate) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 2.3 ==========
 
 // Переключение статуса "горящее предложение" для товара
 export async function toggleHotOffer(productId, shopOwnerId, isHotOffer) {
