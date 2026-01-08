@@ -1,5 +1,5 @@
 // Модуль админки магазина
-import { API_BASE, cancelOrderAPI, completeOrderAPI, deleteOrderAPI, deleteOrdersAPI, deleteSoldProductAPI, deleteSoldProductsAPI, getAllPurchasesAPI, getProductViewStatsAPI, getShopOrdersAPI, getShopSettings, getSoldProductsAPI, getVisitStatsAPI, getVisitsListAPI, updatePurchaseStatusAPI } from './api.js';
+import { API_BASE, deleteSoldProductAPI, deleteSoldProductsAPI, getAllPurchasesAPI, getProductViewStatsAPI, getShopSettings, getSoldProductsAPI, getVisitStatsAPI, getVisitsListAPI, updatePurchaseStatusAPI } from './api.js';
 // ========== REFACTORING STEP 1.1: showNotification ==========
 // ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
 // ========== REFACTORING STEP 1.3: loadShopSettings ==========
@@ -25,12 +25,26 @@ import { checkAllProductsMadeToOrder as checkAllProductsMadeToOrderHandler, hand
 // ========== END REFACTORING STEP 3.2 ==========
 // ========== END REFACTORING STEP 3.3 ==========
 // ========== END REFACTORING STEP 3.4 ==========
+// ========== REFACTORING STEP 4.1: loadOrders ==========
+import { loadOrders as loadOrdersHandler } from './handlers/admin_orders.js';
+// ========== END REFACTORING STEP 4.1 ==========
 
 let adminModal = null;
 let reservationsToggle = null;
 let quantityEnabledToggle = null;
 let allProductsMadeToOrderToggle = null;
 let shopSettings = null;
+
+// ========== REFACTORING STEP 4.1: loadOrders ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_orders.js' и обернута для передачи зависимостей
+async function loadOrders() {
+    console.log('🔄 [REFACTORING STEP 4.1] loadOrders called via wrapper');
+    return await loadOrdersHandler({
+        loadOrders: loadOrders // Передаем саму себя для рекурсивных вызовов
+    });
+}
+// ========== END REFACTORING STEP 4.1 ==========
 
 // ========== REFACTORING STEP 2.4: switchAdminTab ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -687,6 +701,9 @@ function switchAdminTab(tabName) {
 */
 // ========== END REFACTORING STEP 2.4 ==========
 
+// ========== REFACTORING STEP 4.1: loadOrders ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Загрузка заказов
 async function loadOrders() {
     const ordersList = document.getElementById('orders-list');
@@ -1176,6 +1193,8 @@ async function loadOrders() {
         ordersList.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
     }
 }
+*/
+// ========== END REFACTORING STEP 4.1 ==========
 
 // Загрузка проданных товаров
 async function loadSoldProducts() {
