@@ -2,6 +2,8 @@
 import { getInitData } from './telegram.js';
 // Импорты для рефакторинга модуля products_read.js
 import { fetchProducts, getSoldProductsAPI } from './api/products_read.js';
+// Импорты для рефакторинга модуля products_update.js
+import { toggleHotOffer, updateProductAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI, updateProductMadeToOrderAPI, updateProductQuantityShowEnabledAPI, updateProductForSaleAPI, bulkUpdateAllProductsMadeToOrderAPI } from './api/products_update.js';
 
 // ========== REFACTORING STEP 1.1: API_BASE ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -384,6 +386,13 @@ export async function updateShopSettings(settingsUpdate) {
 */
 // ========== END REFACTORING STEP 2.3 ==========
 
+// ========== REFACTORING STEP 5.1: toggleHotOffer() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { toggleHotOffer } from './api/products_update.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Переключение статуса "горящее предложение" для товара
 export async function toggleHotOffer(productId, shopOwnerId, isHotOffer) {
     const url = `${API_BASE}/api/products/${productId}/hot-offer?user_id=${shopOwnerId}`;
@@ -413,6 +422,8 @@ export async function toggleHotOffer(productId, shopOwnerId, isHotOffer) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 5.1 ==========
 
 // Отслеживание посещения магазина или просмотра товара
 export async function trackShopVisit(shopOwnerId, productId = null) {
@@ -442,6 +453,13 @@ export async function trackShopVisit(shopOwnerId, productId = null) {
     }
 }
 
+// ========== REFACTORING STEP 5.2: updateProductAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { updateProductAPI } from './api/products_update.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление цены и скидки товара
 export async function updateProductAPI(productId, shopOwnerId, price, discount) {
     const url = `${API_BASE}/api/products/${productId}/update-price-discount?user_id=${shopOwnerId}`;
@@ -472,7 +490,16 @@ export async function updateProductAPI(productId, shopOwnerId, price, discount) 
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 5.2 ==========
 
+// ========== REFACTORING STEP 5.3: updateProductNameDescriptionAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { updateProductNameDescriptionAPI } from './api/products_update.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление названия и описания товара (без уведомлений)
 export async function updateProductNameDescriptionAPI(productId, shopOwnerId, name, description) {
     const url = `${API_BASE}/api/products/${productId}/update-name-description?user_id=${shopOwnerId}`;
@@ -503,7 +530,16 @@ export async function updateProductNameDescriptionAPI(productId, shopOwnerId, na
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 5.3 ==========
 
+// ========== REFACTORING STEP 5.4: updateProductQuantityAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { updateProductQuantityAPI } from './api/products_update.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление количества товара (без уведомлений)
 export async function updateProductQuantityAPI(productId, shopOwnerId, quantity, quantityUnit = null) {
     const url = `${API_BASE}/api/products/${productId}/update-quantity?user_id=${shopOwnerId}`;
@@ -536,7 +572,16 @@ export async function updateProductQuantityAPI(productId, shopOwnerId, quantity,
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 5.4 ==========
 
+// ========== REFACTORING STEP 5.5: updateProductMadeToOrderAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { updateProductMadeToOrderAPI } from './api/products_update.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление статуса 'под заказ' товара (без уведомлений)
 export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMadeToOrder) {
     const url = `${API_BASE}/api/products/${productId}/update-made-to-order?user_id=${shopOwnerId}`;
@@ -571,7 +616,16 @@ export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMade
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 5.5 ==========
 
+// ========== REFACTORING STEP 5.6: updateProductQuantityShowEnabledAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { updateProductQuantityShowEnabledAPI } from './api/products_update.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление индивидуальной настройки показа количества товара (без уведомлений)
 export async function updateProductQuantityShowEnabledAPI(productId, shopOwnerId, quantityShowEnabled) {
     const url = `${API_BASE}/api/products/${productId}/update-quantity-show-enabled?user_id=${shopOwnerId}`;
@@ -606,7 +660,16 @@ export async function updateProductQuantityShowEnabledAPI(productId, shopOwnerId
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 5.6 ==========
 
+// ========== REFACTORING STEP 5.7: updateProductForSaleAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { updateProductForSaleAPI } from './api/products_update.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление функции 'покупка' товара (без уведомлений)
 export async function updateProductForSaleAPI(productId, shopOwnerId, forSaleData) {
     const url = `${API_BASE}/api/products/${productId}/update-for-sale?user_id=${shopOwnerId}`;
@@ -647,7 +710,16 @@ export async function updateProductForSaleAPI(productId, shopOwnerId, forSaleDat
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 5.7 ==========
 
+// ========== REFACTORING STEP 5.8: bulkUpdateAllProductsMadeToOrderAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { bulkUpdateAllProductsMadeToOrderAPI } from './api/products_update.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Массовое обновление статуса 'под заказ' для всех товаров
 export async function bulkUpdateAllProductsMadeToOrderAPI(isMadeToOrder) {
     const url = `${API_BASE}/api/products/bulk-update-made-to-order`;
@@ -683,6 +755,8 @@ export async function bulkUpdateAllProductsMadeToOrderAPI(isMadeToOrder) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 5.8 ==========
 
 // Удаление товара
 export async function deleteProductAPI(productId, shopOwnerId) {
