@@ -5,8 +5,12 @@
 
 // Импорты зависимостей
 // ========== REFACTORING STEP 8: Исправление циклической зависимости ==========
-import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyPurchasesAPI } from '../api.js';
+import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth } from '../api.js';
 import { getMyOrdersAPI } from '../api/orders.js';
+// ========== REFACTORING STEP 9.2: getMyPurchasesAPI() ==========
+// НОВЫЙ ИМПОРТ из модуля api/purchases.js
+import { getMyPurchasesAPI } from '../api/purchases.js';
+// ========== END REFACTORING STEP 9.2 ==========
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 // import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, getMyPurchasesAPI } from '../api.js';
 // ========== END REFACTORING STEP 8 ==========

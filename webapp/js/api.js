@@ -1,5 +1,4 @@
 // Модуль API вызовов
-import { getInitData } from './telegram.js';
 
 // ========== REFACTORING STEP 1.1: API_BASE ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -1140,6 +1139,11 @@ export async function getProductViewStatsAPI(limit = 20) {
     return data;
 }
 
+// ========== REFACTORING STEP 9.1: createPurchaseAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)
+// НОВЫЙ КОД: используйте import { createPurchaseAPI } from './api/purchases.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Создание заявки на покупку
 export async function createPurchaseAPI(productId, formData) {
     const url = `${API_BASE}/api/purchases/`;
@@ -1170,6 +1174,11 @@ export async function createPurchaseAPI(productId, formData) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { createPurchaseAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.1 ==========
 
 // ========== REFACTORING STEP 7.5: clearReservationsHistoryAPI() ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -1207,6 +1216,11 @@ export async function clearReservationsHistoryAPI() {
 */
 // ========== END REFACTORING STEP 7.5 ==========
 
+// ========== REFACTORING STEP 9.7: clearPurchasesHistoryAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)
+// НОВЫЙ КОД: используйте import { clearPurchasesHistoryAPI } from './api/purchases.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Очистить историю продаж
 export async function clearPurchasesHistoryAPI() {
     const url = `${API_BASE}/api/purchases/history/clear`;
@@ -1233,7 +1247,17 @@ export async function clearPurchasesHistoryAPI() {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { clearPurchasesHistoryAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.7 ==========
 
+// ========== REFACTORING STEP 9.2: getMyPurchasesAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)
+// НОВЫЙ КОД: используйте import { getMyPurchasesAPI } from './api/purchases.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Получение моих покупок
 export async function getMyPurchasesAPI() {
     const url = `${API_BASE}/api/purchases/my`;
@@ -1263,7 +1287,17 @@ export async function getMyPurchasesAPI() {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { getMyPurchasesAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.2 ==========
 
+// ========== REFACTORING STEP 9.3: cancelPurchaseAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)
+// НОВЫЙ КОД: используйте import { cancelPurchaseAPI } from './api/purchases.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Отмена покупки (user_id определяется на backend из initData)
 export async function cancelPurchaseAPI(purchaseId) {
     const url = `${API_BASE}/api/purchases/${purchaseId}`;
@@ -1290,7 +1324,17 @@ export async function cancelPurchaseAPI(purchaseId) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { cancelPurchaseAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.3 ==========
 
+// ========== REFACTORING STEP 9.4: getPurchasesHistoryAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)
+// НОВЫЙ КОД: используйте import { getPurchasesHistoryAPI } from './api/purchases.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Загрузка истории покупок (все покупки пользователя)
 export async function getPurchasesHistoryAPI() {
     const url = `${API_BASE}/api/purchases/history`;
@@ -1320,7 +1364,17 @@ export async function getPurchasesHistoryAPI() {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { getPurchasesHistoryAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.4 ==========
 
+// ========== REFACTORING STEP 9.5: getAllPurchasesAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)
+// НОВЫЙ КОД: используйте import { getAllPurchasesAPI } from './api/purchases.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Получение всех покупок для админа
 export async function getAllPurchasesAPI(shopOwnerId) {
     const url = `${API_BASE}/api/purchases/all?user_id=${shopOwnerId}`;
@@ -1350,7 +1404,17 @@ export async function getAllPurchasesAPI(shopOwnerId) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { getAllPurchasesAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.5 ==========
 
+// ========== REFACTORING STEP 9.6: updatePurchaseStatusAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)
+// НОВЫЙ КОД: используйте import { updatePurchaseStatusAPI } from './api/purchases.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Обновление статуса покупки (для владельца магазина)
 export async function updatePurchaseStatusAPI(purchaseId, shopOwnerId, statusData) {
     const url = `${API_BASE}/api/purchases/${purchaseId}?user_id=${shopOwnerId}`;
@@ -1378,3 +1442,8 @@ export async function updatePurchaseStatusAPI(purchaseId, shopOwnerId, statusDat
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { updatePurchaseStatusAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.6 ==========

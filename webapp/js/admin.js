@@ -5,6 +5,9 @@ import { getShopSettings } from './api.js';
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 // Эти функции будут импортироваться из './api.js' через реэкспорт
 // ========== END REFACTORING STEP 8 ==========
+// ========== REFACTORING STEP 9.6: updatePurchaseStatusAPI() ==========
+// НОВЫЙ ИМПОРТ из модуля api/purchases.js
+// ========== END REFACTORING STEP 9.6 ==========
 // ========== REFACTORING STEP 1.1: showNotification ==========
 // ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
 // ========== REFACTORING STEP 1.3: loadShopSettings ==========

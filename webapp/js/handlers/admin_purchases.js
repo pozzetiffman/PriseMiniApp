@@ -3,7 +3,15 @@
 // Дата начала: 2024-12-19
 // Статус: В процессе
 
-import { API_BASE, getAllPurchasesAPI, updatePurchaseStatusAPI } from '../api.js';
+import { API_BASE } from '../api.js';
+// ========== REFACTORING STEP 9.5: getAllPurchasesAPI() ==========
+// НОВЫЙ ИМПОРТ из модуля api/purchases.js
+import { getAllPurchasesAPI } from '../api/purchases.js';
+// ========== END REFACTORING STEP 9.5 ==========
+// ========== REFACTORING STEP 9.6: updatePurchaseStatusAPI() ==========
+// НОВЫЙ ИМПОРТ из модуля api/purchases.js
+import { updatePurchaseStatusAPI } from '../api/purchases.js';
+// ========== END REFACTORING STEP 9.6 ==========
 import { showNotification } from '../utils/admin_utils.js';
 
 /**

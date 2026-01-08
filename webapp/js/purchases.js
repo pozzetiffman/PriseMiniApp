@@ -2,7 +2,14 @@
 // Вынесено из app.js для рефакторинга
 
 // Импорты API
-import { cancelPurchaseAPI, createPurchaseAPI } from './api.js';
+// ========== REFACTORING STEP 9.1: createPurchaseAPI() ==========
+// НОВЫЙ ИМПОРТ из модуля api/purchases.js
+import { createPurchaseAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.1 ==========
+// ========== REFACTORING STEP 9.3: cancelPurchaseAPI() ==========
+// НОВЫЙ ИМПОРТ из модуля api/purchases.js
+import { cancelPurchaseAPI } from './api/purchases.js';
+// ========== END REFACTORING STEP 9.3 ==========
 
 // Зависимости, которые будут переданы из app.js
 let appContextGetter = null; // Функция-геттер для получения appContext
@@ -47,7 +54,10 @@ function setupGlobalFunctions() {
         }
         
         try {
-            const { clearPurchasesHistoryAPI } = await import('./api.js');
+            // ========== REFACTORING STEP 9.7: clearPurchasesHistoryAPI() ==========
+            // НОВЫЙ ИМПОРТ из модуля api/purchases.js
+            const { clearPurchasesHistoryAPI } = await import('./api/purchases.js');
+            // ========== END REFACTORING STEP 9.7 ==========
             const result = await clearPurchasesHistoryAPI();
             await safeAlert(`✅ История продаж очищена (удалено ${result.deleted_count || 0} записей)`);
             
