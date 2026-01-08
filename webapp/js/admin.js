@@ -1,5 +1,5 @@
 // Модуль админки магазина
-import { API_BASE, bulkUpdateAllProductsMadeToOrderAPI, cancelOrderAPI, completeOrderAPI, deleteOrderAPI, deleteOrdersAPI, deleteSoldProductAPI, deleteSoldProductsAPI, fetchProducts, getAllPurchasesAPI, getProductViewStatsAPI, getShopOrdersAPI, getShopSettings, getSoldProductsAPI, getVisitStatsAPI, getVisitsListAPI, updatePurchaseStatusAPI, updateShopSettings } from './api.js';
+import { API_BASE, cancelOrderAPI, completeOrderAPI, deleteOrderAPI, deleteOrdersAPI, deleteSoldProductAPI, deleteSoldProductsAPI, getAllPurchasesAPI, getProductViewStatsAPI, getShopOrdersAPI, getShopSettings, getSoldProductsAPI, getVisitStatsAPI, getVisitsListAPI, updatePurchaseStatusAPI } from './api.js';
 // ========== REFACTORING STEP 1.1: showNotification ==========
 // ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
 // ========== REFACTORING STEP 1.3: loadShopSettings ==========
@@ -7,6 +7,24 @@ import { getCurrentShopSettings as getCurrentShopSettingsUtil, loadShopSettings 
 // ========== END REFACTORING STEP 1.1 ==========
 // ========== END REFACTORING STEP 1.2 ==========
 // ========== END REFACTORING STEP 1.3 ==========
+// ========== REFACTORING STEP 2.1: initAdmin ==========
+// ========== REFACTORING STEP 2.2: createAdminModal ==========
+// ========== REFACTORING STEP 2.3: openAdmin ==========
+// ========== REFACTORING STEP 2.4: switchAdminTab ==========
+import { createAdminModal as createAdminModalHandler, initAdmin as initAdminHandler, openAdmin as openAdminHandler, switchAdminTab as switchAdminTabHandler } from './handlers/admin_init.js';
+// ========== END REFACTORING STEP 2.1 ==========
+// ========== END REFACTORING STEP 2.2 ==========
+// ========== END REFACTORING STEP 2.3 ==========
+// ========== END REFACTORING STEP 2.4 ==========
+// ========== REFACTORING STEP 3.1: handleQuantityEnabledToggle ==========
+// ========== REFACTORING STEP 3.2: handleReservationsToggle ==========
+// ========== REFACTORING STEP 3.3: checkAllProductsMadeToOrder ==========
+// ========== REFACTORING STEP 3.4: handleAllProductsMadeToOrderToggle ==========
+import { checkAllProductsMadeToOrder as checkAllProductsMadeToOrderHandler, handleAllProductsMadeToOrderToggle as handleAllProductsMadeToOrderToggleHandler, handleQuantityEnabledToggle as handleQuantityEnabledToggleHandler, handleReservationsToggle as handleReservationsToggleHandler } from './handlers/admin_settings.js';
+// ========== END REFACTORING STEP 3.1 ==========
+// ========== END REFACTORING STEP 3.2 ==========
+// ========== END REFACTORING STEP 3.3 ==========
+// ========== END REFACTORING STEP 3.4 ==========
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -14,7 +32,86 @@ let quantityEnabledToggle = null;
 let allProductsMadeToOrderToggle = null;
 let shopSettings = null;
 
-// Инициализация админки
+// ========== REFACTORING STEP 2.4: switchAdminTab ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_init.js' и обернута для передачи зависимостей
+function switchAdminTab(tabName) {
+    return switchAdminTabHandler(tabName, {
+        loadOrders,
+        loadSoldProducts,
+        loadStats,
+        loadPurchases
+    });
+}
+// ========== END REFACTORING STEP 2.4 ==========
+
+// ========== REFACTORING STEP 3.1: handleQuantityEnabledToggle ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_settings.js' и обернута для передачи зависимостей
+async function handleQuantityEnabledToggle(enabled) {
+    console.log('🔄 [REFACTORING STEP 3.1] handleQuantityEnabledToggle called via wrapper');
+    return handleQuantityEnabledToggleHandler(enabled, {
+        getShopSettings: () => shopSettings,
+        setShopSettings: (val) => { shopSettings = val; },
+        getReservationsToggle: () => reservationsToggle,
+        getQuantityEnabledToggle: () => quantityEnabledToggle
+    });
+}
+// ========== END REFACTORING STEP 3.1 ==========
+
+// ========== REFACTORING STEP 3.2: handleReservationsToggle ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_settings.js' и обернута для передачи зависимостей
+async function handleReservationsToggle(enabled) {
+    console.log('🔄 [REFACTORING STEP 3.2] handleReservationsToggle called via wrapper');
+    return handleReservationsToggleHandler(enabled, {
+        getShopSettings: () => shopSettings,
+        setShopSettings: (val) => { shopSettings = val; },
+        getReservationsToggle: () => reservationsToggle
+    });
+}
+// ========== END REFACTORING STEP 3.2 ==========
+
+// ========== REFACTORING STEP 3.3: checkAllProductsMadeToOrder ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_settings.js' и используется напрямую (не требует зависимостей)
+const checkAllProductsMadeToOrder = async (...args) => {
+    console.log('🔄 [REFACTORING STEP 3.3] checkAllProductsMadeToOrder called via wrapper');
+    return checkAllProductsMadeToOrderHandler(...args);
+};
+// ========== END REFACTORING STEP 3.3 ==========
+
+// ========== REFACTORING STEP 3.4: handleAllProductsMadeToOrderToggle ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_settings.js' и обернута для передачи зависимостей
+async function handleAllProductsMadeToOrderToggle(enabled) {
+    console.log('🔄 [REFACTORING STEP 3.4] handleAllProductsMadeToOrderToggle called via wrapper');
+    return handleAllProductsMadeToOrderToggleHandler(enabled, {
+        getAllProductsMadeToOrderToggle: () => allProductsMadeToOrderToggle
+    });
+}
+// ========== END REFACTORING STEP 3.4 ==========
+
+// ========== REFACTORING STEP 2.1: initAdmin ==========
+// ========== REFACTORING STEP 2.2: createAdminModal ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функции импортированы из './handlers/admin_init.js' и обернуты для передачи зависимостей
+export function initAdmin() {
+    initAdminHandler({
+        createAdminModal: createAdminModalHandler,
+        handleQuantityEnabledToggle,
+        handleReservationsToggle,
+        handleAllProductsMadeToOrderToggle,
+        switchAdminTab,
+        setAdminModal: (val) => { adminModal = val; },
+        setReservationsToggle: (val) => { reservationsToggle = val; },
+        setQuantityEnabledToggle: (val) => { quantityEnabledToggle = val; },
+        setAllProductsMadeToOrderToggle: (val) => { allProductsMadeToOrderToggle = val; }
+    });
+}
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 export function initAdmin() {
     console.log('🔧 Initializing admin panel...');
     
@@ -75,8 +172,15 @@ export function initAdmin() {
     
     console.log('✅ Admin panel initialized');
 }
+*/
+// ========== END REFACTORING STEP 2.1 ==========
 
-// Создание модального окна админки
+// ========== REFACTORING STEP 2.2: createAdminModal ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_init.js' (см. импорты в начале файла)
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 function createAdminModal() {
     const modal = document.createElement('div');
     modal.id = 'admin-modal';
@@ -175,8 +279,32 @@ function createAdminModal() {
     
     document.body.appendChild(modal);
 }
+*/
+// ========== END REFACTORING STEP 2.2 ==========
 
-// Открытие админки
+// ========== REFACTORING STEP 2.3: openAdmin ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_init.js' и обернута для передачи зависимостей
+export async function openAdmin() {
+    return await openAdminHandler({
+        initAdmin,
+        getShopSettings,
+        checkAllProductsMadeToOrder,
+        switchAdminTab,
+        getAdminModal: () => adminModal,
+        setAdminModal: (val) => { adminModal = val; },
+        getReservationsToggle: () => reservationsToggle,
+        setReservationsToggle: (val) => { reservationsToggle = val; },
+        getQuantityEnabledToggle: () => quantityEnabledToggle,
+        setQuantityEnabledToggle: (val) => { quantityEnabledToggle = val; },
+        getAllProductsMadeToOrderToggle: () => allProductsMadeToOrderToggle,
+        setAllProductsMadeToOrderToggle: (val) => { allProductsMadeToOrderToggle = val; },
+        setShopSettings: (val) => { shopSettings = val; }
+    });
+}
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 export async function openAdmin() {
     console.log('🔧 Opening admin panel...');
     
@@ -227,7 +355,12 @@ export async function openAdmin() {
         alert('Не удалось загрузить настройки магазина: ' + error.message);
     }
 }
+*/
+// ========== END REFACTORING STEP 2.3 ==========
 
+// ========== REFACTORING STEP 3.1: handleQuantityEnabledToggle ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обработка изменения переключателя количества товаров
 async function handleQuantityEnabledToggle(enabled) {
     console.log(`🔧 Toggling quantity enabled: ${enabled}`);
@@ -275,7 +408,12 @@ async function handleQuantityEnabledToggle(enabled) {
         alert('Не удалось обновить настройки: ' + error.message);
     }
 }
+*/
+// ========== END REFACTORING STEP 3.1 ==========
 
+// ========== REFACTORING STEP 3.2: handleReservationsToggle ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обработка изменения переключателя резервации
 async function handleReservationsToggle(enabled) {
     console.log(`🔧 Toggling reservations: ${enabled}`);
@@ -311,7 +449,12 @@ async function handleReservationsToggle(enabled) {
         alert('Не удалось обновить настройки: ' + error.message);
     }
 }
+*/
+// ========== END REFACTORING STEP 3.2 ==========
 
+// ========== REFACTORING STEP 3.3: checkAllProductsMadeToOrder ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Проверка состояния товаров (все ли они под заказ)
 async function checkAllProductsMadeToOrder() {
     try {
@@ -354,7 +497,12 @@ async function checkAllProductsMadeToOrder() {
         return false;
     }
 }
+*/
+// ========== END REFACTORING STEP 3.3 ==========
 
+// ========== REFACTORING STEP 3.4: handleAllProductsMadeToOrderToggle ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обработка изменения переключателя "Все товары под заказ"
 async function handleAllProductsMadeToOrderToggle(enabled) {
     console.log(`🔧 Toggling all products made-to-order: ${enabled}`);
@@ -387,7 +535,12 @@ async function handleAllProductsMadeToOrderToggle(enabled) {
         alert('Не удалось обновить товары: ' + error.message);
     }
 }
+*/
+// ========== END REFACTORING STEP 3.4 ==========
 
+// ========== REFACTORING STEP 3.5: updateProductsUI ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Обновление UI товаров в зависимости от настройки резервации
 function updateProductsUI(reservationsEnabled) {
     // Обновляем кнопки резервации в модальном окне товара
@@ -407,6 +560,8 @@ function updateProductsUI(reservationsEnabled) {
         }, 300);
     }
 }
+*/
+// ========== END REFACTORING STEP 3.5 ==========
 
 // ========== REFACTORING STEP 1.1: showNotification ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -486,7 +641,9 @@ export async function loadShopSettings(shopOwnerId = null) {
 */
 // ========== END REFACTORING STEP 1.3 ==========
 
-// Переключение вкладок админки
+// ========== REFACTORING STEP 2.4: switchAdminTab ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 function switchAdminTab(tabName) {
     const tabs = document.querySelectorAll('.admin-tab');
     const tabContents = document.querySelectorAll('.admin-tab-content');
@@ -527,6 +684,8 @@ function switchAdminTab(tabName) {
         loadPurchases();
     }
 }
+*/
+// ========== END REFACTORING STEP 2.4 ==========
 
 // Загрузка заказов
 async function loadOrders() {
