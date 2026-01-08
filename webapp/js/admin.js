@@ -1,5 +1,12 @@
 // Модуль админки магазина
-import { API_BASE, getShopSettings, updateShopSettings, getSoldProductsAPI, getShopOrdersAPI, completeOrderAPI, cancelOrderAPI, deleteOrderAPI, deleteOrdersAPI, getVisitStatsAPI, getVisitsListAPI, getProductViewStatsAPI, deleteSoldProductAPI, deleteSoldProductsAPI, bulkUpdateAllProductsMadeToOrderAPI, fetchProducts, getAllPurchasesAPI, updatePurchaseStatusAPI } from './api.js';
+import { API_BASE, bulkUpdateAllProductsMadeToOrderAPI, cancelOrderAPI, completeOrderAPI, deleteOrderAPI, deleteOrdersAPI, deleteSoldProductAPI, deleteSoldProductsAPI, fetchProducts, getAllPurchasesAPI, getProductViewStatsAPI, getShopOrdersAPI, getShopSettings, getSoldProductsAPI, getVisitStatsAPI, getVisitsListAPI, updatePurchaseStatusAPI, updateShopSettings } from './api.js';
+// ========== REFACTORING STEP 1.1: showNotification ==========
+// ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
+// ========== REFACTORING STEP 1.3: loadShopSettings ==========
+import { getCurrentShopSettings as getCurrentShopSettingsUtil, loadShopSettings as loadShopSettingsUtil, showNotification } from './utils/admin_utils.js';
+// ========== END REFACTORING STEP 1.1 ==========
+// ========== END REFACTORING STEP 1.2 ==========
+// ========== END REFACTORING STEP 1.3 ==========
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -401,7 +408,12 @@ function updateProductsUI(reservationsEnabled) {
     }
 }
 
-// Показ уведомления
+// ========== REFACTORING STEP 1.1: showNotification ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './utils/admin_utils.js' (см. импорты в начале файла)
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 function showNotification(message) {
     // Создаем временное уведомление
     const notification = document.createElement('div');
@@ -429,13 +441,37 @@ function showNotification(message) {
         }, 300);
     }, 2000);
 }
+*/
+// ========== END REFACTORING STEP 1.1 ==========
 
-// Получение текущих настроек (для использования в других модулях)
+// ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './utils/admin_utils.js' и обернута для доступа к shopSettings
+export function getCurrentShopSettings() {
+    return getCurrentShopSettingsUtil(() => shopSettings);
+}
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 export function getCurrentShopSettings() {
     return shopSettings;
 }
+*/
+// ========== END REFACTORING STEP 1.2 ==========
 
-// Загрузка настроек магазина (для использования при инициализации)
+// ========== REFACTORING STEP 1.3: loadShopSettings ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './utils/admin_utils.js' и обернута для доступа к shopSettings
+export async function loadShopSettings(shopOwnerId = null) {
+    return await loadShopSettingsUtil(
+        getShopSettings,
+        (settings) => { shopSettings = settings; },
+        shopOwnerId
+    );
+}
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 export async function loadShopSettings(shopOwnerId = null) {
     try {
         shopSettings = await getShopSettings(shopOwnerId);
@@ -447,6 +483,8 @@ export async function loadShopSettings(shopOwnerId = null) {
         return { reservations_enabled: true, quantity_enabled: true };
     }
 }
+*/
+// ========== END REFACTORING STEP 1.3 ==========
 
 // Переключение вкладок админки
 function switchAdminTab(tabName) {
