@@ -3,12 +3,16 @@
 
 // Импорты зависимостей
 import { getCurrentShopSettings } from './admin.js';
-import { API_BASE, toggleHotOffer, trackShopVisit } from './api.js';
+import { toggleHotOffer, trackShopVisit } from './api.js';
 import { getProductPriceDisplay } from './utils/priceUtils.js';
 // ========== REFACTORING STEP 1.1: isMobileDevice ==========
 // НОВЫЙ КОД (используется сейчас)
 import { isMobileDevice } from './utils/products_utils.js';
 // ========== END REFACTORING STEP 1.1 ==========
+// ========== REFACTORING STEP 4.1: renderProducts ==========
+// НОВЫЙ КОД (используется сейчас)
+import { initRenderProductsDependencies, renderProducts as renderProductsNew } from './handlers/products_render.js';
+// ========== END REFACTORING STEP 4.1 ==========
 
 // Зависимости, которые будут переданы из app.js
 let productsGridElement = null;
@@ -31,6 +35,15 @@ export function initProductsDependencies(dependencies) {
     productsGridElement = dependencies.productsGrid;
     appContextGetter = dependencies.appContext; // Функция-геттер для получения актуального appContext
     
+    // ========== REFACTORING STEP 4.1: renderProducts ==========
+    // НОВЫЙ КОД (используется сейчас)
+    // Инициализируем зависимости для renderProducts в новом модуле
+    initRenderProductsDependencies({
+        productsGrid: dependencies.productsGrid,
+        appContext: dependencies.appContext
+    });
+    // ========== END REFACTORING STEP 4.1 ==========
+    
     // Зависимости для showProductModal
     modalElement = dependencies.modal;
     modalState = dependencies.modalState; // Объект состояния { currentImageLoadId, currentProduct, currentImages, currentImageIndex }
@@ -44,6 +57,15 @@ export function initProductsDependencies(dependencies) {
     showOrderModalCallback = dependencies.showOrderModal;
 }
 
+// ========== REFACTORING STEP 4.1: renderProducts ==========
+// НОВЫЙ КОД (используется сейчас)
+// Экспортируем функцию из нового модуля
+export { renderProductsNew as renderProducts };
+// ========== END REFACTORING STEP 4.1 ==========
+
+// ========== REFACTORING STEP 4.1: renderProducts ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Рендеринг товаров
 export function renderProducts(products) {
     if (!productsGridElement) {
@@ -562,6 +584,8 @@ export function renderProducts(products) {
         // card уже добавлен в DOM выше (перед установкой img.src)
     });
 }
+*/
+// ========== END REFACTORING STEP 4.1 ==========
 
 // Показ модального окна товара
 export function showProductModal(prod, finalPrice, fullImages) {
