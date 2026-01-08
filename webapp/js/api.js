@@ -6,6 +6,8 @@ import { fetchProducts, getSoldProductsAPI } from './api/products_read.js';
 import { toggleHotOffer, updateProductAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI, updateProductMadeToOrderAPI, updateProductQuantityShowEnabledAPI, updateProductForSaleAPI, bulkUpdateAllProductsMadeToOrderAPI } from './api/products_update.js';
 // Импорты для рефакторинга модуля products_delete.js
 import { deleteProductAPI, markProductSoldAPI, deleteSoldProductAPI, deleteSoldProductsAPI } from './api/products_delete.js';
+// Импорты для рефакторинга модуля reservations.js
+import { fetchUserReservations, fetchReservationsHistory, createReservationAPI, cancelReservationAPI, clearReservationsHistoryAPI } from './api/reservations.js';
 
 // ========== REFACTORING STEP 1.1: API_BASE ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -234,6 +236,13 @@ export async function fetchProducts(shopOwnerId, categoryId = null, botId = null
 */
 // ========== END REFACTORING STEP 4.1 ==========
 
+// ========== REFACTORING STEP 7.1: fetchUserReservations() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { fetchUserReservations } from './api/reservations.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Загрузка резерваций для корзины (только те, где текущий пользователь - резервирующий)
 export async function fetchUserReservations() {
     const url = `${API_BASE}/api/reservations/cart`;
@@ -249,7 +258,16 @@ export async function fetchUserReservations() {
     console.log(`📦 fetchUserReservations: Got ${data.length} cart reservations`);
     return data;
 }
+*/
+// ========== END REFACTORING STEP 7.1 ==========
 
+// ========== REFACTORING STEP 7.2: fetchReservationsHistory() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { fetchReservationsHistory } from './api/reservations.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Загрузка истории резерваций (все резервации пользователя)
 export async function fetchReservationsHistory() {
     const url = `${API_BASE}/api/reservations/history`;
@@ -268,7 +286,16 @@ export async function fetchReservationsHistory() {
     console.log(`📜 fetchReservationsHistory: Got ${data.length} reservations`);
     return data;
 }
+*/
+// ========== END REFACTORING STEP 7.2 ==========
 
+// ========== REFACTORING STEP 7.3: createReservationAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { createReservationAPI } from './api/reservations.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Создание резервации (reserved_by_user_id определяется на backend из initData)
 export async function createReservationAPI(productId, hours, quantity = 1) {
     const url = `${API_BASE}/api/reservations/?product_id=${productId}&hours=${hours}&quantity=${quantity}`;
@@ -295,7 +322,16 @@ export async function createReservationAPI(productId, hours, quantity = 1) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 7.3 ==========
 
+// ========== REFACTORING STEP 7.4: cancelReservationAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { cancelReservationAPI } from './api/reservations.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Отмена резервации (user_id определяется на backend из initData)
 export async function cancelReservationAPI(reservationId) {
     const url = `${API_BASE}/api/reservations/${reservationId}`;
@@ -322,6 +358,8 @@ export async function cancelReservationAPI(reservationId) {
     
     return true;
 }
+*/
+// ========== END REFACTORING STEP 7.4 ==========
 
 // ========== REFACTORING STEP 2.2: getShopSettings() ==========
 // НОВЫЙ КОД (используется сейчас) - импорт и реэкспорт уже добавлены выше в STEP 2.1
@@ -1265,6 +1303,13 @@ export async function createPurchaseAPI(productId, formData) {
     return JSON.parse(responseText);
 }
 
+// ========== REFACTORING STEP 7.5: clearReservationsHistoryAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт для обратной совместимости
+export { clearReservationsHistoryAPI } from './api/reservations.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Очистить историю резерваций
 export async function clearReservationsHistoryAPI() {
     const url = `${API_BASE}/api/reservations/history/clear`;
@@ -1291,6 +1336,8 @@ export async function clearReservationsHistoryAPI() {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 7.5 ==========
 
 // Очистить историю заказов
 export async function clearOrdersHistoryAPI() {
