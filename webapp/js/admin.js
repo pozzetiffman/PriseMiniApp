@@ -1,5 +1,5 @@
 // Модуль админки магазина
-import { API_BASE, deleteSoldProductAPI, deleteSoldProductsAPI, getAllPurchasesAPI, getProductViewStatsAPI, getShopSettings, getSoldProductsAPI, getVisitStatsAPI, getVisitsListAPI, updatePurchaseStatusAPI } from './api.js';
+import { API_BASE, getAllPurchasesAPI, getProductViewStatsAPI, getShopSettings, getVisitStatsAPI, getVisitsListAPI, updatePurchaseStatusAPI } from './api.js';
 // ========== REFACTORING STEP 1.1: showNotification ==========
 // ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
 // ========== REFACTORING STEP 1.3: loadShopSettings ==========
@@ -28,6 +28,9 @@ import { checkAllProductsMadeToOrder as checkAllProductsMadeToOrderHandler, hand
 // ========== REFACTORING STEP 4.1: loadOrders ==========
 import { loadOrders as loadOrdersHandler } from './handlers/admin_orders.js';
 // ========== END REFACTORING STEP 4.1 ==========
+// ========== REFACTORING STEP 6.1: loadSoldProducts ==========
+import { loadSoldProducts as loadSoldProductsHandler } from './handlers/admin_sold.js';
+// ========== END REFACTORING STEP 6.1 ==========
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -45,6 +48,17 @@ async function loadOrders() {
     });
 }
 // ========== END REFACTORING STEP 4.1 ==========
+
+// ========== REFACTORING STEP 6.1: loadSoldProducts ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_sold.js' и обернута для передачи зависимостей
+async function loadSoldProducts() {
+    console.log('🔄 [REFACTORING STEP 6.1] loadSoldProducts called via wrapper');
+    return await loadSoldProductsHandler({
+        loadSoldProducts: loadSoldProducts // Передаем саму себя для рекурсивных вызовов
+    });
+}
+// ========== END REFACTORING STEP 6.1 ==========
 
 // ========== REFACTORING STEP 2.4: switchAdminTab ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -1197,6 +1211,9 @@ async function loadOrders() {
 // ========== END REFACTORING STEP 4.1 ==========
 
 // Загрузка проданных товаров
+// ========== REFACTORING STEP 6.1: loadSoldProducts ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 async function loadSoldProducts() {
     const soldProductsList = document.getElementById('sold-products-list');
     if (!soldProductsList) return;
@@ -1493,6 +1510,8 @@ async function loadSoldProducts() {
         soldProductsList.innerHTML = `<p class="loading">Ошибка загрузки: ${errorMessage}</p>`;
     }
 }
+*/
+// ========== END REFACTORING STEP 6.1 ==========
 
 // Загрузка статистики
 async function loadStats() {
