@@ -500,6 +500,53 @@ header h1 {
     isolation: isolate; /* Создаем новый контекст наложения */
 }
 
+/* Поисковая строка */
+.search-container {
+    padding: 8px 16px;
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 10001; /* Ниже чем категории, но выше чем товары */
+}
+
+.search-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--bg-glass) !important;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary) !important;
+    box-shadow: 0 2px 8px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+.search-input::placeholder {
+    color: var(--text-hint);
+    opacity: 0.7;
+}
+
+.search-input:focus {
+    background: var(--bg-glass-light) !important;
+    border-color: rgba(90, 200, 250, 0.5);
+    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.15),
+                0 0 0 1px rgba(90, 200, 250, 0.2) inset,
+                0 2px 8px rgba(90, 200, 250, 0.1);
+    transform: translateY(-1px);
+}
+
+.search-input:hover:not(:focus) {
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 2px 12px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
 .category-dropdowns-container {
     display: flex;
     flex-direction: row;
@@ -1790,6 +1837,18 @@ main {
         margin: 10px auto;
         padding: 20px;
         border-radius: 20px;
+    }
+    
+    /* Адаптивные стили для поисковой строки */
+    .search-container {
+        padding: 6px 12px;
+        margin-bottom: 6px;
+    }
+    
+    .search-input {
+        padding: 10px 14px;
+        font-size: 13px;
+        border-radius: 14px;
     }
 }
 

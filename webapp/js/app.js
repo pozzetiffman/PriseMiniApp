@@ -42,7 +42,8 @@ let productFilters = {
     withDiscount: false,
     madeToOrder: false,
     newItems: false, // Новинки
-    sortBy: 'none' // 'none', 'price-asc', 'price-desc'
+    sortBy: 'none', // 'none', 'price-asc', 'price-desc'
+    searchQuery: '' // Поисковый запрос
 };
 
 // Делаем productFilters доступным глобально для categories.js
@@ -109,7 +110,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         categoriesHierarchyGetter: () => categoriesHierarchy,
         currentCategoryIdGetter: () => currentCategoryId,
         productsGridElement: productsGrid,
-        renderProductsCallback: renderProducts
+        renderProductsCallback: renderProducts,
+        applyFiltersCallback: applyFilters
     });
     
     // 4.1 Инициализируем зависимости для модуля категорий

@@ -10,6 +10,7 @@ let categoriesHierarchyGetter = null;
 let currentCategoryIdGetter = null;
 let productsGridElement = null;
 let renderProductsCallback = null;
+let applyFiltersCallback = null;
 
 // Инициализация зависимостей
 export function initFiltersDependencies(dependencies) {
@@ -21,12 +22,49 @@ export function initFiltersDependencies(dependencies) {
     currentCategoryIdGetter = dependencies.currentCategoryIdGetter;
     productsGridElement = dependencies.productsGridElement;
     renderProductsCallback = dependencies.renderProductsCallback;
+    applyFiltersCallback = dependencies.applyFiltersCallback;
 }
 
 // Инициализация фильтров
 export function initFilters() {
     // Старые фильтры удалены, функционал перенесен в кнопку со стрелками
     // Обработчики инициализируются в initCategoryFilterHandlers() из categories.js
+    
+    // Инициализация поисковой строки
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        // Обработчик ввода текста с задержкой (debounce)
+        let searchTimeout = null;
+        searchInput.addEventListener('input', (e) => {
+            const productFilters = productFiltersGetter ? productFiltersGetter() : {};
+            const query = e.target.value.trim();
+            
+            // Очищаем предыдущий таймер
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+            
+            // Устанавливаем новый таймер для задержки поиска (300ms)
+            searchTimeout = setTimeout(() => {
+                productFilters.searchQuery = query;
+                if (applyFiltersCallback) {
+                    applyFiltersCallback();
+                }
+            }, 300);
+        });
+        
+        // Обработчик очистки поиска
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                searchInput.value = '';
+                const productFilters = productFiltersGetter ? productFiltersGetter() : {};
+                productFilters.searchQuery = '';
+                if (applyFiltersCallback) {
+                    applyFiltersCallback();
+                }
+            }
+        });
+    }
 }
 
 // Обновление опций фильтра
@@ -246,6 +284,18 @@ export function applyFilters() {
                 return newestIds.includes(prod.id);
             }
             return false;
+        });
+    }
+    
+    // Фильтр по поисковому запросу
+    if (productFilters.searchQuery && productFilters.searchQuery.trim() !== '') {
+        const searchQuery = productFilters.searchQuery.toLowerCase().trim();
+        filteredProducts = filteredProducts.filter(prod => {
+            // Ищем в названии товара
+            const nameMatch = prod.name && prod.name.toLowerCase().includes(searchQuery);
+            // Ищем в описании товара
+            const descriptionMatch = prod.description && prod.description.toLowerCase().includes(searchQuery);
+            return nameMatch || descriptionMatch;
         });
     }
     
