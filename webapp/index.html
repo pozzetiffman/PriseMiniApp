@@ -15,7 +15,10 @@
         <header>
             <button id="profile-button" class="profile-button" style="display: none;">👤</button>
             <h1 id="user-name">Загрузка...</h1>
-            <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
+            <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
+                <button id="card-view-toggle-button" class="card-view-toggle-button" style="display: none;">≡</button>
+                <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
+            </div>
         </header>
         <main>
             <div id="categories-nav" class="scroll-x">
@@ -24,7 +27,7 @@
             <div id="search-container" class="search-container">
                 <input type="text" id="search-input" class="search-input" placeholder="🔍 Поиск товаров..." />
             </div>
-            <div id="products-grid">
+            <div id="products-grid" class="products-grid-view">
                 <!-- Товары будут здесь -->
                 <p class="loading">Загрузка товаров...</p>
             </div>

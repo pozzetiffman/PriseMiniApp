@@ -535,6 +535,82 @@ export function renderProducts(products) {
             card.appendChild(quantityBadge);
         }
         
+        // Для режима списка создаем специальную структуру
+        const topBadgesContainer = document.createElement('div');
+        topBadgesContainer.className = 'product-top-badges-list';
+        
+        // Бейдж скидки для режима списка (если есть скидка)
+        if (prod.discount > 0) {
+            const discountBadgeList = document.createElement('div');
+            discountBadgeList.className = 'discount-badge-list';
+            discountBadgeList.textContent = `-${prod.discount}%`;
+            topBadgesContainer.appendChild(discountBadgeList);
+        }
+        
+        // Бейдж горящего предложения для режима списка (если есть)
+        if (prod.is_hot_offer) {
+            const hotOfferBadgeList = document.createElement('div');
+            hotOfferBadgeList.className = 'hot-offer-badge-list';
+            hotOfferBadgeList.textContent = '🔥';
+            topBadgesContainer.appendChild(hotOfferBadgeList);
+        }
+        
+        // Бейдж резервации для режима списка (если есть резервация)
+        if (prod.reservation) {
+            const reservationBadgeList = document.createElement('div');
+            reservationBadgeList.className = 'reservation-badge-list';
+            reservationBadgeList.textContent = '🔒 Резерв';
+            topBadgesContainer.appendChild(reservationBadgeList);
+        }
+        
+        // Название для режима списка
+        const nameDivList = document.createElement('div');
+        nameDivList.className = 'product-name-list';
+        nameDivList.textContent = prod.name;
+        
+        // Контейнер для цены и статуса в режиме списка
+        const listPriceStatusContainer = document.createElement('div');
+        listPriceStatusContainer.className = 'product-list-price-status';
+        
+        // Цена в режиме списка
+        const listPriceContainer = document.createElement('div');
+        listPriceContainer.className = 'product-list-price';
+        
+        // Старая цена при скидке (только для обычных товаров)
+        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
+            const oldPriceSpanList = document.createElement('span');
+            oldPriceSpanList.className = 'old-price';
+            oldPriceSpanList.textContent = `${prod.price} ₽`;
+            listPriceContainer.appendChild(oldPriceSpanList);
+        }
+        
+        const priceSpanList = document.createElement('span');
+        priceSpanList.className = 'product-price';
+        priceSpanList.textContent = priceDisplay;
+        listPriceContainer.appendChild(priceSpanList);
+        
+        listPriceStatusContainer.appendChild(listPriceContainer);
+        
+        // Статус товара справа в режиме списка
+        if (quantityBadge) {
+            // Создаем новый статус для списка, копируя только текст и стили
+            const statusBadgeList = document.createElement('div');
+            statusBadgeList.className = 'product-quantity-badge-list';
+            statusBadgeList.textContent = quantityBadge.textContent;
+            // Копируем цвет фона и текста из оригинального бейджа
+            statusBadgeList.style.background = quantityBadge.style.background || 'rgba(52, 199, 89, 0.95)';
+            statusBadgeList.style.color = quantityBadge.style.color || '#ffffff';
+            statusBadgeList.style.display = 'inline-block';
+            statusBadgeList.style.position = 'static';
+            statusBadgeList.style.margin = '0';
+            listPriceStatusContainer.appendChild(statusBadgeList);
+        }
+        
+        // Вставляем элементы для режима списка в начало карточки
+        card.insertBefore(topBadgesContainer, card.firstChild);
+        card.insertBefore(nameDivList, topBadgesContainer.nextSibling);
+        card.appendChild(listPriceStatusContainer);
+        
         card.onclick = () => {
             // Используем экспортированную функцию напрямую
             showProductModal(prod, null, fullImages);

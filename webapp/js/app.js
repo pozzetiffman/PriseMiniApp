@@ -29,6 +29,8 @@ import { applyFilters, initFilters, initFiltersDependencies, updateProductFilter
 import { initModalsDependencies, setupModals } from './modals.js';
 // Импорт функций загрузки данных из отдельного модуля (рефакторинг)
 import { initDataDependencies, loadData, updateShopNameInHeader } from './data.js';
+// Импорт функций переключения вида карточек
+import { initCardViewToggle } from './handlers/cardViewToggle.js';
 
 // Глобальные переменные
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
@@ -354,6 +356,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 8.1 Инициализируем личный кабинет для всех пользователей
     initProfile();
     setupProfileButton();
+    
+    // 8.2 Инициализируем переключение вида карточек
+    const cardViewToggleButton = document.getElementById('card-view-toggle-button');
+    if (cardViewToggleButton && productsGrid) {
+        cardViewToggleButton.style.display = 'flex';
+        initCardViewToggle(cardViewToggleButton, productsGrid);
+    }
     
     // Обновляем заголовок с названием магазина (async функция)
     await updateShopNameInHeader();

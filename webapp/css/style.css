@@ -826,6 +826,168 @@ header h1 {
     }
 }
 
+/* Скрываем элементы списка в режиме сетки */
+#products-grid.products-grid-view .product-top-badges-list,
+#products-grid.products-grid-view .product-name-list,
+#products-grid.products-grid-view .product-list-price-status {
+    display: none !important;
+}
+
+/* Режим списка товаров */
+#products-grid.products-list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+}
+
+#products-grid.products-list-view .product-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px;
+    gap: 8px;
+    min-height: auto;
+}
+
+/* Скрываем изображение в режиме списка */
+#products-grid.products-list-view .product-image {
+    display: none !important;
+}
+
+/* Скрываем оригинальные элементы в режиме списка */
+#products-grid.products-list-view .product-name {
+    display: none !important;
+}
+
+#products-grid.products-list-view .product-price-container {
+    display: none !important;
+}
+
+#products-grid.products-list-view .product-quantity-badge:not(.product-quantity-badge-list) {
+    display: none !important;
+}
+
+/* Контейнер верхних бейджей (скидка, горящее предложение, резерв) */
+#products-grid.products-list-view .product-top-badges-list {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+/* Бейдж скидки в списке */
+#products-grid.products-list-view .discount-badge-list {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    background: rgba(255, 77, 77, 0.9) !important;
+    color: white !important;
+    font-weight: 700 !important;
+    white-space: nowrap;
+}
+
+/* Бейдж горящего предложения в списке */
+#products-grid.products-list-view .hot-offer-badge-list {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    background: rgba(255, 149, 0, 0.95) !important;
+    color: white !important;
+    font-weight: 700 !important;
+    white-space: nowrap;
+}
+
+/* Бейдж резервации в списке */
+#products-grid.products-list-view .reservation-badge-list {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    background: rgba(255, 193, 7, 0.95) !important;
+    color: #1a1a1a !important;
+    font-weight: 700 !important;
+    white-space: nowrap;
+}
+
+/* Название товара в списке (новое) */
+#products-grid.products-list-view .product-name-list {
+    width: 100%;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-align: left;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+/* Контейнер для цены и статуса в списке */
+#products-grid.products-list-view .product-list-price-status {
+    width: 100%;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px;
+    flex-wrap: nowrap !important;
+}
+
+/* Контейнер цены в списке (слева) */
+#products-grid.products-list-view .product-list-price {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+
+/* Цена в списке */
+#products-grid.products-list-view .product-list-price .product-price {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--tg-theme-link-color);
+    white-space: nowrap;
+}
+
+/* Старая цена в списке */
+#products-grid.products-list-view .product-list-price .old-price {
+    font-size: 14px;
+    color: var(--text-hint);
+    text-decoration: line-through;
+    white-space: nowrap;
+}
+
+/* Статус товара в списке (справа) */
+#products-grid.products-list-view .product-quantity-badge-list {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    margin: 0 !important;
+    font-weight: 600 !important;
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: inline-block !important;
+}
+
+/* Адаптивность списка для мобильных */
+@media (max-width: 768px) {
+    #products-grid.products-list-view .product-card {
+        padding: 10px;
+        gap: 8px;
+        min-height: auto;
+    }
+    
+    #products-grid.products-list-view .product-name-list {
+        font-size: 15px;
+    }
+    
+    #products-grid.products-list-view .product-list-price-status {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+}
+
 .product-card {
     background: var(--bg-glass) !important;
     backdrop-filter: var(--blur-medium);
@@ -2925,6 +3087,54 @@ main {
     cursor: default;
 }
 
+/* Кнопка переключения вида карточек */
+.card-view-toggle-button {
+    background: linear-gradient(135deg, rgba(255, 149, 0, 0.15) 0%, rgba(255, 149, 0, 0.08) 100%);
+    border: 1px solid rgba(255, 149, 0, 0.3);
+    color: var(--text-primary);
+    padding: 0;
+    border-radius: 16px;
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(255, 149, 0, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+    align-self: center;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.card-view-toggle-button:hover {
+    background: linear-gradient(135deg, rgba(255, 149, 0, 0.25) 0%, rgba(255, 149, 0, 0.15) 100%);
+    border-color: rgba(255, 149, 0, 0.5);
+    box-shadow: 0 6px 24px rgba(255, 149, 0, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-2px);
+}
+
+.card-view-toggle-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.card-view-toggle-button[style*="display: none"] {
+    display: flex !important;
+    opacity: 0.3;
+    pointer-events: none;
+    cursor: default;
+}
+
 /* Модальное окно личного кабинета */
 .profile-modal-content {
     max-width: 500px;
@@ -3081,6 +3291,13 @@ main {
     }
     
     .profile-button {
+        min-width: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
+    
+    .card-view-toggle-button {
         min-width: 40px;
         width: 40px;
         height: 40px;
