@@ -98,13 +98,21 @@ export function showReservationModal(productId) {
         return;
     }
     
-    const productQuantity = product.quantity || 0;
-    console.log('🔒 showReservationModal:', { productId, productQuantity, productName: product.name });
+    const productQuantity = product.quantity !== undefined && product.quantity !== null ? product.quantity : 0;
+    console.log('🔒 showReservationModal:', { productId, productQuantity, productName: product.name, quantity_show_enabled: product.quantity_show_enabled });
     
     // Проверяем, включен ли показ количества в настройках
     const shopSettings = getCurrentShopSettings();
-    const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
-    console.log('🔒 quantityEnabled from settings:', quantityEnabled);
+    const globalQuantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
+    
+    // Определяем, какую настройку использовать для резервации: индивидуальную или общую
+    let quantityEnabled;
+    if (product.quantity_show_enabled === null || product.quantity_show_enabled === undefined) {
+        quantityEnabled = globalQuantityEnabled;
+    } else {
+        quantityEnabled = product.quantity_show_enabled === true || product.quantity_show_enabled === 1 || product.quantity_show_enabled === 'true' || product.quantity_show_enabled === '1';
+    }
+    console.log('🔒 quantityEnabled:', { globalQuantityEnabled, individualSetting: product.quantity_show_enabled, finalQuantityEnabled: quantityEnabled });
     
     const quantityContainer = document.getElementById('reservation-quantity-container');
     const quantityInput = document.getElementById('reservation-quantity');
@@ -116,32 +124,62 @@ export function showReservationModal(productId) {
         return;
     }
     
-    // Показываем выбор количества только если quantity_enabled включен И quantity > 1
-    if (quantityEnabled && productQuantity > 1) {
+    // Сбрасываем состояние disabled при каждом открытии модального окна
+    quantityInput.disabled = false;
+    
+    // Показываем выбор количества если quantity_enabled включен
+    if (quantityEnabled) {
         console.log('🔒 Showing quantity selector for product with quantity:', productQuantity);
         quantityContainer.style.display = 'block';
-        quantityInput.max = productQuantity;
-        quantityInput.value = 1;
         
-        // Показываем информацию о доступном количестве
-        const activeReservationsCount = product.reservation ? 1 : 0;
-        const availableCount = productQuantity - activeReservationsCount;
-        const quantityUnit = product.quantity_unit || 'шт';
-        quantityInfo.textContent = `Доступно для резервации: ${availableCount} из ${productQuantity} ${quantityUnit}`;
+        // Если quantity не указан или равен 0, считаем что товар в наличии (неограниченное количество)
+        const hasQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0;
         
-        // Обновляем max при изменении
-        quantityInput.oninput = () => {
-            const value = parseInt(quantityInput.value) || 1;
-            if (value > availableCount) {
-                quantityInput.value = availableCount;
+        if (hasQuantity) {
+            // Показываем информацию о доступном количестве
+            const activeReservationsCount = product.reservation && product.reservation.active_count ? product.reservation.active_count : 0;
+            const availableCount = Math.max(0, productQuantity - activeReservationsCount);
+            const quantityUnit = product.quantity_unit || 'шт';
+            
+            // Устанавливаем максимальное значение для input
+            quantityInput.max = availableCount;
+            quantityInput.value = Math.min(1, availableCount); // По умолчанию 1, но не больше доступного
+            
+            // Обновляем информацию о доступном количестве
+            if (availableCount > 0) {
+                quantityInfo.textContent = `Доступно для резервации: ${availableCount} из ${productQuantity} ${quantityUnit}`;
+            } else {
+                quantityInfo.textContent = `❌ Нет доступных единиц для резервации (зарезервировано: ${activeReservationsCount} из ${productQuantity} ${quantityUnit})`;
+                quantityInput.disabled = true;
             }
-            if (value < 1) {
-                quantityInput.value = 1;
-            }
-        };
+            
+            // Обновляем max при изменении
+            quantityInput.oninput = () => {
+                const value = parseInt(quantityInput.value) || 1;
+                if (value > availableCount) {
+                    quantityInput.value = availableCount;
+                }
+                if (value < 1) {
+                    quantityInput.value = 1;
+                }
+            };
+        } else {
+            // Если quantity не указан, считаем что товар в наличии (неограниченное количество)
+            quantityInput.max = ''; // Убираем ограничение
+            quantityInput.value = 1;
+            quantityInfo.textContent = 'Введите количество для резервации';
+            
+            // Обновляем max при изменении
+            quantityInput.oninput = () => {
+                const value = parseInt(quantityInput.value) || 1;
+                if (value < 1) {
+                    quantityInput.value = 1;
+                }
+            };
+        }
     } else {
-        // Если quantity_enabled выключен ИЛИ quantity = 1 или null/undefined, скрываем выбор количества
-        console.log('🔒 Hiding quantity selector (quantity_enabled=false or quantity <= 1 or null)');
+        // Если quantity_enabled выключен, скрываем выбор количества
+        console.log('🔒 Hiding quantity selector: quantity_enabled=false');
         quantityContainer.style.display = 'none';
     }
     
@@ -175,23 +213,29 @@ export function showReservationModal(productId) {
             
             console.log('🔒 Reservation option clicked:', { hours, productQuantity, quantityEnabled, containerDisplay: quantityContainer ? quantityContainer.style.display : 'not found' });
             
-            // Если показывается выбор количества (quantity_enabled включен И quantity > 1), берем значение из input
-            if (quantityEnabled && productQuantity > 1 && quantityContainer && quantityContainer.style.display !== 'none') {
+            // Если показывается выбор количества (quantity_enabled включен), берем значение из input
+            if (quantityEnabled && quantityContainer && quantityContainer.style.display !== 'none') {
                 quantity = parseInt(quantityInput.value) || 1;
-                const activeReservationsCount = product.reservation ? 1 : 0;
-                const availableCount = Math.max(0, productQuantity - activeReservationsCount);
-                const quantityUnit = product.quantity_unit || 'шт';
-                console.log('🔒 Quantity check:', { quantity, availableCount, productQuantity, activeReservationsCount });
-                if (quantity > availableCount) {
-                    alert(`❌ Недостаточно товара. Доступно для резервации: ${availableCount} ${quantityUnit}`);
-                    return;
+                
+                // Проверяем количество только если оно указано для товара
+                const hasQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0;
+                if (hasQuantity) {
+                    const activeReservationsCount = product.reservation && product.reservation.active_count ? product.reservation.active_count : 0;
+                    const availableCount = Math.max(0, productQuantity - activeReservationsCount);
+                    const quantityUnit = product.quantity_unit || 'шт';
+                    console.log('🔒 Quantity check:', { quantity, availableCount, productQuantity, activeReservationsCount });
+                    if (quantity > availableCount) {
+                        alert(`❌ Недостаточно товара. Доступно для резервации: ${availableCount} ${quantityUnit}`);
+                        return;
+                    }
                 }
+                
                 if (quantity < 1) {
                     alert('❌ Количество должно быть не менее 1');
                     return;
                 }
             } else {
-                console.log('🔒 Using default quantity=1 (quantity selector not shown or quantity <= 1)');
+                console.log('🔒 Using default quantity=1 (quantity selector not shown)');
             }
             
             console.log('🔒 Creating reservation with:', { productId, hours, quantity });
