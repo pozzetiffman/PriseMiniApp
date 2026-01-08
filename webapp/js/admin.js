@@ -1,9 +1,9 @@
 // Модуль админки магазина
-import { API_BASE, getAllPurchasesAPI, getShopSettings, updatePurchaseStatusAPI } from './api.js';
+import { getShopSettings } from './api.js';
 // ========== REFACTORING STEP 1.1: showNotification ==========
 // ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
 // ========== REFACTORING STEP 1.3: loadShopSettings ==========
-import { getCurrentShopSettings as getCurrentShopSettingsUtil, loadShopSettings as loadShopSettingsUtil, showNotification } from './utils/admin_utils.js';
+import { getCurrentShopSettings as getCurrentShopSettingsUtil, loadShopSettings as loadShopSettingsUtil } from './utils/admin_utils.js';
 // ========== END REFACTORING STEP 1.1 ==========
 // ========== END REFACTORING STEP 1.2 ==========
 // ========== END REFACTORING STEP 1.3 ==========
@@ -34,6 +34,9 @@ import { loadSoldProducts as loadSoldProductsHandler } from './handlers/admin_so
 // ========== REFACTORING STEP 5.1: loadStats ==========
 import { loadStats as loadStatsHandler } from './handlers/admin_stats.js';
 // ========== END REFACTORING STEP 5.1 ==========
+// ========== REFACTORING STEP 7.1: loadPurchases ==========
+import { loadPurchases as loadPurchasesHandler } from './handlers/admin_purchases.js';
+// ========== END REFACTORING STEP 7.1 ==========
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -71,6 +74,17 @@ async function loadStats() {
     return await loadStatsHandler();
 }
 // ========== END REFACTORING STEP 5.1 ==========
+
+// ========== REFACTORING STEP 7.1: loadPurchases ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_purchases.js' и обернута для передачи зависимостей
+async function loadPurchases() {
+    console.log('🔄 [REFACTORING STEP 7.1] loadPurchases called via wrapper');
+    return await loadPurchasesHandler({
+        loadPurchases: loadPurchases // Передаем саму себя для рекурсивных вызовов
+    });
+}
+// ========== END REFACTORING STEP 7.1 ==========
 
 // ========== REFACTORING STEP 2.4: switchAdminTab ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -1702,6 +1716,9 @@ async function loadStats() {
 // ========== END REFACTORING STEP 5.1 ==========
 
 // Загрузка покупок
+// ========== REFACTORING STEP 7.1: loadPurchases ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 async function loadPurchases() {
     const purchasesList = document.getElementById('purchases-list');
     if (!purchasesList) return;
@@ -2178,4 +2195,6 @@ async function loadPurchases() {
         purchasesList.innerHTML = `<p class="loading">Ошибка загрузки: ${errorMessage}</p>`;
     }
 }
+*/
+// ========== END REFACTORING STEP 7.1 ==========
 
