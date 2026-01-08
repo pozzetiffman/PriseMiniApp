@@ -1,9 +1,27 @@
 // Модуль API вызовов
 import { getInitData, requireTelegram } from './telegram.js';
 
+// ========== REFACTORING STEP 1.1: API_BASE ==========
+// НОВЫЙ КОД (используется сейчас)
+import { API_BASE } from './api/config.js';
+// Реэкспорт для обратной совместимости
+export { API_BASE } from './api/config.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // НАСТРОЙКА АДРЕСА
 export const API_BASE = "https://unmaneuvered-chronogrammatically-otelia.ngrok-free.dev".trim();
+*/
+// ========== END REFACTORING STEP 1.1 ==========
 
+// ========== REFACTORING STEP 1.2: getBaseHeadersNoAuth() ==========
+// НОВЫЙ КОД (используется сейчас)
+import { getBaseHeadersNoAuth } from './api/config.js';
+// Реэкспорт для обратной совместимости
+export { getBaseHeadersNoAuth } from './api/config.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Базовые заголовки без авторизации (для просмотра товаров/категорий)
 export function getBaseHeadersNoAuth() {
     return {
@@ -11,7 +29,17 @@ export function getBaseHeadersNoAuth() {
         "Content-Type": "application/json"
     };
 }
+*/
+// ========== END REFACTORING STEP 1.2 ==========
 
+// ========== REFACTORING STEP 1.3: getBaseHeaders() ==========
+// НОВЫЙ КОД (используется сейчас)
+import { getBaseHeaders } from './api/config.js';
+// Реэкспорт для обратной совместимости
+export { getBaseHeaders } from './api/config.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Базовые опции для запросов с авторизацией
 export function getBaseHeaders() {
     const headers = {
@@ -30,7 +58,17 @@ export function getBaseHeaders() {
     headers["X-Telegram-Init-Data"] = initData;
     return headers;
 }
+*/
+// ========== END REFACTORING STEP 1.3 ==========
 
+// ========== REFACTORING STEP 1.4: fetchOptions ==========
+// НОВЫЙ КОД (используется сейчас)
+import { fetchOptions } from './api/config.js';
+// Реэкспорт для обратной совместимости
+export { fetchOptions } from './api/config.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Опции для обхода предупреждения ngrok (для обратной совместимости)
 // НЕ используем getBaseHeaders() здесь, так как он требует initData при импорте
 export const fetchOptions = {
@@ -39,6 +77,8 @@ export const fetchOptions = {
         "Content-Type": "application/json"
     }
 };
+*/
+// ========== END REFACTORING STEP 1.4 ==========
 
 // Получение контекста магазина
 export async function getContext(shopOwnerId = null) {
