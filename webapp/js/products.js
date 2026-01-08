@@ -2,9 +2,6 @@
 // Вынесено из app.js для рефакторинга
 
 // Импорты зависимостей
-import { getCurrentShopSettings } from './admin.js';
-import { toggleHotOffer, trackShopVisit } from './api.js';
-import { getProductPriceDisplay } from './utils/priceUtils.js';
 // ========== REFACTORING STEP 1.1: isMobileDevice ==========
 // НОВЫЙ КОД (используется сейчас)
 import { isMobileDevice } from './utils/products_utils.js';
@@ -13,14 +10,20 @@ import { isMobileDevice } from './utils/products_utils.js';
 // НОВЫЙ КОД (используется сейчас)
 import { initRenderProductsDependencies, renderProducts as renderProductsNew } from './handlers/products_render.js';
 // ========== END REFACTORING STEP 4.1 ==========
+// ========== REFACTORING STEP 3.1: showProductModal ==========
+// НОВЫЙ КОД (используется сейчас)
+import { initProductModalDependencies, showProductModal as showProductModalNew } from './handlers/products_modal.js';
+// ========== END REFACTORING STEP 3.1 ==========
 
 // Зависимости, которые будут переданы из app.js
 let productsGridElement = null;
 let appContextGetter = null; // Функция для получения актуального appContext
 
+// ========== REFACTORING STEP 3.1: showProductModal ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 // Зависимости для showProductModal
+/*
 let modalElement = null; // DOM элемент модального окна
-let modalState = null; // Объект состояния модального окна { currentImageLoadId, currentProduct, currentImages, currentImageIndex }
 let loadDataCallback = null; // Функция для перезагрузки данных
 let showEditProductModalCallback = null; // Функция для показа модального окна редактирования
 let markAsSoldCallback = null; // Функция для пометки товара как проданного
@@ -29,6 +32,12 @@ let cancelReservationCallback = null; // Функция для отмены ре
 let showPurchaseModalCallback = null; // Функция для показа модального окна продажи
 let showReservationModalCallback = null; // Функция для показа модального окна резервации
 let showOrderModalCallback = null; // Функция для показа модального окна заказа
+*/
+// ========== END REFACTORING STEP 3.1 ==========
+
+// ВАЖНО: modalState используется в showModalImage и updateImageNavigation, которые еще не вынесены
+// Поэтому оставляем эту переменную активной
+let modalState = null; // Объект состояния модального окна { currentImageLoadId, currentProduct, currentImages, currentImageIndex }
 
 // Инициализация зависимостей
 export function initProductsDependencies(dependencies) {
@@ -44,7 +53,35 @@ export function initProductsDependencies(dependencies) {
     });
     // ========== END REFACTORING STEP 4.1 ==========
     
+    // ========== REFACTORING STEP 3.1: showProductModal ==========
+    // НОВЫЙ КОД (используется сейчас)
+    // Инициализируем зависимости для showProductModal в новом модуле
+    // ВАЖНО: showModalImage определена позже в файле, но в ES6 модулях export function доступна в момент импорта
+    // Используем функцию напрямую - она будет доступна в момент вызова через замыкание модуля
+    // ВАЖНО: modalState используется в showModalImage и updateImageNavigation, которые еще не вынесены
+    // Поэтому устанавливаем глобальную переменную modalState
+    modalState = dependencies.modalState;
+    
+    initProductModalDependencies({
+        modal: dependencies.modal,
+        modalState: dependencies.modalState,
+        appContext: dependencies.appContext,
+        loadData: dependencies.loadData,
+        showEditProductModal: dependencies.showEditProductModal,
+        markAsSold: dependencies.markAsSold,
+        deleteProduct: dependencies.deleteProduct,
+        cancelReservation: dependencies.cancelReservation,
+        showPurchaseModal: dependencies.showPurchaseModal,
+        showReservationModal: dependencies.showReservationModal,
+        showOrderModal: dependencies.showOrderModal,
+        showModalImage: showModalImage // Передаем функцию напрямую - в ES6 модулях она доступна после загрузки модуля
+    });
+    // ========== END REFACTORING STEP 3.1 ==========
+    
+    // ========== REFACTORING STEP 3.1: showProductModal ==========
+    // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
     // Зависимости для showProductModal
+    /*
     modalElement = dependencies.modal;
     modalState = dependencies.modalState; // Объект состояния { currentImageLoadId, currentProduct, currentImages, currentImageIndex }
     loadDataCallback = dependencies.loadData;
@@ -55,6 +92,8 @@ export function initProductsDependencies(dependencies) {
     showPurchaseModalCallback = dependencies.showPurchaseModal;
     showReservationModalCallback = dependencies.showReservationModal;
     showOrderModalCallback = dependencies.showOrderModal;
+    */
+    // ========== END REFACTORING STEP 3.1 ==========
 }
 
 // ========== REFACTORING STEP 4.1: renderProducts ==========
@@ -62,6 +101,11 @@ export function initProductsDependencies(dependencies) {
 // Экспортируем функцию из нового модуля
 export { renderProductsNew as renderProducts };
 // ========== END REFACTORING STEP 4.1 ==========
+// ========== REFACTORING STEP 3.1: showProductModal ==========
+// НОВЫЙ КОД (используется сейчас)
+// Экспортируем функцию из нового модуля
+    export { showProductModalNew as showProductModal };
+// ========== END REFACTORING STEP 3.1 ==========
 
 // ========== REFACTORING STEP 4.1: renderProducts ==========
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
@@ -587,6 +631,9 @@ export function renderProducts(products) {
 */
 // ========== END REFACTORING STEP 4.1 ==========
 
+// ========== REFACTORING STEP 3.1: showProductModal ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Показ модального окна товара
 export function showProductModal(prod, finalPrice, fullImages) {
     console.log(`[MODAL] showProductModal called: productId=${prod.id}, productName="${prod.name}", fullImages.length=${fullImages ? fullImages.length : 0}`);
@@ -1024,6 +1071,8 @@ export function showProductModal(prod, finalPrice, fullImages) {
     showModalImage(0);
     modalElement.style.display = 'block';
 }
+*/
+// ========== END REFACTORING STEP 3.1 ==========
 
 // Показ изображения в модальном окне
 export function showModalImage(index) {

@@ -8,7 +8,10 @@
 // Импорты зависимостей
 import { getCurrentShopSettings } from '../admin.js';
 import { API_BASE } from '../api.js';
-import { showProductModal } from '../products.js'; // Импортируем из products.js, так как она еще не вынесена
+// ========== REFACTORING STEP 3.1: showProductModal ==========
+// НОВЫЙ КОД (используется сейчас)
+import { showProductModal } from './products_modal.js'; // Импортируем из нового модуля
+// ========== END REFACTORING STEP 3.1 ==========
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
 import { isMobileDevice } from '../utils/products_utils.js';
 
