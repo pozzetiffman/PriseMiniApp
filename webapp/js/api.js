@@ -1,5 +1,7 @@
 // Модуль API вызовов
 import { getInitData } from './telegram.js';
+// Импорты для рефакторинга модуля products_read.js
+import { fetchProducts, getSoldProductsAPI } from './api/products_read.js';
 
 // ========== REFACTORING STEP 1.1: API_BASE ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -16,7 +18,6 @@ export const API_BASE = "https://unmaneuvered-chronogrammatically-otelia.ngrok-f
 
 // ========== REFACTORING STEP 1.2: getBaseHeadersNoAuth() ==========
 // НОВЫЙ КОД (используется сейчас)
-import { getBaseHeadersNoAuth } from './api/config.js';
 // Реэкспорт для обратной совместимости
 export { getBaseHeadersNoAuth } from './api/config.js';
 
@@ -183,6 +184,14 @@ export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
 */
 // ========== END REFACTORING STEP 3.1 ==========
 
+// ========== REFACTORING STEP 4.1: fetchProducts() и getSoldProductsAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Импорт уже добавлен в начале файла
+// Реэкспорт для обратной совместимости
+export { fetchProducts, getSoldProductsAPI };
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Загрузка товаров (не требует авторизации - только просмотр)
 export async function fetchProducts(shopOwnerId, categoryId = null, botId = null) {
     let url = `${API_BASE}/api/products/?user_id=${shopOwnerId}`;
@@ -218,6 +227,8 @@ export async function fetchProducts(shopOwnerId, categoryId = null, botId = null
         throw e;
     }
 }
+*/
+// ========== END REFACTORING STEP 4.1 ==========
 
 // Загрузка резерваций для корзины (только те, где текущий пользователь - резервирующий)
 export async function fetchUserReservations() {
@@ -727,6 +738,12 @@ export async function markProductSoldAPI(productId, shopOwnerId, quantity = 1) {
     return JSON.parse(responseText);
 }
 
+// ========== REFACTORING STEP 4.2: getSoldProductsAPI() ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт уже добавлен в блоке 4.1 выше
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Получить список проданных товаров
 export async function getSoldProductsAPI(shopOwnerId) {
     const url = `${API_BASE}/api/products/sold?user_id=${shopOwnerId}`;
@@ -752,6 +769,8 @@ export async function getSoldProductsAPI(shopOwnerId) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 4.2 ==========
 
 // Удалить запись о проданном товаре
 export async function deleteSoldProductAPI(soldId, shopOwnerId) {
