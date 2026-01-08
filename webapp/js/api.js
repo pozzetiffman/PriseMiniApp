@@ -3,7 +3,6 @@
 // ========== REFACTORING STEP 1.1: API_BASE ==========
 // НОВЫЙ КОД (используется сейчас)
 // ВАЖНО: config.js должен быть импортирован ПЕРВЫМ, так как он нужен другим модулям
-import { API_BASE } from './api/config.js';
 // Реэкспорт для обратной совместимости
 export { API_BASE } from './api/config.js';
 
@@ -473,6 +472,11 @@ export async function toggleHotOffer(productId, shopOwnerId, isHotOffer) {
 */
 // ========== END REFACTORING STEP 5.1 ==========
 
+// ========== REFACTORING STEP 10.1: trackShopVisit() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/visits.js)
+// НОВЫЙ КОД: используйте import { trackShopVisit } from './api/visits.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Отслеживание посещения магазина или просмотра товара
 export async function trackShopVisit(shopOwnerId, productId = null) {
     const url = `${API_BASE}/api/shop-visits/track?shop_owner_id=${shopOwnerId}${productId ? `&product_id=${productId}` : ''}`;
@@ -500,6 +504,11 @@ export async function trackShopVisit(shopOwnerId, productId = null) {
         return null;
     }
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { trackShopVisit } from './api/visits.js';
+// ========== END REFACTORING STEP 10.1 ==========
 
 // ========== REFACTORING STEP 5.2: updateProductAPI() ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -1082,6 +1091,11 @@ export async function clearOrdersHistoryAPI() {
 */
 // ========== END REFACTORING STEP 8.10 ==========
 
+// ========== REFACTORING STEP 10.2: getVisitStatsAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/visits.js)
+// НОВЫЙ КОД: используйте import { getVisitStatsAPI } from './api/visits.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Получить статистику посещений
 export async function getVisitStatsAPI() {
     const url = `${API_BASE}/api/shop-visits/stats`;
@@ -1100,7 +1114,17 @@ export async function getVisitStatsAPI() {
     console.log(`✅ Visit stats fetched:`, data);
     return data;
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { getVisitStatsAPI } from './api/visits.js';
+// ========== END REFACTORING STEP 10.2 ==========
 
+// ========== REFACTORING STEP 10.3: getVisitsListAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/visits.js)
+// НОВЫЙ КОД: используйте import { getVisitsListAPI } from './api/visits.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Получить список посещений
 export async function getVisitsListAPI(limit = 50, offset = 0) {
     const url = `${API_BASE}/api/shop-visits/list?limit=${limit}&offset=${offset}`;
@@ -1119,7 +1143,17 @@ export async function getVisitsListAPI(limit = 50, offset = 0) {
     console.log(`✅ Visits list fetched: ${data.length}`);
     return data;
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { getVisitsListAPI } from './api/visits.js';
+// ========== END REFACTORING STEP 10.3 ==========
 
+// ========== REFACTORING STEP 10.4: getProductViewStatsAPI() ==========
+// СТАРЫЙ КОД (закомментирован, перенесен в api/visits.js)
+// НОВЫЙ КОД: используйте import { getProductViewStatsAPI } from './api/visits.js';
+// ========== START OLD CODE (COMMENTED) ==========
+/*
 // Получить статистику просмотров товаров
 export async function getProductViewStatsAPI(limit = 20) {
     const url = `${API_BASE}/api/shop-visits/product-stats?limit=${limit}`;
@@ -1138,6 +1172,11 @@ export async function getProductViewStatsAPI(limit = 20) {
     console.log(`✅ Product view stats fetched: ${data.length}`);
     return data;
 }
+*/
+// ========== END OLD CODE (COMMENTED) ==========
+// НОВЫЙ КОД (реэкспорт для обратной совместимости)
+export { getProductViewStatsAPI } from './api/visits.js';
+// ========== END REFACTORING STEP 10.4 ==========
 
 // ========== REFACTORING STEP 9.1: createPurchaseAPI() ==========
 // СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)
