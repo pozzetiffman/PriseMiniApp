@@ -7,7 +7,7 @@
 
 // Импорты зависимостей
 import { getCurrentShopSettings } from '../admin.js';
-import { toggleHotOffer, trackShopVisit } from '../api.js';
+import { toggleHotOffer, trackShopVisit, updateProductHiddenAPI } from '../api.js';
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
 // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -132,6 +132,52 @@ export function showProductModal(prod, finalPrice, fullImages) {
         hotOfferContainer.appendChild(hotOfferLabel);
         hotOfferContainer.appendChild(hotOfferToggle);
         modalHotOfferControl.appendChild(hotOfferContainer);
+        
+        // Добавляем тумблер для скрытия товара
+        const hiddenContainer = document.createElement('div');
+        hiddenContainer.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--bg-glass); backdrop-filter: blur(10px); border-radius: 12px; margin: 12px 0;';
+        
+        const hiddenLabel = document.createElement('div');
+        hiddenLabel.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        const eyeIcon = prod.is_hidden ? '👁️‍🗨️' : '👁️';
+        hiddenLabel.innerHTML = `<span style="font-size: 20px;">${eyeIcon}</span><span style="font-weight: 600;">${prod.is_hidden ? 'Скрыт от клиентов' : 'Виден клиентам'}</span>`;
+        
+        const hiddenToggle = document.createElement('label');
+        hiddenToggle.className = 'toggle-switch';
+        hiddenToggle.style.cssText = 'margin: 0;';
+        
+        const hiddenToggleInput = document.createElement('input');
+        hiddenToggleInput.type = 'checkbox';
+        hiddenToggleInput.checked = prod.is_hidden || false;
+        hiddenToggleInput.onchange = async (e) => {
+            const isHidden = e.target.checked;
+            try {
+                await updateProductHiddenAPI(prod.id, appContext.shop_owner_id, isHidden);
+                prod.is_hidden = isHidden;
+                // Обновляем иконку
+                hiddenLabel.innerHTML = `<span style="font-size: 20px;">${isHidden ? '👁️‍🗨️' : '👁️'}</span><span style="font-weight: 600;">${isHidden ? 'Скрыт от клиентов' : 'Виден клиентам'}</span>`;
+                // Обновляем визуальное отображение на карточках
+                if (loadDataCallback) {
+                    setTimeout(() => {
+                        loadDataCallback();
+                    }, 300);
+                }
+            } catch (error) {
+                console.error('Error toggling hidden status:', error);
+                alert('Ошибка при изменении статуса скрытия: ' + error.message);
+                hiddenToggleInput.checked = !isHidden; // Возвращаем предыдущее значение
+            }
+        };
+        
+        const hiddenToggleSlider = document.createElement('span');
+        hiddenToggleSlider.className = 'toggle-slider';
+        
+        hiddenToggle.appendChild(hiddenToggleInput);
+        hiddenToggle.appendChild(hiddenToggleSlider);
+        
+        hiddenContainer.appendChild(hiddenLabel);
+        hiddenContainer.appendChild(hiddenToggle);
+        modalHotOfferControl.appendChild(hiddenContainer);
     } else {
         modalHotOfferControl.style.display = 'none';
     }

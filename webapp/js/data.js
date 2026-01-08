@@ -77,7 +77,9 @@ export async function loadData() {
         const productsUrl = `${API_BASE}/api/products/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}`;
         console.log('📦 Products URL:', productsUrl);
         console.log('📦 Using botId:', botId, 'for products');
-        const products = await fetchProducts(appContext.shop_owner_id, null, botId); // Загружаем все товары
+        // Передаем viewer_id для фильтрации скрытых товаров (если это клиент, а не владелец)
+        const viewerId = appContext.viewer_id || null;
+        const products = await fetchProducts(appContext.shop_owner_id, null, botId, viewerId); // Загружаем все товары
         console.log('✅ Step 2 complete: Products loaded:', products.length);
         // Сохраняем все товары для фильтрации
         if (allProductsSetter) {

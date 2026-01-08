@@ -73,6 +73,7 @@ def get_product_by_id(
         "price_type": getattr(product, 'price_type', 'range'),
         "quantity_from": getattr(product, 'quantity_from', None),
         "quantity_unit": getattr(product, 'quantity_unit', None),
+        "is_hidden": getattr(product, 'is_hidden', False),
         "has_active_reservation": active_reservation is not None
     }
 
@@ -81,7 +82,8 @@ def get_products(
     user_id: int,
     category_id: Optional[int],
     bot_id: Optional[int],
-    db: Session
+    db: Session,
+    viewer_id: Optional[int] = None  # ID пользователя, который просматривает товары (для фильтрации скрытых)
 ):
     """Получить список товаров с автоматической синхронизацией между основным магазином и ботами"""
     print(f"DEBUG: get_products called with user_id={user_id}, category_id={category_id}, bot_id={bot_id}")
@@ -168,6 +170,7 @@ def get_products(
                         quantity_from=bot_product.quantity_from,
                         quantity_unit=bot_product.quantity_unit,
                         quantity_show_enabled=bot_product.quantity_show_enabled,
+                        is_hidden=bot_product.is_hidden,
                         category_id=category_id_for_main
                     )
                     db.add(new_main_product)
@@ -244,6 +247,7 @@ def get_products(
                         quantity_from=main_product.quantity_from,
                         quantity_unit=main_product.quantity_unit,
                         quantity_show_enabled=main_product.quantity_show_enabled,
+                        is_hidden=main_product.is_hidden,
                         category_id=category_id_for_bot
                     )
                     db.add(new_bot_product)
@@ -254,6 +258,12 @@ def get_products(
         models.Product.user_id == user_id,
         models.Product.is_sold == False  # Не показываем проданные товары на витрине
     )
+    
+    # Фильтруем скрытые товары для клиентов (если viewer_id указан и не является владельцем)
+    # Если viewer_id не указан или равен user_id (владелец), показываем все товары
+    if viewer_id is not None and viewer_id != user_id:
+        # Клиент просматривает - скрываем товары с is_hidden = True
+        query = query.filter(models.Product.is_hidden == False)
     # Если bot_id указан - фильтруем по bot_id (независимый магазин бота)
     # Если bot_id не указан - фильтруем по bot_id = None (основной бот)
     if bot_id is not None:
@@ -370,6 +380,7 @@ def get_products(
             "quantity_from": getattr(prod, 'quantity_from', None),
             "quantity_unit": getattr(prod, 'quantity_unit', None),
             "quantity_show_enabled": getattr(prod, 'quantity_show_enabled', None),
+            "is_hidden": getattr(prod, 'is_hidden', False),
             "reservation": reservation_data
         })
     

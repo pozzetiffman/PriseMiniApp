@@ -6,8 +6,11 @@
 import { API_BASE, apiRequest, getBaseHeaders, getBaseHeadersNoAuth } from './client.js';
 
 // Загрузка товаров (не требует авторизации - только просмотр)
-export async function fetchProducts(shopOwnerId, categoryId = null, botId = null) {
+export async function fetchProducts(shopOwnerId, categoryId = null, botId = null, viewerId = null) {
     let url = `${API_BASE}/api/products/?user_id=${shopOwnerId}`;
+    if (viewerId !== null && viewerId !== undefined) {
+        url += `&viewer_id=${viewerId}`;
+    }
     if (categoryId !== null) {
         url += `&category_id=${categoryId}`;
     }

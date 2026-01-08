@@ -636,3 +636,48 @@ async def bulk_update_made_to_order(
         "message": f"Обновлено {updated_count} товаров"
     }
 
+
+def update_hidden(
+    product_id: int,
+    hidden_update: schemas.HiddenUpdate,
+    user_id: int,
+    db: Session
+):
+    """
+    Обновление статуса скрытия товара (без уведомлений)
+    
+    Args:
+        product_id: ID товара для обновления
+        hidden_update: Данные для обновления статуса скрытия
+        user_id: ID пользователя (владельца магазина)
+        db: Сессия базы данных
+        
+    Returns:
+        Словарь с результатом обновления
+        
+    Raises:
+        HTTPException: Если товар не найден
+    """
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Обновляем статус скрытия
+    db_product.is_hidden = bool(hidden_update.is_hidden)
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
+    db.commit()
+    db.refresh(db_product)
+    
+    return {
+        "id": db_product.id,
+        "is_hidden": db_product.is_hidden,
+        "message": "Статус скрытия товара обновлен"
+    }
+

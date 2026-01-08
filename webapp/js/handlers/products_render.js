@@ -88,10 +88,26 @@ export function renderProducts(products) {
         const card = document.createElement('div');
         card.className = 'product-card';
         
+        // Получаем контекст приложения для проверки роли
+        const currentAppContextForCard = appContextGetter ? appContextGetter() : null;
+        const isHiddenForAdmin = prod.is_hidden && currentAppContextForCard && currentAppContextForCard.role === 'owner' && prod.user_id === currentAppContextForCard.shop_owner_id;
+        
+        // Применяем тусклость для скрытых товаров (только для админа)
+        if (isHiddenForAdmin) {
+            card.style.opacity = '0.5';
+        }
+        
         // Бейдж резервации будет добавлен в нижнюю часть фото
         let reservedBadge = null;
         if (prod.reservation) {
-            card.style.opacity = '0.7';
+            // Если товар не скрыт для админа, применяем тусклость для резервации
+            if (!isHiddenForAdmin) {
+                card.style.opacity = '0.7';
+            }
+            // Если товар и скрыт, и зарезервирован, используем более тусклую opacity
+            else {
+                card.style.opacity = '0.4';
+            }
             reservedBadge = document.createElement('div');
             reservedBadge.style.cssText = `
                 position: absolute;
@@ -144,6 +160,42 @@ export function renderProducts(products) {
             hotOfferBadge.className = 'hot-offer-badge';
             hotOfferBadge.innerHTML = '🔥';
             hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+        }
+        
+        // Создаем badge скрытого товара (только для админа)
+        let hiddenBadge = null;
+        if (isHiddenForAdmin) {
+            hiddenBadge = document.createElement('div');
+            hiddenBadge.className = 'hidden-badge';
+            // Используем SVG иконку зачеркнутого глаза (как в Photoshop)
+            hiddenBadge.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M12 9C13.6569 9 15 10.3431 15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+            `;
+            hiddenBadge.setAttribute('aria-label', 'Скрыт от клиентов');
+            hiddenBadge.style.cssText = `
+                position: absolute;
+                top: 8px;
+                left: 8px;
+                background: rgba(0, 0, 0, 0.85);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                color: #ffffff;
+                padding: 8px;
+                border-radius: 50%;
+                width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 15;
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.3);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            `;
+            hiddenBadge.querySelector('svg').style.cssText = 'width: 100%; height: 100%;';
         }
         
         // Создаем badge количества товара или "Под заказ"
@@ -283,6 +335,11 @@ export function renderProducts(products) {
                 imageDiv.appendChild(discountBadge);
             }
             
+            // Добавляем badge скрытого товара (слева вверху, только для админа)
+            if (hiddenBadge) {
+                imageDiv.appendChild(hiddenBadge);
+            }
+            
             // Добавляем badge горящего предложения (всегда справа)
             if (hotOfferBadge) {
                 hotOfferBadge.style.zIndex = '11';
@@ -311,6 +368,9 @@ export function renderProducts(products) {
                 imageDiv.appendChild(errorPlaceholder);
                 if (discountBadge) {
                     imageDiv.appendChild(discountBadge);
+                }
+                if (hiddenBadge) {
+                    imageDiv.appendChild(hiddenBadge);
                 }
                 if (hotOfferBadge) {
                     imageDiv.appendChild(hotOfferBadge);
@@ -376,6 +436,9 @@ export function renderProducts(products) {
                     imageDiv.appendChild(img);
                     if (discountBadge) {
                         imageDiv.appendChild(discountBadge);
+                    }
+                    if (hiddenBadge) {
+                        imageDiv.appendChild(hiddenBadge);
                     }
                     if (hotOfferBadge) {
                         imageDiv.appendChild(hotOfferBadge);
@@ -449,6 +512,9 @@ export function renderProducts(products) {
                 if (discountBadge) {
                     imageDiv.appendChild(discountBadge);
                 }
+                if (hiddenBadge) {
+                    imageDiv.appendChild(hiddenBadge);
+                }
                 if (hotOfferBadge) {
                     imageDiv.appendChild(hotOfferBadge);
                 }
@@ -473,6 +539,11 @@ export function renderProducts(products) {
             // Добавляем badge скидки даже если нет изображения
             if (discountBadge) {
                 imageDiv.appendChild(discountBadge);
+            }
+            
+            // Добавляем badge скрытого товара даже если нет изображения (слева вверху, только для админа)
+            if (hiddenBadge) {
+                imageDiv.appendChild(hiddenBadge);
             }
             
             // Добавляем badge горящего предложения даже если нет изображения (всегда справа)

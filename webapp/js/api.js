@@ -679,7 +679,7 @@ export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMade
 // ========== REFACTORING STEP 5.6: updateProductQuantityShowEnabledAPI() ==========
 // НОВЫЙ КОД (используется сейчас)
 // Реэкспорт для обратной совместимости
-export { updateProductQuantityShowEnabledAPI } from './api/products_update.js';
+export { updateProductHiddenAPI, updateProductQuantityShowEnabledAPI } from './api/products_update.js';
 
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 /*

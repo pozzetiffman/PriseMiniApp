@@ -87,6 +87,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.quantity_from = db_product.quantity_from
                 matching.quantity_unit = db_product.quantity_unit
                 matching.quantity_show_enabled = db_product.quantity_show_enabled
+                matching.is_hidden = db_product.is_hidden
                 matching.category_id = category_id_for_bot
                 # Обновляем sync_product_id если он не был установлен
                 if not matching.sync_product_id:
@@ -149,6 +150,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                         quantity_from=db_product.quantity_from,
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
+                        is_hidden=db_product.is_hidden,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -206,6 +208,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
             matching_main.is_sold = db_product.is_sold
             matching_main.is_made_to_order = db_product.is_made_to_order
             matching_main.quantity_show_enabled = db_product.quantity_show_enabled
+            matching_main.is_hidden = db_product.is_hidden
             # Обновляем поля для продажи
             matching_main.is_for_sale = db_product.is_for_sale
             matching_main.price_from = db_product.price_from
@@ -274,6 +277,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.is_sold = db_product.is_sold
                 matching.is_made_to_order = db_product.is_made_to_order
                 matching.quantity_show_enabled = db_product.quantity_show_enabled
+                matching.is_hidden = db_product.is_hidden
                 # Обновляем поля для продажи
                 matching.is_for_sale = db_product.is_for_sale
                 matching.price_from = db_product.price_from
@@ -367,6 +371,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         quantity_from=db_product.quantity_from,
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
+                        is_hidden=db_product.is_hidden,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -417,6 +422,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     matching.is_sold = db_product.is_sold
                     matching.is_made_to_order = db_product.is_made_to_order
                     matching.quantity_show_enabled = db_product.quantity_show_enabled
+                    matching.is_hidden = db_product.is_hidden
                     # Обновляем поля для продажи
                     matching.is_for_sale = db_product.is_for_sale
                     matching.price_from = db_product.price_from
@@ -671,6 +677,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         quantity_from=db_product.quantity_from,
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
+                        is_hidden=db_product.is_hidden,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -733,6 +740,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 matching_main.is_sold = db_product.is_sold
                 matching_main.is_made_to_order = db_product.is_made_to_order
                 matching_main.quantity_show_enabled = db_product.quantity_show_enabled
+                matching_main.is_hidden = db_product.is_hidden
                 # Обновляем поля для продажи
                 matching_main.is_for_sale = db_product.is_for_sale
                 matching_main.price_from = db_product.price_from
@@ -798,6 +806,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     matching.is_sold = db_product.is_sold
                     matching.is_made_to_order = db_product.is_made_to_order
                     matching.quantity_show_enabled = db_product.quantity_show_enabled
+                    matching.is_hidden = db_product.is_hidden
                     # Обновляем поля для продажи
                     matching.is_for_sale = db_product.is_for_sale
                     matching.price_from = db_product.price_from

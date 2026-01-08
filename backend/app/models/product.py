@@ -20,6 +20,7 @@ class ProductBase(BaseModel):
     quantity_from: Optional[int] = None  # Количество от (для товаров для покупки)
     quantity_unit: Optional[str] = None  # Единица измерения количества (шт или кг)
     quantity_show_enabled: Optional[bool] = None  # Индивидуальная настройка показа количества (null = использовать общую настройку магазина)
+    is_hidden: bool = False  # Скрыт ли товар от клиентов (виден только админу)
 
 class ProductCreate(ProductBase):
     pass
@@ -64,6 +65,9 @@ class ForSaleUpdate(BaseModel):
 
 class QuantityShowEnabledUpdate(BaseModel):
     quantity_show_enabled: Optional[bool] = None  # null = использовать общую настройку магазина
+
+class HiddenUpdate(BaseModel):
+    is_hidden: bool  # Скрыть/показать товар для клиентов
 
 
 

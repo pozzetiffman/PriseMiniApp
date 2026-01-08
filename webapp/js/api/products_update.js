@@ -324,3 +324,44 @@ console.log('✅ [REFACTORING] bulkUpdateAllProductsMadeToOrderAPI() loaded from
 
 // ========== END REFACTORING STEP 5.8 ==========
 
+// ========== REFACTORING STEP 5.9: updateProductHiddenAPI() ==========
+// Обновление статуса скрытия товара (без уведомлений)
+export async function updateProductHiddenAPI(productId, shopOwnerId, isHidden) {
+    const url = `${API_BASE}/api/products/${productId}/update-hidden?user_id=${shopOwnerId}`;
+    console.log(`Updating product hidden status: productId=${productId}, isHidden=${isHidden}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            is_hidden: isHidden
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update product hidden status response: status=${response.status}, body=${responseText}`);
+    
+    if (response.ok) {
+        const result = JSON.parse(responseText);
+        console.log(`✅ Hidden status updated successfully: is_hidden=${result.is_hidden}`);
+    }
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить статус скрытия товара';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+// Логирование для проверки рефакторинга (будет удалено после проверки)
+console.log('✅ [REFACTORING] updateProductHiddenAPI() loaded from api/products_update.js');
+
+// ========== END REFACTORING STEP 5.9 ==========
+
