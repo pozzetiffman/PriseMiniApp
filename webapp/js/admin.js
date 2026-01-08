@@ -1,5 +1,5 @@
 // Модуль админки магазина
-import { API_BASE, getAllPurchasesAPI, getProductViewStatsAPI, getShopSettings, getVisitStatsAPI, getVisitsListAPI, updatePurchaseStatusAPI } from './api.js';
+import { API_BASE, getAllPurchasesAPI, getShopSettings, updatePurchaseStatusAPI } from './api.js';
 // ========== REFACTORING STEP 1.1: showNotification ==========
 // ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
 // ========== REFACTORING STEP 1.3: loadShopSettings ==========
@@ -31,6 +31,9 @@ import { loadOrders as loadOrdersHandler } from './handlers/admin_orders.js';
 // ========== REFACTORING STEP 6.1: loadSoldProducts ==========
 import { loadSoldProducts as loadSoldProductsHandler } from './handlers/admin_sold.js';
 // ========== END REFACTORING STEP 6.1 ==========
+// ========== REFACTORING STEP 5.1: loadStats ==========
+import { loadStats as loadStatsHandler } from './handlers/admin_stats.js';
+// ========== END REFACTORING STEP 5.1 ==========
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -59,6 +62,15 @@ async function loadSoldProducts() {
     });
 }
 // ========== END REFACTORING STEP 6.1 ==========
+
+// ========== REFACTORING STEP 5.1: loadStats ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_stats.js' и используется напрямую (не требует зависимостей)
+async function loadStats() {
+    console.log('🔄 [REFACTORING STEP 5.1] loadStats called via wrapper');
+    return await loadStatsHandler();
+}
+// ========== END REFACTORING STEP 5.1 ==========
 
 // ========== REFACTORING STEP 2.4: switchAdminTab ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -1513,6 +1525,9 @@ async function loadSoldProducts() {
 */
 // ========== END REFACTORING STEP 6.1 ==========
 
+// ========== REFACTORING STEP 5.1: loadStats ==========
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
 // Загрузка статистики
 async function loadStats() {
     const statsContent = document.getElementById('stats-content');
@@ -1683,6 +1698,8 @@ async function loadStats() {
         statsContent.innerHTML = `<p class="loading">Ошибка загрузки: ${errorMessage}</p>`;
     }
 }
+*/
+// ========== END REFACTORING STEP 5.1 ==========
 
 // Загрузка покупок
 async function loadPurchases() {
