@@ -4,7 +4,12 @@
 // Статус: ✅ ЗАВЕРШЕНО (STEP 8.1 завершен, STEP 8.2 завершен, STEP 8.3 завершен, STEP 8.4 завершен, STEP 8.5 завершен, STEP 8.6 завершен)
 
 // Импорты зависимостей
-import { fetchReservationsHistory, fetchUserReservations, getMyOrdersAPI, getMyPurchasesAPI, getOrdersHistoryAPI, getPurchasesHistoryAPI } from '../api.js';
+// ========== REFACTORING STEP 8: Исправление циклической зависимости ==========
+import { fetchReservationsHistory, fetchUserReservations, getMyPurchasesAPI, getPurchasesHistoryAPI } from '../api.js';
+import { getMyOrdersAPI, getOrdersHistoryAPI } from '../api/orders.js';
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+// import { fetchReservationsHistory, fetchUserReservations, getMyOrdersAPI, getMyPurchasesAPI, getOrdersHistoryAPI, getPurchasesHistoryAPI } from '../api.js';
+// ========== END REFACTORING STEP 8 ==========
 
 /**
  * Получение активных резерваций для корзины

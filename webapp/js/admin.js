@@ -1,5 +1,10 @@
 // Модуль админки магазина
 import { getShopSettings } from './api.js';
+// ========== REFACTORING STEP 8: Исправление циклической зависимости ==========
+// НОВЫЙ КОД (используется сейчас) - импорт напрямую из модуля orders.js
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+// Эти функции будут импортироваться из './api.js' через реэкспорт
+// ========== END REFACTORING STEP 8 ==========
 // ========== REFACTORING STEP 1.1: showNotification ==========
 // ========== REFACTORING STEP 1.2: getCurrentShopSettings ==========
 // ========== REFACTORING STEP 1.3: loadShopSettings ==========
@@ -1023,7 +1028,12 @@ async function loadOrders() {
                     
                     try {
                         // Получаем username через API
-                        const { getUserUsernameAPI } = await import('./api.js');
+                        // ========== REFACTORING STEP 8: Исправление циклической зависимости ==========
+                        // НОВЫЙ КОД (используется сейчас) - импорт напрямую из модуля orders.js
+                        const { getUserUsernameAPI } = await import('./api/orders.js');
+                        // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+                        // const { getUserUsernameAPI } = await import('./api.js');
+                        // ========== END REFACTORING STEP 8 ==========
                         const userData = await getUserUsernameAPI(userId);
                         const username = userData.username;
                         

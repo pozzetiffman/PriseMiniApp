@@ -4,7 +4,12 @@
 // Статус: В процессе
 
 // Импорты зависимостей
-import { API_BASE, fetchReservationsHistory, getBaseHeadersNoAuth, getOrdersHistoryAPI, getPurchasesHistoryAPI } from '../api.js';
+// ========== REFACTORING STEP 8: Исправление циклической зависимости ==========
+import { API_BASE, fetchReservationsHistory, getBaseHeadersNoAuth, getPurchasesHistoryAPI } from '../api.js';
+import { getOrdersHistoryAPI } from '../api/orders.js';
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+// import { API_BASE, fetchReservationsHistory, getBaseHeadersNoAuth, getOrdersHistoryAPI, getPurchasesHistoryAPI } from '../api.js';
+// ========== END REFACTORING STEP 8 ==========
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
 import { createImageContainer, getProductImageUrl } from '../utils/imageUtils.js';
 import { formatDateToMoscow } from '../utils/dateUtils.js';

@@ -2,7 +2,12 @@
 // Вынесено из app.js для рефакторинга
 
 // Импорты API
-import { cancelOrderAPI, createOrderAPI } from './api.js';
+// ========== REFACTORING STEP 8: Исправление циклической зависимости ==========
+// НОВЫЙ КОД (используется сейчас) - импорт напрямую из модуля orders.js
+import { cancelOrderAPI, createOrderAPI } from './api/orders.js';
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+// import { cancelOrderAPI, createOrderAPI } from './api.js';
+// ========== END REFACTORING STEP 8 ==========
 
 // Зависимости, которые будут переданы из app.js
 let appContextGetter = null; // Функция-геттер для получения appContext
@@ -54,7 +59,12 @@ function setupGlobalFunctions() {
         }
         
         try {
-            const { clearOrdersHistoryAPI } = await import('./api.js');
+            // ========== REFACTORING STEP 8: Исправление циклической зависимости ==========
+            // НОВЫЙ КОД (используется сейчас) - импорт напрямую из модуля orders.js
+            const { clearOrdersHistoryAPI } = await import('./api/orders.js');
+            // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+            // const { clearOrdersHistoryAPI } = await import('./api.js');
+            // ========== END REFACTORING STEP 8 ==========
             const result = await clearOrdersHistoryAPI();
             await safeAlert(`✅ История заказов очищена (удалено ${result.deleted_count || 0} записей)`);
             

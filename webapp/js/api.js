@@ -1,19 +1,28 @@
 // Модуль API вызовов
 import { getInitData } from './telegram.js';
-// Импорты для рефакторинга модуля products_read.js
-import { fetchProducts, getSoldProductsAPI } from './api/products_read.js';
-// Импорты для рефакторинга модуля products_update.js
-import { toggleHotOffer, updateProductAPI, updateProductNameDescriptionAPI, updateProductQuantityAPI, updateProductMadeToOrderAPI, updateProductQuantityShowEnabledAPI, updateProductForSaleAPI, bulkUpdateAllProductsMadeToOrderAPI } from './api/products_update.js';
-// Импорты для рефакторинга модуля products_delete.js
-import { deleteProductAPI, markProductSoldAPI, deleteSoldProductAPI, deleteSoldProductsAPI } from './api/products_delete.js';
-// Импорты для рефакторинга модуля reservations.js
-import { fetchUserReservations, fetchReservationsHistory, createReservationAPI, cancelReservationAPI, clearReservationsHistoryAPI } from './api/reservations.js';
 
 // ========== REFACTORING STEP 1.1: API_BASE ==========
 // НОВЫЙ КОД (используется сейчас)
+// ВАЖНО: config.js должен быть импортирован ПЕРВЫМ, так как он нужен другим модулям
 import { API_BASE } from './api/config.js';
 // Реэкспорт для обратной совместимости
 export { API_BASE } from './api/config.js';
+
+// Импорты для рефакторинга модуля products_read.js
+// ВАЖНО: Функции products_read.js реэкспортируются ниже для обратной совместимости
+// Не импортируем здесь, чтобы избежать проблем с порядком загрузки модулей
+// Импорты для рефакторинга модуля products_update.js
+// ВАЖНО: Функции products_update.js реэкспортируются ниже для обратной совместимости
+// Не импортируем здесь, чтобы избежать проблем с порядком загрузки модулей
+// Импорты для рефакторинга модуля products_delete.js
+// ВАЖНО: Функции products_delete.js реэкспортируются ниже для обратной совместимости
+// Не импортируем здесь, чтобы избежать проблем с порядком загрузки модулей
+// Импорты для рефакторинга модуля reservations.js
+// ВАЖНО: Функции reservations.js реэкспортируются ниже для обратной совместимости
+// Не импортируем здесь, чтобы избежать проблем с порядком загрузки модулей
+// Импорты для рефакторинга модуля orders.js
+// ВАЖНО: Функции orders.js реэкспортируются ниже для обратной совместимости
+// Не импортируем здесь, чтобы избежать проблем с порядком загрузки модулей
 
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 /*
@@ -41,8 +50,8 @@ export function getBaseHeadersNoAuth() {
 
 // ========== REFACTORING STEP 1.3: getBaseHeaders() ==========
 // НОВЫЙ КОД (используется сейчас)
-import { getBaseHeaders } from './api/config.js';
 // Реэкспорт для обратной совместимости
+// ВАЖНО: Не импортируем здесь, чтобы избежать проблем с порядком загрузки модулей
 export { getBaseHeaders } from './api/config.js';
 
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
@@ -194,7 +203,7 @@ export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
 // НОВЫЙ КОД (используется сейчас)
 // Импорт уже добавлен в начале файла
 // Реэкспорт для обратной совместимости
-export { fetchProducts, getSoldProductsAPI };
+export { fetchProducts, getSoldProductsAPI } from './api/products_read.js';
 
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 /*
@@ -980,6 +989,20 @@ export async function deleteSoldProductsAPI(soldIds, shopOwnerId) {
 */
 // ========== END REFACTORING STEP 6.4 ==========
 
+// ========== REFACTORING STEP 8: Модуль orders.js ==========
+// НОВЫЙ КОД (используется сейчас)
+// Реэкспорт всех функций orders для обратной совместимости
+// ВАЖНО: Все функции реэкспортируются из одного модуля для избежания проблем с порядком загрузки
+export {
+    cancelOrderAPI, clearOrdersHistoryAPI, completeOrderAPI, createOrderAPI, deleteOrderAPI,
+    deleteOrdersAPI, getMyOrdersAPI,
+    getOrdersHistoryAPI, getShopOrdersAPI,
+    getUserUsernameAPI
+} from './api/orders.js';
+
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
+// ========== REFACTORING STEP 8.1: createOrderAPI() ==========
 // Создание заказа (ordered_by_user_id определяется на backend из initData)
 export async function createOrderAPI(orderData) {
     // Поддерживаем старый формат для обратной совместимости
@@ -1026,101 +1049,29 @@ export async function createOrderAPI(orderData) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 8 ==========
 
-// Получить заказы магазина (для владельца)
-export async function getShopOrdersAPI() {
-    const url = `${API_BASE}/api/orders/shop`;
-    console.log(`Fetching shop orders from: ${url}`);
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+/*
+// Очистить историю заказов
+export async function clearOrdersHistoryAPI() {
+    const url = `${API_BASE}/api/orders/history/clear`;
+    console.log(`Clear orders history URL: ${url}`);
     
     const response = await fetch(url, {
-        headers: getBaseHeaders()
-    });
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Shop orders error: ${response.status} - ${errorText}`);
-    }
-    
-    const data = await response.json();
-    console.log(`✅ Shop orders fetched: ${data.length}`);
-    return data;
-}
-
-// Получить username пользователя по его ID
-export async function getUserUsernameAPI(userId) {
-    const url = `${API_BASE}/api/orders/user/${userId}/username`;
-    console.log(`Fetching username for user: ${userId}`);
-    
-    const response = await fetch(url, {
-        headers: getBaseHeaders()
-    });
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.warn(`Failed to get username for user ${userId}: ${response.status} - ${errorText}`);
-        return { username: null, user_id: userId };
-    }
-    
-    const data = await response.json();
-    return data;
-}
-
-// Получить мои заказы (для клиента)
-export async function getMyOrdersAPI() {
-    const url = `${API_BASE}/api/orders/my`;
-    console.log(`Fetching my orders from: ${url}`);
-    
-    const response = await fetch(url, {
-        headers: getBaseHeaders()
-    });
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`My orders error: ${response.status} - ${errorText}`);
-    }
-    
-    const data = await response.json();
-    console.log(`✅ My orders fetched: ${data.length}`);
-    return data;
-}
-
-// Загрузка истории заказов (все заказы пользователя)
-export async function getOrdersHistoryAPI() {
-    const url = `${API_BASE}/api/orders/history`;
-    console.log(`Fetching orders history from: ${url}`);
-    
-    const response = await fetch(url, {
-        headers: getBaseHeaders()
-    });
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Orders history error: ${response.status} - ${errorText}`);
-    }
-    
-    const data = await response.json();
-    console.log(`✅ Orders history fetched: ${data.length}`);
-    return data;
-}
-
-// Выполнить заказ (только владелец магазина)
-export async function completeOrderAPI(orderId) {
-    const url = `${API_BASE}/api/orders/${orderId}/complete`;
-    console.log(`Complete order URL: ${url}`);
-    
-    const response = await fetch(url, {
-        method: 'PATCH',
+        method: 'DELETE',
         headers: getBaseHeaders()
     });
     
     const responseText = await response.text();
-    console.log(`Complete order response: status=${response.status}, body=${responseText}`);
+    console.log(`Clear orders history response: status=${response.status}, body=${responseText}`);
     
     if (!response.ok) {
-        let errorMessage = 'Не удалось выполнить заказ';
+        let errorMessage = 'Не удалось очистить историю заказов';
         try {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.detail || errorMessage;
+            const error = JSON.parse(responseText);
+            errorMessage = error.detail || errorMessage;
         } catch (e) {
             errorMessage = responseText;
         }
@@ -1129,8 +1080,9 @@ export async function completeOrderAPI(orderId) {
     
     return JSON.parse(responseText);
 }
+*/
+// ========== END REFACTORING STEP 8.10 ==========
 
-// Отменить заказ (владелец магазина или заказчик)
 // Получить статистику посещений
 export async function getVisitStatsAPI() {
     const url = `${API_BASE}/api/shop-visits/stats`;
@@ -1186,90 +1138,6 @@ export async function getProductViewStatsAPI(limit = 20) {
     const data = await response.json();
     console.log(`✅ Product view stats fetched: ${data.length}`);
     return data;
-}
-
-export async function cancelOrderAPI(orderId) {
-    const url = `${API_BASE}/api/orders/${orderId}`;
-    console.log(`Cancel order URL: ${url}`);
-    
-    const response = await fetch(url, {
-        method: 'DELETE',
-        headers: getBaseHeaders()
-    });
-    
-    const responseText = await response.text();
-    console.log(`Cancel order response: status=${response.status}, body=${responseText}`);
-    
-    if (!response.ok) {
-        let errorMessage = 'Не удалось отменить заказ';
-        try {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.detail || errorMessage;
-        } catch (e) {
-            errorMessage = responseText;
-        }
-        throw new Error(errorMessage);
-    }
-    
-    return true;
-}
-
-// Удалить заказ (только владелец магазина)
-export async function deleteOrderAPI(orderId) {
-    const url = `${API_BASE}/api/orders/${orderId}/delete`;
-    console.log(`Delete order URL: ${url}`);
-    
-    const response = await fetch(url, {
-        method: 'DELETE',
-        headers: getBaseHeaders()
-    });
-    
-    const responseText = await response.text();
-    console.log(`Delete order response: status=${response.status}, body=${responseText}`);
-    
-    if (!response.ok) {
-        let errorMessage = 'Не удалось удалить заказ';
-        try {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.detail || errorMessage;
-        } catch (e) {
-            errorMessage = responseText;
-        }
-        throw new Error(errorMessage);
-    }
-    
-    return JSON.parse(responseText);
-}
-
-// Удалить несколько заказов (только владелец магазина)
-export async function deleteOrdersAPI(orderIds) {
-    const url = `${API_BASE}/api/orders/batch-delete`;
-    console.log(`Delete orders URL: ${url}, orderIds=${orderIds}`);
-    
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            ...getBaseHeaders(),
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(orderIds)
-    });
-    
-    const responseText = await response.text();
-    console.log(`Delete orders response: status=${response.status}, body=${responseText}`);
-    
-    if (!response.ok) {
-        let errorMessage = 'Не удалось удалить заказы';
-        try {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.detail || errorMessage;
-        } catch (e) {
-            errorMessage = responseText;
-        }
-        throw new Error(errorMessage);
-    }
-    
-    return JSON.parse(responseText);
 }
 
 // Создание заявки на покупку
@@ -1338,33 +1206,6 @@ export async function clearReservationsHistoryAPI() {
 }
 */
 // ========== END REFACTORING STEP 7.5 ==========
-
-// Очистить историю заказов
-export async function clearOrdersHistoryAPI() {
-    const url = `${API_BASE}/api/orders/history/clear`;
-    console.log(`Clear orders history URL: ${url}`);
-    
-    const response = await fetch(url, {
-        method: 'DELETE',
-        headers: getBaseHeaders()
-    });
-    
-    const responseText = await response.text();
-    console.log(`Clear orders history response: status=${response.status}, body=${responseText}`);
-    
-    if (!response.ok) {
-        let errorMessage = 'Не удалось очистить историю заказов';
-        try {
-            const error = JSON.parse(responseText);
-            errorMessage = error.detail || errorMessage;
-        } catch (e) {
-            errorMessage = responseText;
-        }
-        throw new Error(errorMessage);
-    }
-    
-    return JSON.parse(responseText);
-}
 
 // Очистить историю продаж
 export async function clearPurchasesHistoryAPI() {

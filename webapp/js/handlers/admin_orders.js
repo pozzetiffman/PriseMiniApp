@@ -3,7 +3,12 @@
 // Дата начала: 2024-12-19
 // Статус: В процессе
 
-import { cancelOrderAPI, completeOrderAPI, deleteOrderAPI, deleteOrdersAPI, getShopOrdersAPI } from '../api.js';
+// ========== REFACTORING STEP 8: Исправление циклической зависимости ==========
+// НОВЫЙ КОД (используется сейчас) - импорт напрямую из модуля orders.js
+import { cancelOrderAPI, completeOrderAPI, deleteOrderAPI, deleteOrdersAPI, getShopOrdersAPI } from '../api/orders.js';
+// СТАРЫЙ КОД (закомментирован, будет удален после проверки)
+// import { cancelOrderAPI, completeOrderAPI, deleteOrderAPI, deleteOrdersAPI, getShopOrdersAPI } from '../api.js';
+// ========== END REFACTORING STEP 8 ==========
 import { showNotification } from '../utils/admin_utils.js';
 
 /**
@@ -294,7 +299,7 @@ export async function loadOrders(dependencies = {}) {
                     
                     try {
                         // Получаем username через API
-                        const { getUserUsernameAPI } = await import('../api.js');
+                        const { getUserUsernameAPI } = await import('../api/orders.js');
                         const userData = await getUserUsernameAPI(userId);
                         const username = userData.username;
                         
