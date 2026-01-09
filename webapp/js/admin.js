@@ -45,6 +45,9 @@ import { loadStats as loadStatsHandler } from './handlers/admin_stats.js';
 // ========== REFACTORING STEP 7.1: loadPurchases ==========
 import { loadPurchases as loadPurchasesHandler } from './handlers/admin_purchases.js';
 // ========== END REFACTORING STEP 7.1 ==========
+// ========== REFACTORING STEP 10.1: loadReservations ==========
+import { loadReservations as loadReservationsHandler } from './handlers/admin_reservations.js';
+// ========== END REFACTORING STEP 10.1 ==========
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -94,12 +97,24 @@ async function loadPurchases() {
 }
 // ========== END REFACTORING STEP 7.1 ==========
 
+// ========== REFACTORING STEP 10.1: loadReservations ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_reservations.js' и обернута для передачи зависимостей
+async function loadReservations() {
+    console.log('🔄 [REFACTORING STEP 10.1] loadReservations called via wrapper');
+    return await loadReservationsHandler({
+        loadReservations: loadReservations // Передаем саму себя для рекурсивных вызовов
+    });
+}
+// ========== END REFACTORING STEP 10.1 ==========
+
 // ========== REFACTORING STEP 2.4: switchAdminTab ==========
 // НОВЫЙ КОД (используется сейчас)
 // Функция импортирована из './handlers/admin_init.js' и обернута для передачи зависимостей
 function switchAdminTab(tabName) {
     return switchAdminTabHandler(tabName, {
         loadOrders,
+        loadReservations,
         loadSoldProducts,
         loadStats,
         loadPurchases
@@ -354,6 +369,7 @@ export async function openAdmin() {
         checkAllProductsMadeToOrder,
         switchAdminTab,
         loadOrders,
+        loadReservations,
         loadSoldProducts,
         loadStats,
         loadPurchases,
@@ -901,7 +917,7 @@ async function loadOrders() {
             headerDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px;';
             
             const leftDiv = document.createElement('div');
-            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1;';
+            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
             
             // Чекбокс для выбора
             const checkbox = document.createElement('input');
@@ -919,7 +935,7 @@ async function loadOrders() {
             
             // Название товара
             const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1;';
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (order.product && order.product.name) {
                 nameDiv.textContent = order.product.name;
             } else {
@@ -973,16 +989,16 @@ async function loadOrders() {
             
             // Информация о заказе
             const infoDiv = document.createElement('div');
-            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px; flex: 1;';
+            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;';
             
             // Количество
             const quantityDiv = document.createElement('div');
-            quantityDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color);';
+            quantityDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             quantityDiv.textContent = `Количество: ${order.quantity} шт.`;
             
             // Дата заказа
             const dateDiv = document.createElement('div');
-            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color);';
+            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (order.created_at) {
                 const orderDate = new Date(order.created_at);
                 dateDiv.textContent = `Дата заказа: ${orderDate.toLocaleDateString('ru-RU', {
@@ -996,7 +1012,7 @@ async function loadOrders() {
             
             // Статус
             const statusDiv = document.createElement('div');
-            statusDiv.style.cssText = 'font-size: 14px; font-weight: 600;';
+            statusDiv.style.cssText = 'font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (order.is_completed) {
                 statusDiv.textContent = '✅ Выполнен';
                 statusDiv.style.color = '#4CAF50';
@@ -1411,7 +1427,7 @@ async function loadSoldProducts() {
             headerDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px;';
             
             const leftDiv = document.createElement('div');
-            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1;';
+            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
             
             // Чекбокс для выбора
             const checkbox = document.createElement('input');
@@ -1429,7 +1445,7 @@ async function loadSoldProducts() {
             
             // Название
             const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1;';
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             nameDiv.textContent = sold.name;
             
             leftDiv.appendChild(checkbox);
@@ -1801,18 +1817,18 @@ async function loadPurchases() {
             headerDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px;';
             
             const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1;';
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             nameDiv.textContent = product.name || `Товар #${purchase.product_id}`;
             
             headerDiv.appendChild(nameDiv);
             
             // Информация о покупке
             const infoDiv = document.createElement('div');
-            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px; flex: 1;';
+            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;';
             
             // Статус
             const statusDiv = document.createElement('div');
-            statusDiv.style.cssText = 'font-size: 14px; font-weight: 600;';
+            statusDiv.style.cssText = 'font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (purchase.is_completed) {
                 statusDiv.textContent = '✅ Выполнена';
                 statusDiv.style.color = '#4CAF50';
@@ -1826,7 +1842,7 @@ async function loadPurchases() {
             
             // Дата создания
             const dateDiv = document.createElement('div');
-            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color);';
+            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (purchase.created_at) {
                 const purchaseDate = new Date(purchase.created_at);
                 dateDiv.textContent = `Дата заявки: ${purchaseDate.toLocaleDateString('ru-RU', {

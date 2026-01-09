@@ -165,7 +165,7 @@ export async function loadOrders(dependencies = {}) {
             headerDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px;';
             
             const leftDiv = document.createElement('div');
-            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1;';
+            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
             
             // Чекбокс для выбора
             const checkbox = document.createElement('input');
@@ -183,7 +183,7 @@ export async function loadOrders(dependencies = {}) {
             
             // Название товара
             const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1;';
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (order.product && order.product.name) {
                 nameDiv.textContent = order.product.name;
             } else {
@@ -237,16 +237,16 @@ export async function loadOrders(dependencies = {}) {
             
             // Информация о заказе
             const infoDiv = document.createElement('div');
-            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px; flex: 1;';
+            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;';
             
             // Количество
             const quantityDiv = document.createElement('div');
-            quantityDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color);';
+            quantityDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             quantityDiv.textContent = `Количество: ${order.quantity} шт.`;
             
             // Дата заказа
             const dateDiv = document.createElement('div');
-            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color);';
+            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (order.created_at) {
                 const orderDate = new Date(order.created_at);
                 dateDiv.textContent = `Дата заказа: ${orderDate.toLocaleDateString('ru-RU', {
@@ -260,7 +260,7 @@ export async function loadOrders(dependencies = {}) {
             
             // Статус
             const statusDiv = document.createElement('div');
-            statusDiv.style.cssText = 'font-size: 14px; font-weight: 600;';
+            statusDiv.style.cssText = 'font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (order.is_completed) {
                 statusDiv.textContent = '✅ Выполнен';
                 statusDiv.style.color = '#4CAF50';

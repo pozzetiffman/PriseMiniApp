@@ -169,7 +169,7 @@ export async function loadSoldProducts(dependencies = {}) {
             headerDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px;';
             
             const leftDiv = document.createElement('div');
-            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1;';
+            leftDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
             
             // Чекбокс для выбора
             const checkbox = document.createElement('input');
@@ -187,7 +187,7 @@ export async function loadSoldProducts(dependencies = {}) {
             
             // Название
             const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1;';
+            nameDiv.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--tg-theme-text-color); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             nameDiv.textContent = sold.name;
             
             leftDiv.appendChild(checkbox);
@@ -236,7 +236,7 @@ export async function loadSoldProducts(dependencies = {}) {
             
             // Информация о продаже
             const infoDiv = document.createElement('div');
-            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
+            infoDiv.style.cssText = 'display: flex; flex-direction: column; gap: 6px; min-width: 0;';
             
             // Количество и цены
             const quantity = sold.quantity || 1;
@@ -245,12 +245,12 @@ export async function loadSoldProducts(dependencies = {}) {
             
             // Количество
             const quantityDiv = document.createElement('div');
-            quantityDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-text-color);';
+            quantityDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             quantityDiv.textContent = `Количество: ${quantity} шт.`;
             
             // Цена за 1 шт
             const unitPriceDiv = document.createElement('div');
-            unitPriceDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color);';
+            unitPriceDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (sold.discount > 0) {
                 unitPriceDiv.innerHTML = `Цена за 1 шт: <span style="text-decoration: line-through; margin-right: 6px;">${sold.price} ₽</span> <span style="color: var(--tg-theme-link-color); font-weight: 600;">${unitPrice} ₽</span>`;
             } else {
@@ -259,7 +259,7 @@ export async function loadSoldProducts(dependencies = {}) {
             
             // Общая цена
             const totalPriceDiv = document.createElement('div');
-            totalPriceDiv.style.cssText = 'font-size: 18px; font-weight: 700; color: var(--tg-theme-link-color); margin-top: 4px;';
+            totalPriceDiv.style.cssText = 'font-size: 18px; font-weight: 700; color: var(--tg-theme-link-color); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (sold.discount > 0) {
                 const oldTotalPrice = sold.price * quantity;
                 totalPriceDiv.innerHTML = `Общая цена: <span style="text-decoration: line-through; margin-right: 6px; font-size: 14px; color: var(--tg-theme-hint-color);">${oldTotalPrice} ₽</span> <span>${totalPrice} ₽</span>`;
@@ -269,7 +269,7 @@ export async function loadSoldProducts(dependencies = {}) {
             
             // Дата продажи
             const dateDiv = document.createElement('div');
-            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px;';
+            dateDiv.style.cssText = 'font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
             if (sold.sold_at) {
                 const soldDate = new Date(sold.sold_at);
                 dateDiv.textContent = soldDate.toLocaleDateString('ru-RU', {
@@ -312,4 +312,5 @@ export async function loadSoldProducts(dependencies = {}) {
     }
 }
 // ========== END REFACTORING STEP 6.1 ==========
+
 

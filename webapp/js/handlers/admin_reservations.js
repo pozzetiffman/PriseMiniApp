@@ -170,14 +170,14 @@ export async function loadReservations(dependencies = {}) {
                         <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             ${productName}
                         </h3>
-                        <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 4px;">
+                        <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             Количество: <strong style="color: var(--tg-theme-link-color);">${quantity} шт.</strong>
                         </div>
-                        <div style="font-size: 13px; color: var(--text-hint);">
+                        <div style="font-size: 13px; color: var(--text-hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             Осталось: <strong style="color: ${timeLeft < 30 ? '#ff3b30' : 'var(--tg-theme-link-color)'};">${timeLeftText}</strong>
                         </div>
                         ${reservation.reserved_by_user_id ? `
-                            <div style="font-size: 12px; color: var(--text-hint); margin-top: 4px;">
+                            <div style="font-size: 12px; color: var(--text-hint); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                 ID пользователя: ${reservation.reserved_by_user_id}
                             </div>
                         ` : ''}
