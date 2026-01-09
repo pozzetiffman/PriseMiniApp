@@ -505,10 +505,13 @@ header h1 {
     margin-bottom: 8px;
     position: relative;
     z-index: 10001; /* Ниже чем категории, но выше чем товары */
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .search-input {
-    width: 100%;
+    flex: 1;
     padding: 12px 16px;
     background: var(--bg-glass) !important;
     backdrop-filter: var(--blur-medium);
@@ -524,6 +527,7 @@ header h1 {
     outline: none;
     box-sizing: border-box;
     font-family: inherit;
+    min-width: 0; /* Позволяет input сжиматься в flex контейнере */
 }
 
 .search-input::placeholder {
@@ -3125,8 +3129,8 @@ main {
     backdrop-filter: var(--blur-medium);
     -webkit-backdrop-filter: var(--blur-medium);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 16px rgba(255, 149, 0, 0.15),
-                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    box-shadow: 0 2px 8px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     min-width: 44px;
     width: 44px;
     height: 44px;
@@ -3136,7 +3140,6 @@ main {
     flex-shrink: 0;
     position: relative;
     z-index: 2;
-    align-self: center;
     line-height: 1;
     vertical-align: middle;
 }
