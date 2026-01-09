@@ -13,7 +13,11 @@
 <body>
     <div id="app">
         <header>
-            <button id="profile-button" class="profile-button" style="display: none;">👤</button>
+            <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-start;">
+                <button id="profile-button" class="profile-button" style="display: none;">👤</button>
+                <button id="settings-button" class="settings-button" style="display: none;">⚙️</button>
+                <button id="admin-button" class="admin-button" style="display: none;">📊</button>
+            </div>
             <h1 id="user-name">Загрузка...</h1>
             <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
                 <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
@@ -480,9 +484,55 @@
                         <label>Язык:</label>
                         <div id="profile-language" class="profile-value">—</div>
                     </div>
-                    <button id="profile-admin-button" class="profile-admin-button" style="display: none; margin-top: 20px;">
-                        ⚙️ Настройки магазина
-                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно настроек магазина -->
+    <div id="settings-modal" class="modal admin-modal">
+        <div class="modal-content admin-modal-content">
+            <div class="admin-modal-header">
+                <h2>⚙️ Настройки магазина</h2>
+                <span class="admin-close settings-close">&times;</span>
+            </div>
+            <div class="admin-modal-body">
+                <div id="settings-content" class="settings-content">
+                    <div class="admin-setting">
+                        <div class="admin-setting-label">
+                            <label for="quantity-enabled-toggle">Показ количества товаров</label>
+                            <p class="admin-setting-description">Показывать количество товаров в карточках и модальном окне. При отключении будет отображаться "В наличии" без указания числа.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="quantity-enabled-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="admin-setting">
+                        <div class="admin-setting-label">
+                            <label for="reservations-toggle">Резервация товаров</label>
+                            <p class="admin-setting-description">Разрешить клиентам резервировать товары на определенное время. Работает независимо от показа количества.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="reservations-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="admin-setting">
+                        <div class="admin-setting-label">
+                            <label for="all-products-made-to-order-toggle">Все товары под заказ</label>
+                            <p class="admin-setting-description">При включении все активные товары устанавливаются как "под заказ". При выключении статус "под заказ" снимается со всех активных товаров. Вы можете индивидуально изменять статус товаров в карточке товара - это не влияет на тумблер.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="all-products-made-to-order-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="admin-info">
+                        <p>💡 <strong>Как это работает:</strong><br>
+                        • <strong>Показ количества включен:</strong> отображается точное количество товара (например, "В наличии: 5"). При резервации товара с количеством больше 1 можно выбрать, сколько единиц зарезервировать.<br>
+                        • <strong>Показ количества выключен:</strong> отображается просто "В наличии" без числа. Резервация работает, но всегда резервируется 1 единица товара (выбор количества недоступен).</p>
+                    </div>
                 </div>
             </div>
         </div>

@@ -1,7 +1,8 @@
 // Главный файл приложения - инициализация и координация модулей
-import { initAdmin, loadShopSettings } from './admin.js';
+import { initAdmin, loadShopSettings, openAdmin } from './admin.js';
 import { getContext } from './api.js';
 import { initCart, loadCart, loadOrders, loadPurchases, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
+import { initSettingsModal, openSettings } from './handlers/admin_settings_modal.js';
 import { initProfile, setupProfileButton } from './profile.js';
 import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 // Импорт функций категорий из отдельного модуля (рефакторинг)
@@ -356,6 +357,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 8.1 Инициализируем личный кабинет для всех пользователей
     initProfile();
     setupProfileButton();
+    
+    // 7.5 Инициализируем модальное окно настроек
+    initSettingsModal();
+    
+    // 7.6 Настраиваем кнопки настроек и админки для владельцев магазинов
+    const isOwner = appContext && appContext.role === 'owner';
+    const settingsButton = document.getElementById('settings-button');
+    const adminButton = document.getElementById('admin-button');
+    
+    if (settingsButton) {
+        if (isOwner) {
+            settingsButton.style.display = 'flex';
+            settingsButton.onclick = () => {
+                openSettings();
+            };
+        } else {
+            settingsButton.style.display = 'none';
+        }
+    }
+    
+    if (adminButton) {
+        if (isOwner) {
+            adminButton.style.display = 'flex';
+            adminButton.onclick = () => {
+                openAdmin();
+            };
+        } else {
+            adminButton.style.display = 'none';
+        }
+    }
     
     // 8.2 Инициализируем переключение вида карточек
     const cardViewToggleButton = document.getElementById('card-view-toggle-button');

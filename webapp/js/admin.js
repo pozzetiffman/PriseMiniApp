@@ -353,6 +353,10 @@ export async function openAdmin() {
         getShopSettings,
         checkAllProductsMadeToOrder,
         switchAdminTab,
+        loadOrders,
+        loadSoldProducts,
+        loadStats,
+        loadPurchases,
         getAdminModal: () => adminModal,
         setAdminModal: (val) => { adminModal = val; },
         getReservationsToggle: () => reservationsToggle,
@@ -410,8 +414,8 @@ export async function openAdmin() {
         // Показываем модальное окно
         adminModal.style.display = 'flex';
         
-        // Убеждаемся, что активна вкладка "Настройки"
-        switchAdminTab('settings');
+        // Убеждаемся, что активна вкладка "Заказы"
+        switchAdminTab('orders');
     } catch (error) {
         console.error('❌ Error loading shop settings:', error);
         alert('Не удалось загрузить настройки магазина: ' + error.message);

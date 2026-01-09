@@ -1,6 +1,5 @@
 // Модуль личного кабинета пользователя
 import { getTelegramInstance, isTelegramAvailable } from './telegram.js';
-import { openAdmin } from './admin.js';
 
 let profileModal = null;
 
@@ -32,14 +31,7 @@ export function initProfile() {
         }
     };
     
-    // Обработчик кнопки админки для владельцев магазинов
-    const adminButton = document.getElementById('profile-admin-button');
-    if (adminButton) {
-        adminButton.onclick = () => {
-            profileModal.style.display = 'none';
-            openAdmin();
-        };
-    }
+    // Кнопка админки удалена - теперь есть отдельные кнопки в header
     
     console.log('✅ Profile panel initialized');
 }
@@ -79,15 +71,7 @@ export function openProfile() {
         displayUserData(null);
     }
     
-    // Проверяем, является ли пользователь владельцем магазина
-    const appContext = window.getAppContext ? window.getAppContext() : null;
-    const isOwner = appContext && appContext.role === 'owner';
-    
-    // Показываем/скрываем кнопку админки для владельцев
-    const adminButton = document.getElementById('profile-admin-button');
-    if (adminButton) {
-        adminButton.style.display = isOwner ? 'block' : 'none';
-    }
+    // Кнопка админки удалена - теперь есть отдельные кнопки в header
     
     profileModal.style.display = 'flex';
 }

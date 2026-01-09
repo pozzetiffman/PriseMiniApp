@@ -48,19 +48,21 @@ export function initAdmin(dependencies) {
     if (setAllProductsMadeToOrderToggle) setAllProductsMadeToOrderToggle(allProductsMadeToOrderToggle);
     
     // Настройка закрытия модального окна
-    const adminClose = document.querySelector('.admin-close');
-    if (adminClose) {
-        adminClose.onclick = () => {
-            adminModal.style.display = 'none';
+    if (adminModal) {
+        const adminClose = adminModal.querySelector('.admin-close');
+        if (adminClose) {
+            adminClose.onclick = () => {
+                adminModal.style.display = 'none';
+            };
+        }
+        
+        // Закрытие при клике вне модального окна
+        adminModal.onclick = (e) => {
+            if (e.target === adminModal) {
+                adminModal.style.display = 'none';
+            }
         };
     }
-    
-    // Закрытие при клике вне модального окна
-    adminModal.onclick = (e) => {
-        if (e.target === adminModal) {
-            adminModal.style.display = 'none';
-        }
-    };
     
     // Обработчик переключателя количества товаров
     if (quantityEnabledToggle) {
@@ -86,11 +88,7 @@ export function initAdmin(dependencies) {
         };
     }
     
-    // Настройка вкладок
-    const tabs = document.querySelectorAll('.admin-tab');
-    tabs.forEach(tab => {
-        tab.onclick = () => switchAdminTab(tab.dataset.tab);
-    });
+    // Настройка вкладок - будет настроена через зависимости в openAdmin
     
     console.log('✅ Admin panel initialized');
 }
@@ -109,15 +107,11 @@ export function createAdminModal() {
     modal.innerHTML = `
         <div class="admin-modal-content">
             <div class="admin-modal-header">
-                <h2>⚙️ Настройки магазина</h2>
+                <h2>📊 Админка</h2>
                 <span class="admin-close">&times;</span>
             </div>
             <div class="admin-tabs">
-                <button class="admin-tab active" data-tab="settings">
-                    <span style="font-size: 18px;">⚙️</span>
-                    <span>Настройки</span>
-                </button>
-                <button class="admin-tab" data-tab="orders">
+                <button class="admin-tab active" data-tab="orders">
                     <span style="font-size: 18px;">🛒</span>
                     <span>Заказы</span>
                 </button>
@@ -135,44 +129,7 @@ export function createAdminModal() {
                 </button>
             </div>
             <div class="admin-modal-body">
-                <div id="admin-tab-settings" class="admin-tab-content active">
-                    <div class="admin-setting">
-                        <div class="admin-setting-label">
-                            <label for="quantity-enabled-toggle">Показ количества товаров</label>
-                            <p class="admin-setting-description">Показывать количество товаров в карточках и модальном окне. При отключении будет отображаться "В наличии" без указания числа.</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="quantity-enabled-toggle" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <div class="admin-setting">
-                        <div class="admin-setting-label">
-                            <label for="reservations-toggle">Резервация товаров</label>
-                            <p class="admin-setting-description">Разрешить клиентам резервировать товары на определенное время. Работает независимо от показа количества.</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="reservations-toggle" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <div class="admin-setting">
-                        <div class="admin-setting-label">
-                            <label for="all-products-made-to-order-toggle">Все товары под заказ</label>
-                            <p class="admin-setting-description">При включении все активные товары устанавливаются как "под заказ". При выключении статус "под заказ" снимается со всех активных товаров. Вы можете индивидуально изменять статус товаров в карточке товара - это не влияет на тумблер.</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="all-products-made-to-order-toggle">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <div class="admin-info">
-                        <p>💡 <strong>Как это работает:</strong><br>
-                        • <strong>Показ количества включен:</strong> отображается точное количество товара (например, "В наличии: 5"). При резервации товара с количеством больше 1 можно выбрать, сколько единиц зарезервировать.<br>
-                        • <strong>Показ количества выключен:</strong> отображается просто "В наличии" без числа. Резервация работает, но всегда резервируется 1 единица товара (выбор количества недоступен).</p>
-                    </div>
-                </div>
-                <div id="admin-tab-orders" class="admin-tab-content">
+                <div id="admin-tab-orders" class="admin-tab-content active">
                     <div id="orders-list" class="orders-list">
                         <p class="loading">Загрузка заказов...</p>
                     </div>
@@ -224,6 +181,10 @@ export async function openAdmin(dependencies) {
         getShopSettings,
         checkAllProductsMadeToOrder,
         switchAdminTab,
+        loadOrders,
+        loadSoldProducts,
+        loadStats,
+        loadPurchases,
         getAdminModal,
         setAdminModal,
         getReservationsToggle,
@@ -290,10 +251,43 @@ export async function openAdmin(dependencies) {
         
         // Показываем модальное окно
         if (adminModal) {
+            // Настройка закрытия модального окна
+            const adminClose = adminModal.querySelector('.admin-close');
+            if (adminClose) {
+                adminClose.onclick = () => {
+                    adminModal.style.display = 'none';
+                };
+            }
+            
+            // Закрытие при клике вне модального окна
+            adminModal.onclick = (e) => {
+                if (e.target === adminModal) {
+                    adminModal.style.display = 'none';
+                }
+            };
+            
+            // Настройка вкладок
+            const tabs = adminModal.querySelectorAll('.admin-tab');
+            tabs.forEach(tab => {
+                tab.onclick = () => {
+                    switchAdminTab(tab.dataset.tab, {
+                        loadOrders,
+                        loadSoldProducts,
+                        loadStats,
+                        loadPurchases
+                    });
+                };
+            });
+            
             adminModal.style.display = 'flex';
             
-            // Убеждаемся, что активна вкладка "Настройки"
-            switchAdminTab('settings');
+            // Убеждаемся, что активна вкладка "Заказы"
+            switchAdminTab('orders', {
+                loadOrders,
+                loadSoldProducts,
+                loadStats,
+                loadPurchases
+            });
         }
     } catch (error) {
         console.error('❌ Error loading shop settings:', error);
@@ -305,7 +299,7 @@ export async function openAdmin(dependencies) {
 // ========== REFACTORING STEP 2.4: switchAdminTab ==========
 /**
  * Переключение вкладок админки
- * @param {string} tabName - Название вкладки ('settings', 'orders', 'sold', 'stats', 'purchases')
+ * @param {string} tabName - Название вкладки ('orders', 'sold', 'stats', 'purchases')
  * @param {Object} dependencies - Объект с зависимостями
  * @param {Function} dependencies.loadOrders - Функция загрузки заказов
  * @param {Function} dependencies.loadSoldProducts - Функция загрузки проданных товаров
