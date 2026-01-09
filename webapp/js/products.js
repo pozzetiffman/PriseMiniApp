@@ -751,16 +751,25 @@ export function showProductModal(prod, finalPrice, fullImages) {
         };
         editControl.appendChild(editBtn);
         
-        // Кнопка "Продан"
-        const soldBtn = document.createElement('button');
-        soldBtn.className = 'reserve-btn btn-sold';
-        soldBtn.textContent = '✅ Продан';
-        soldBtn.onclick = () => {
-            if (markAsSoldCallback) {
-                markAsSoldCallback(prod.id, prod);
-            }
-        };
-        editControl.appendChild(soldBtn);
+        // Проверяем, является ли товар для покупки (is_for_sale)
+        const isForSale = prod.is_for_sale === true || 
+                         prod.is_for_sale === 1 || 
+                         prod.is_for_sale === '1' ||
+                         prod.is_for_sale === 'true' ||
+                         String(prod.is_for_sale).toLowerCase() === 'true';
+        
+        // Кнопка "Продан" - показываем только для обычных товаров (не для покупки)
+        if (!isForSale) {
+            const soldBtn = document.createElement('button');
+            soldBtn.className = 'reserve-btn btn-sold';
+            soldBtn.textContent = '✅ Продан';
+            soldBtn.onclick = () => {
+                if (markAsSoldCallback) {
+                    markAsSoldCallback(prod.id, prod);
+                }
+            };
+            editControl.appendChild(soldBtn);
+        }
         
         // Кнопка "Удалить"
         const deleteBtn = document.createElement('button');
