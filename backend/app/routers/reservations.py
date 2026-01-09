@@ -581,6 +581,12 @@ async def get_user_reservations(
         )
     ).order_by(models.Reservation.created_at.desc()).all()
     
+    print(f"🛒 Found {len(reservations)} reservations before product validation")
+    for res in reservations:
+        product = db.query(models.Product).filter(models.Product.id == res.product_id).first()
+        product_owner = product.user_id if product else None
+        print(f"🛒 Reservation {res.id}: user_id={res.user_id}, reserved_by_user_id={res.reserved_by_user_id}, product_id={res.product_id}, product_owner={product_owner}")
+    
     # Фильтруем резервации, у которых товар существует (товар мог быть удален)
     valid_reservations = []
     for reservation in reservations:
@@ -594,7 +600,26 @@ async def get_user_reservations(
             print(f"⚠️ Deactivated reservation {reservation.id} - product {reservation.product_id} not found")
     
     print(f"🛒 Found {len(valid_reservations)} valid active reservations (filtered {len(reservations) - len(valid_reservations)} with deleted products)")
+    
+    # Логируем детали каждой резервации для отладки
+    for res in valid_reservations:
+        print(f"🛒 Reservation {res.id}: user_id={res.user_id} (type: {type(res.user_id)}), product_id={res.product_id}, reserved_by_user_id={res.reserved_by_user_id}, is_active={res.is_active}, reserved_until={res.reserved_until}")
+        print(f"🛒 Reservation {res.id}: reserved_until type={type(res.reserved_until)}, value={res.reserved_until}, now={datetime.utcnow()}, is_future={res.reserved_until > datetime.utcnow() if res.reserved_until else False}")
+    
     print(f"🛒 ========== get_user_reservations END ==========")
+    
+    # Логируем сериализованные данные для отладки (что именно отправляется на фронтенд)
+    import json
+    try:
+        serialized = [schemas.Reservation.model_validate(res).model_dump(mode='json') for res in valid_reservations]
+        print(f"🛒 [BACKEND] Serialized reservations count: {len(serialized)}")
+        for idx, ser_res in enumerate(serialized):
+            print(f"🛒 [BACKEND] Reservation {idx+1}: id={ser_res.get('id')}, user_id={ser_res.get('user_id')} (type: {type(ser_res.get('user_id'))}), is_active={ser_res.get('is_active')} (type: {type(ser_res.get('is_active'))}), reserved_until={ser_res.get('reserved_until')} (type: {type(ser_res.get('reserved_until'))})")
+        print(f"🛒 [BACKEND] Full JSON response: {json.dumps(serialized, default=str, indent=2)}")
+    except Exception as e:
+        print(f"⚠️ Error serializing reservations: {e}")
+        import traceback
+        traceback.print_exc()
     
     return valid_reservations
 
