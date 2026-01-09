@@ -1910,7 +1910,7 @@ main {
     
     .admin-tabs {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         border-bottom: 1px solid var(--border-glass);
         background: var(--bg-glass-light);
         margin-bottom: 15px;
@@ -2499,7 +2499,7 @@ main {
 }
 
 .admin-modal-header {
-    padding: 16px 20px;
+    padding: 20px 20px 16px 20px;
     border-bottom: 1px solid var(--border-glass);
     display: flex;
     justify-content: space-between;
@@ -2583,7 +2583,7 @@ main {
 /* Вкладки админки */
 .admin-tabs {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     border-bottom: 1px solid var(--border-glass);
     background: var(--bg-glass-light);
     flex-shrink: 0;
@@ -2750,7 +2750,8 @@ main {
     box-shadow: 0 4px 12px var(--shadow-medium);
 }
 
-.orders-list {
+.orders-list,
+.reservations-list {
     padding: 0;
     max-height: calc(90vh - 200px);
     overflow-y: auto;
@@ -2759,7 +2760,8 @@ main {
     -ms-overflow-style: none; /* IE и Edge */
 }
 
-.orders-list::-webkit-scrollbar {
+.orders-list::-webkit-scrollbar,
+.reservations-list::-webkit-scrollbar {
     display: none; /* Chrome, Safari, Opera */
 }
 
