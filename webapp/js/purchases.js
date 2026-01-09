@@ -170,7 +170,7 @@ export function showPurchaseModal(prod) {
         await submitPurchaseForm(prod.id);
     };
     
-    purchaseModal.style.display = 'block';
+    purchaseModal.style.display = 'flex';
 }
 
 // Отправка формы продажи

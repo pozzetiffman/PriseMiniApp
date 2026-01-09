@@ -1080,7 +1080,7 @@ export function showProductModal(prod, finalPrice, fullImages) {
     
     // Показываем первое изображение
     showModalImage(0);
-    modalElement.style.display = 'block';
+    modalElement.style.display = 'flex';
 }
 */
 // ========== END REFACTORING STEP 3.1 ==========

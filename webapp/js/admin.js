@@ -408,7 +408,7 @@ export async function openAdmin() {
         }
         
         // Показываем модальное окно
-        adminModal.style.display = 'block';
+        adminModal.style.display = 'flex';
         
         // Убеждаемся, что активна вкладка "Настройки"
         switchAdminTab('settings');

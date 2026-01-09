@@ -121,7 +121,7 @@ export function showOrderModal(productId) {
     // Устанавливаем обработчики
     setupOrderFormHandlers(productId);
     
-    orderModalElement.style.display = 'block';
+    orderModalElement.style.display = 'flex';
 }
 
 // Сброс формы заказа

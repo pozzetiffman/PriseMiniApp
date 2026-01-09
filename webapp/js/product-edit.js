@@ -296,7 +296,7 @@ export function showEditProductModal(prod) {
     console.log('🔧 Edit product modal - is_for_sale raw:', prod.is_for_sale, 'type:', typeof prod.is_for_sale, 'checked:', isForSale);
     
     // Показываем модальное окно
-    editProductModal.style.display = 'block';
+    editProductModal.style.display = 'flex';
     
     // Обработчик сохранения
     const saveBtn = document.getElementById('edit-product-save');
@@ -746,6 +746,6 @@ export function showSellModal(productId, product) {
         };
     }
     
-    sellModalElement.style.display = 'block';
+    sellModalElement.style.display = 'flex';
 }
 

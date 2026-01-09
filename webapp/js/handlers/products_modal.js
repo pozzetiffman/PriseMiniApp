@@ -549,7 +549,7 @@ export function showProductModal(prod, finalPrice, fullImages) {
     //     console.error('❌ showModalImageCallback not initialized!');
     // }
     // ========== END REFACTORING STEP 2.1-2.2 ==========
-    modalElement.style.display = 'block';
+    modalElement.style.display = 'flex';
 }
 // ========== END REFACTORING STEP 3.1 ==========
 

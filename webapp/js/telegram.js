@@ -53,9 +53,14 @@ export async function initTelegram() {
     
     tg = window.Telegram.WebApp;
     
-    // Расширяем WebApp на весь экран
+    // Расширяем WebApp на весь экран (ВАЖНО: вызывается до рендера UI)
     if (tg && typeof tg.expand === 'function') {
         tg.expand();
+    }
+    
+    // Готовим WebApp к использованию
+    if (tg && typeof tg.ready === 'function') {
+        tg.ready();
     }
     
     // Устанавливаем темную тему в стиле Liquid Glass (Telegram iOS)
@@ -70,6 +75,8 @@ export async function initTelegram() {
     }
     
     console.log('✅ Telegram WebApp инициализирован');
+    console.log('✅ Safe area top:', getComputedStyle(document.body).getPropertyValue('--tg-safe-area-inset-top'));
+    console.log('✅ Content safe area top:', getComputedStyle(document.body).getPropertyValue('--tg-content-safe-area-inset-top'));
     return true;
 }
 

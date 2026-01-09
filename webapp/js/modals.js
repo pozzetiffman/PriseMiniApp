@@ -176,32 +176,46 @@ export function setupModals() {
     // Закрытие по Escape
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            if (modalElement && modalElement.style.display === 'block') {
+            if (modalElement && (modalElement.style.display === 'flex' || modalElement.style.display === 'block')) {
                 modalElement.style.display = 'none';
                 document.body.style.overflow = 'auto';
             }
-            if (reservationModalElement && reservationModalElement.style.display === 'block') {
+            if (reservationModalElement && (reservationModalElement.style.display === 'flex' || reservationModalElement.style.display === 'block')) {
                 reservationModalElement.style.display = 'none';
             }
             const cartModal = document.getElementById('cart-modal');
-            if (cartModal && cartModal.style.display === 'block') {
+            if (cartModal && (cartModal.style.display === 'flex' || cartModal.style.display === 'block')) {
                 cartModal.style.display = 'none';
             }
             const adminModal = document.getElementById('admin-modal');
-            if (adminModal && adminModal.style.display === 'block') {
+            if (adminModal && (adminModal.style.display === 'flex' || adminModal.style.display === 'block')) {
                 adminModal.style.display = 'none';
             }
-            if (editProductModal && editProductModal.style.display === 'block') {
+            if (editProductModal && (editProductModal.style.display === 'flex' || editProductModal.style.display === 'block')) {
                 editProductModal.style.display = 'none';
             }
-            if (sellModalElement && sellModalElement.style.display === 'block') {
+            if (sellModalElement && (sellModalElement.style.display === 'flex' || sellModalElement.style.display === 'block')) {
                 sellModalElement.style.display = 'none';
             }
-            if (orderModalElement && orderModalElement.style.display === 'block') {
+            if (orderModalElement && (orderModalElement.style.display === 'flex' || orderModalElement.style.display === 'block')) {
                 orderModalElement.style.display = 'none';
             }
         }
     });
+}
+
+// Универсальная функция для показа модального окна
+export function showModal(modalElement) {
+    if (modalElement) {
+        modalElement.style.display = 'flex';
+    }
+}
+
+// Универсальная функция для скрытия модального окна
+export function hideModal(modalElement) {
+    if (modalElement) {
+        modalElement.style.display = 'none';
+    }
 }
 
 

@@ -89,7 +89,7 @@ export function setupCartButton() {
                     }
                     
                     // Сначала открываем модальное окно, чтобы элементы DOM были доступны
-                    cartModal.style.display = 'block';
+                    cartModal.style.display = 'flex';
                     
                     // Затем инициализируем активную вкладку (после небольшой задержки для рендеринга)
                     setTimeout(() => {

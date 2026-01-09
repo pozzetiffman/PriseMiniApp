@@ -64,7 +64,7 @@ body::before {
 
 header {
     padding: 12px 16px;
-    padding-bottom: max(12px, calc(12px + env(safe-area-inset-bottom)));
+    padding-bottom: max(12px, calc(12px + var(--tg-safe-area-inset-bottom, 0px)));
     text-align: center;
     background: var(--bg-glass) !important;
     backdrop-filter: var(--blur-large);
@@ -85,7 +85,6 @@ header {
     justify-items: center;
     gap: 12px;
     border-radius: 24px 24px 0 0;
-    padding-bottom: max(12px, calc(12px + env(safe-area-inset-bottom, 0px)));
 }
 
 header h1 {
@@ -448,7 +447,7 @@ header h1 {
     /* Убираем display: none, так как теперь используем выпадающие списки */
     overflow-x: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
     overflow-y: visible !important;
-    padding: 8px 10px;
+    padding: 0; /* Убираем padding, так как он задается в #categories-nav */
     gap: 8px;
     -webkit-overflow-scrolling: touch;
     position: relative; /* Для правильного позиционирования выпадающих списков */
@@ -494,7 +493,7 @@ header h1 {
 #categories-nav {
     display: block !important; /* Показываем контейнер категорий */
     overflow: visible !important; /* Разрешаем выпадающие списки выходить за границы */
-    padding: 8px 16px; /* Отступы для выпадающих списков */
+    padding: 8px 0; /* Убираем горизонтальный padding, так как он задается в .category-dropdowns-container */
     position: relative; /* Для правильного позиционирования выпадающих списков */
     z-index: 10002; /* Выше чем products-grid, чтобы фильтр не перекрывался */
     isolation: isolate; /* Создаем новый контекст наложения */
@@ -502,7 +501,7 @@ header h1 {
 
 /* Поисковая строка */
 .search-container {
-    padding: 8px 16px;
+    padding: 8px 12px;
     margin-bottom: 8px;
     position: relative;
     z-index: 10001; /* Ниже чем категории, но выше чем товары */
@@ -553,7 +552,7 @@ header h1 {
     gap: 8px;
     width: 100%;
     margin-bottom: 12px;
-    padding: 0 16px; /* Отступы для Telegram WebView */
+    padding: 0 12px; /* Отступы выровнены с поиском */
     justify-content: space-between;
     align-items: flex-start;
     overflow: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
@@ -1209,20 +1208,30 @@ header h1 {
 
 /* Модальное окно */
 .modal {
-    display: none;
+    display: none; /* По умолчанию скрыто */
     position: fixed;
+    inset: 0;
     z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
     background-color: rgba(0,0,0,0.7);
-    overflow-y: auto;
     backdrop-filter: var(--blur-large);
     -webkit-backdrop-filter: var(--blur-large);
+    overflow-y: auto;
+    /* Flex для центрирования модального окна (применяется когда modal открыт) */
+    justify-content: center;
+    align-items: flex-start;
+    /* Safe-area ТОЛЬКО здесь, не в body и не в modal-content */
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 12px);
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + 12px);
+    padding-left: 0;
+    padding-right: 0;
     /* Скрываем scrollbar */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE и Edge */
+}
+
+.modal[style*="display: block"],
+.modal[style*="display:flex"] {
+    display: flex !important;
 }
 
 .modal::-webkit-scrollbar {
@@ -1233,12 +1242,11 @@ header h1 {
     background: var(--bg-glass-light) !important;
     backdrop-filter: var(--blur-large);
     -webkit-backdrop-filter: var(--blur-large);
-    margin: 20px auto;
+    width: 100%;
+    max-width: 420px;
+    min-width: 280px;
     padding: 24px;
     border-radius: 24px;
-    max-width: 90%;
-    min-width: 280px;
-    max-height: 90vh;
     position: relative;
     animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 20px 60px var(--shadow-glass),
@@ -1247,7 +1255,8 @@ header h1 {
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
-    width: calc(100% - 40px);
+    max-height: 100%;
+    margin: 0 20px;
     /* Скрываем scrollbar */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE и Edge */
@@ -1613,6 +1622,8 @@ html, body {
     overflow-y: visible; /* Разрешаем выпадающим спискам выходить за границы */
     position: relative;
     z-index: 1;
+    /* Safe-area ТОЛЬКО здесь для главной страницы */
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
 }
 
 main {
@@ -1620,7 +1631,7 @@ main {
     max-width: 100%;
     overflow-x: hidden;
     overflow-y: visible; /* Разрешаем выпадающим спискам выходить за границы */
-    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)); /* Отступ для фиксированной шапки внизу + safe area + отступ */
+    padding: 12px 12px calc(68px + var(--tg-safe-area-inset-bottom, 0px)) 12px; /* Отступ для фиксированной шапки внизу + safe area */
     position: relative;
 }
 
@@ -1732,7 +1743,7 @@ main {
     
     header {
         padding: 10px 12px;
-        padding-bottom: max(10px, calc(10px + env(safe-area-inset-bottom, 0px)));
+        padding-bottom: max(10px, calc(10px + var(--tg-safe-area-inset-bottom, 0px)));
         min-height: 60px;
         bottom: 0;
         gap: 8px;
@@ -1829,7 +1840,7 @@ main {
     }
     
     main {
-        padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+        padding: 12px 12px calc(58px + var(--tg-safe-area-inset-bottom, 0px)) 12px;
     }
     
     .admin-tabs {
@@ -1868,9 +1879,9 @@ main {
     
     .admin-modal-content {
         max-width: 98%;
-        width: calc(100% - 10px);
-        margin: 2% auto;
-        max-height: 96vh;
+        width: 100%;
+        margin: 0 10px;
+        max-height: 100%;
     }
     
     .admin-modal-body {
@@ -1895,10 +1906,10 @@ main {
     
     .modal-content {
         max-width: 95%;
-        width: calc(100% - 20px);
-        margin: 10px auto;
+        width: 100%;
+        margin: 0 10px;
         padding: 15px;
-        max-height: calc(100vh - 20px);
+        max-height: 100%;
     }
     
     .modal-image {
@@ -2377,35 +2388,49 @@ main {
 
 /* Модальное окно админки */
 .admin-modal {
-    display: none;
+    display: none; /* По умолчанию скрыто */
     position: fixed;
+    inset: 0;
     z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: var(--blur-medium);
     -webkit-backdrop-filter: var(--blur-medium);
+    overflow-y: auto;
+    /* Flex для центрирования модального окна (применяется когда modal открыт) */
+    justify-content: center;
+    align-items: flex-start;
+    /* Safe-area ТОЛЬКО здесь */
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 12px);
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + 12px);
+    padding-left: 0;
+    padding-right: 0;
     animation: fadeIn 0.3s ease;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.admin-modal[style*="display: block"],
+.admin-modal[style*="display:flex"] {
+    display: flex !important;
 }
 
 .admin-modal-content {
     background: var(--bg-glass);
     backdrop-filter: var(--blur-large);
     -webkit-backdrop-filter: var(--blur-large);
-    margin: 5% auto;
+    width: 100%;
+    max-width: 600px;
     padding: 0;
     border-radius: 24px;
-    width: 95%;
-    max-width: 600px;
-    max-height: 90vh;
     box-shadow: 0 8px 32px var(--shadow-glass);
     border: 1px solid var(--border-glass);
     animation: modalSlideIn 0.3s ease;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    max-height: 100%;
+    margin: 0 20px;
 }
 
 .admin-modal-header {
@@ -3138,15 +3163,15 @@ main {
 /* Модальное окно личного кабинета */
 .profile-modal-content {
     max-width: 500px;
-    width: 90%;
-    margin: 5% auto;
+    width: 100%;
     padding: 0;
-    max-height: 90vh;
     overflow-y: auto;
     background: var(--bg-glass);
     border-radius: 24px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    max-height: 100%;
+    margin: 0 20px;
     /* Скрываем scrollbar */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE и Edge */
@@ -3261,9 +3286,9 @@ main {
 @media (max-width: 768px) {
     .profile-modal-content {
         max-width: 95%;
-        width: calc(100% - 20px);
-        margin: 10px auto;
-        max-height: calc(100vh - 20px);
+        width: 100%;
+        margin: 0 10px;
+        max-height: 100%;
     }
     
     .profile-title {

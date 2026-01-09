@@ -89,7 +89,7 @@ export function openProfile() {
         adminButton.style.display = isOwner ? 'block' : 'none';
     }
     
-    profileModal.style.display = 'block';
+    profileModal.style.display = 'flex';
 }
 
 /**
