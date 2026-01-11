@@ -10,6 +10,50 @@ from dotenv import load_dotenv
 from ..db import models, database
 from ..models import order as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
+from ..utils.product_snapshot import create_product_snapshot, get_product_display_info_from_snapshot
+from ..utils.products_utils import make_full_url
+
+def get_product_price_from_dict(product_dict: dict) -> Optional[float]:
+    """
+    Получить правильную цену товара из словаря (например, из snapshot).
+    Использует ту же логику, что и для обычных товаров.
+    
+    ВАЖНО: product_dict["price"] должна быть ОРИГИНАЛЬНОЙ ценой БЕЗ скидки.
+    Скидка применяется только здесь один раз.
+    """
+    is_for_sale = product_dict.get("is_for_sale", False)
+    
+    if is_for_sale:
+        price_type = product_dict.get("price_type", "range")
+        if price_type == 'fixed' and product_dict.get("price_fixed") is not None:
+            return product_dict.get("price_fixed")
+        elif price_type == 'range' and product_dict.get("price_from") is not None:
+            return product_dict.get("price_from")
+        elif price_type == 'range' and product_dict.get("price_to") is not None:
+            return product_dict.get("price_to")
+        # Если нет цены для продажи, возвращаем обычную цену (может быть None)
+        price = product_dict.get("price")
+        if price is None:
+            return None
+        # Для товаров "на продажу" без указания цены для продажи, применяем скидку к обычной цене
+        discount = product_dict.get("discount", 0)
+        if discount and discount > 0:
+            return round(price * (1 - discount / 100), 2)
+        return price
+    else:
+        # Обычная цена со скидкой
+        # ВАЖНО: price должна быть оригинальной ценой БЕЗ скидки
+        price = product_dict.get("price")
+        if price is None:
+            return None  # Цена по запросу
+        discount = product_dict.get("discount", 0)
+        
+        if discount and discount > 0:
+            # Вычисляем цену со скидкой: оригинальная_цена * (1 - скидка%)
+            final_price = round(price * (1 - discount / 100), 2)
+            print(f"   💰 Price calculation from snapshot: original={price}, discount={discount}%, final={final_price}")
+            return final_price
+        return price
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -125,9 +169,18 @@ async def create_order(
             detail="Вы не можете заказать свой собственный товар"
         )
     
+    # Создаем snapshot товара на момент операции
+    snapshot_id = create_product_snapshot(
+        db=db,
+        product=product,
+        user_id=ordered_by_user_id,
+        operation_type='order'
+    )
+    
     # Создаем заказ
     order = models.Order(
         product_id=product_id,
+        snapshot_id=snapshot_id,
         user_id=product.user_id,  # Владелец магазина
         ordered_by_user_id=ordered_by_user_id,
         quantity=quantity,
@@ -364,7 +417,8 @@ async def get_shop_orders(
     
     # Получаем заказы, где пользователь - владелец магазина, и заказ не отменен
     orders = db.query(models.Order).options(
-        joinedload(models.Order.product)
+        joinedload(models.Order.product),
+        joinedload(models.Order.snapshot)
     ).filter(
         and_(
             models.Order.user_id == user_id,
@@ -372,25 +426,105 @@ async def get_shop_orders(
         )
     ).order_by(models.Order.created_at.desc()).all()
     
-    # Преобразуем images_urls из JSON строки в список для каждого заказа
-    # И обрабатываем случай, когда товар был удален (product=None)
+    # Формируем ответ с информацией о товаре из snapshot или из продукта
+    # ВСЕГДА используем snapshot если он есть - для изоляции данных товара на момент заказа
+    result = []
     for order in orders:
-        if order.product:
+        order_dict = schemas.Order.model_validate(order).model_dump(mode='json')
+        
+        # ВСЕГДА используем snapshot если он есть - для изоляции данных товара на момент заказа
+        if order.snapshot_id:
+            snapshot = db.query(models.UserProductSnapshot).filter(
+                models.UserProductSnapshot.snapshot_id == order.snapshot_id
+            ).first()
+            if snapshot:
+                product_info = get_product_display_info_from_snapshot(snapshot)
+                if product_info:
+                    # Вычисляем правильную цену используя ту же логику, что и для существующих товаров
+                    calculated_price = get_product_price_from_dict(product_info)
+                    product_info["price"] = calculated_price
+                    # ВАЖНО: Обнуляем discount, так как цена уже вычислена со скидкой
+                    product_info["discount"] = 0
+                    # ВАЖНО: Для заказов товар доступен (он был заказан, когда был доступен)
+                    product_info["is_unavailable"] = False
+                    # Преобразуем images_urls в полные URL
+                    if product_info.get("images_urls"):
+                        product_info["images_urls"] = [make_full_url(img_url) for img_url in product_info["images_urls"]]
+                    if product_info.get("image_url"):
+                        product_info["image_url"] = make_full_url(product_info["image_url"])
+                    order_dict['product'] = product_info
+                else:
+                    order_dict['product'] = {
+                        "id": order.product_id or 0,
+                        "name": "Товар недоступен",
+                        "price": None,
+                        "discount": 0,
+                        "image_url": None,
+                        "images_urls": [],
+                        "is_unavailable": True
+                    }
+            else:
+                # Snapshot не найден - fallback к актуальному товару
+                if order.product:
+                    images_urls_list = None
+                    if order.product.images_urls:
+                        try:
+                            images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
+                        except (json.JSONDecodeError, TypeError):
+                            images_urls_list = []
+                    order_dict['product'] = {
+                        "id": order.product.id,
+                        "name": order.product.name,
+                        "price": order.product.price,
+                        "discount": order.product.discount,
+                        "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
+                        "images_urls": images_urls_list,
+                        "is_unavailable": False
+                    }
+                else:
+                    order_dict['product'] = {
+                        "id": order.product_id or 0,
+                        "name": "Товар недоступен",
+                        "price": None,
+                        "discount": 0,
+                        "image_url": None,
+                        "images_urls": [],
+                        "is_unavailable": True
+                    }
+        elif order.product:
+            # Нет snapshot - используем актуальный товар (для старых заказов без snapshot)
+            images_urls_list = None
             if order.product.images_urls:
-                if isinstance(order.product.images_urls, str):
-                    try:
-                        order.product.images_urls = json.loads(order.product.images_urls)
-                    except (json.JSONDecodeError, TypeError):
-                        order.product.images_urls = []
+                try:
+                    images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
+                except (json.JSONDecodeError, TypeError):
+                    images_urls_list = []
+            order_dict['product'] = {
+                "id": order.product.id,
+                "name": order.product.name,
+                "price": order.product.price,
+                "discount": order.product.discount,
+                "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
+                "images_urls": images_urls_list,
+                "is_unavailable": False
+            }
         else:
-            # Если товар был удален, устанавливаем product_id в None для корректной сериализации
-            if order.product_id is not None:
-                # Товар был удален, но product_id еще есть - оставляем как есть
-                pass
+            # Товар удален и нет snapshot - показываем заглушку
+            order_dict['product'] = {
+                "id": order.product_id or 0,
+                "name": "Товар недоступен",
+                "price": None,
+                "discount": 0,
+                "image_url": None,
+                "images_urls": [],
+                "is_unavailable": True
+            }
+        
+        result.append(order_dict)
     
-    return orders
+    return result
 
-@router.get("/my", response_model=List[schemas.Order])
+@router.get("/my")
 async def get_my_orders(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
@@ -413,7 +547,8 @@ async def get_my_orders(
     # Получаем заказы, где пользователь - заказчик, заказ не отменен и не завершен
     # В корзине показываем только активные заказы (не завершенные и не отмененные)
     orders = db.query(models.Order).options(
-        joinedload(models.Order.product)
+        joinedload(models.Order.product),
+        joinedload(models.Order.snapshot)
     ).filter(
         and_(
             models.Order.ordered_by_user_id == user_id,
@@ -422,16 +557,102 @@ async def get_my_orders(
         )
     ).order_by(models.Order.created_at.desc()).all()
     
-    # Преобразуем images_urls из JSON строки в список для каждого заказа
+    # Формируем ответ с информацией о товаре из snapshot или из продукта
+    result = []
     for order in orders:
-        if order.product and order.product.images_urls:
-            if isinstance(order.product.images_urls, str):
+        order_dict = schemas.Order.model_validate(order).model_dump(mode='json')
+        
+        # ВСЕГДА используем snapshot если он есть - для изоляции данных товара на момент заказа
+        if order.snapshot_id:
+            snapshot = db.query(models.UserProductSnapshot).filter(
+                models.UserProductSnapshot.snapshot_id == order.snapshot_id
+            ).first()
+            if snapshot:
+                product_info = get_product_display_info_from_snapshot(snapshot)
+                if product_info:
+                    # Вычисляем правильную цену используя ту же логику, что и для существующих товаров
+                    calculated_price = get_product_price_from_dict(product_info)
+                    product_info["price"] = calculated_price
+                    # ВАЖНО: Обнуляем discount, так как цена уже вычислена со скидкой
+                    product_info["discount"] = 0
+                    # ВАЖНО: Для заказов товар доступен (он был заказан, когда был доступен)
+                    product_info["is_unavailable"] = False
+                    # Преобразуем images_urls в полные URL
+                    if product_info.get("images_urls"):
+                        product_info["images_urls"] = [make_full_url(img_url) for img_url in product_info["images_urls"]]
+                    if product_info.get("image_url"):
+                        product_info["image_url"] = make_full_url(product_info["image_url"])
+                    order_dict['product'] = product_info
+                else:
+                    order_dict['product'] = {
+                        "id": order.product_id or 0,
+                        "name": "Товар недоступен",
+                        "price": None,
+                        "discount": 0,
+                        "image_url": None,
+                        "images_urls": [],
+                        "is_unavailable": True
+                    }
+            else:
+                # Snapshot не найден - fallback к актуальному товару
+                if order.product:
+                    images_urls_list = None
+                    if order.product.images_urls:
+                        try:
+                            images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
+                        except (json.JSONDecodeError, TypeError):
+                            images_urls_list = []
+                    order_dict['product'] = {
+                        "id": order.product.id,
+                        "name": order.product.name,
+                        "price": order.product.price,
+                        "discount": order.product.discount,
+                        "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
+                        "images_urls": images_urls_list,
+                        "is_unavailable": False
+                    }
+                else:
+                    order_dict['product'] = {
+                        "id": order.product_id or 0,
+                        "name": "Товар недоступен",
+                        "price": None,
+                        "discount": 0,
+                        "image_url": None,
+                        "images_urls": [],
+                        "is_unavailable": True
+                    }
+        elif order.product:
+            # Нет snapshot - используем актуальный товар (для старых заказов без snapshot)
+            images_urls_list = None
+            if order.product.images_urls:
                 try:
-                    order.product.images_urls = json.loads(order.product.images_urls)
+                    images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
                 except (json.JSONDecodeError, TypeError):
-                    order.product.images_urls = []
+                    images_urls_list = []
+            order_dict['product'] = {
+                "id": order.product.id,
+                "name": order.product.name,
+                "price": order.product.price,
+                "discount": order.product.discount,
+                "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
+                "images_urls": images_urls_list,
+                "is_unavailable": False
+            }
+        else:
+            # Товар удален и нет snapshot - показываем заглушку
+            order_dict['product'] = {
+                "id": order.product_id or 0,
+                "name": "Товар недоступен",
+                "price": None,
+                "discount": 0,
+                "image_url": None,
+                "images_urls": [],
+                "is_unavailable": True
+            }
+        
+        result.append(order_dict)
     
-    return orders
+    return result
 
 @router.get("/history", response_model=List[schemas.Order])
 async def get_orders_history(
@@ -456,7 +677,8 @@ async def get_orders_history(
     # Получаем только завершенные или отмененные заказы (история = неактивные)
     # Активные заказы показываются в разделе "Активные", а не в истории
     orders = db.query(models.Order).options(
-        joinedload(models.Order.product)
+        joinedload(models.Order.product),
+        joinedload(models.Order.snapshot)
     ).filter(
         and_(
             models.Order.ordered_by_user_id == user_id,
@@ -467,16 +689,103 @@ async def get_orders_history(
         )
     ).order_by(models.Order.created_at.desc()).all()
     
-    # Преобразуем images_urls из JSON строки в список для каждого заказа
+    # Формируем ответ с информацией о товаре из snapshot или из продукта
+    # ВСЕГДА используем snapshot если он есть - для изоляции данных товара на момент заказа
+    result = []
     for order in orders:
-        if order.product and order.product.images_urls:
-            if isinstance(order.product.images_urls, str):
+        order_dict = schemas.Order.model_validate(order).model_dump(mode='json')
+        
+        # ВСЕГДА используем snapshot если он есть - для изоляции данных товара на момент заказа
+        if order.snapshot_id:
+            snapshot = db.query(models.UserProductSnapshot).filter(
+                models.UserProductSnapshot.snapshot_id == order.snapshot_id
+            ).first()
+            if snapshot:
+                product_info = get_product_display_info_from_snapshot(snapshot)
+                if product_info:
+                    # Вычисляем правильную цену используя ту же логику, что и для существующих товаров
+                    calculated_price = get_product_price_from_dict(product_info)
+                    product_info["price"] = calculated_price
+                    # ВАЖНО: Обнуляем discount, так как цена уже вычислена со скидкой
+                    product_info["discount"] = 0
+                    # ВАЖНО: Для заказов товар доступен (он был заказан, когда был доступен)
+                    product_info["is_unavailable"] = False
+                    # Преобразуем images_urls в полные URL
+                    if product_info.get("images_urls"):
+                        product_info["images_urls"] = [make_full_url(img_url) for img_url in product_info["images_urls"]]
+                    if product_info.get("image_url"):
+                        product_info["image_url"] = make_full_url(product_info["image_url"])
+                    order_dict['product'] = product_info
+                else:
+                    order_dict['product'] = {
+                        "id": order.product_id or 0,
+                        "name": "Товар недоступен",
+                        "price": None,
+                        "discount": 0,
+                        "image_url": None,
+                        "images_urls": [],
+                        "is_unavailable": True
+                    }
+            else:
+                # Snapshot не найден - fallback к актуальному товару
+                if order.product:
+                    images_urls_list = None
+                    if order.product.images_urls:
+                        try:
+                            images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
+                        except (json.JSONDecodeError, TypeError):
+                            images_urls_list = []
+                    order_dict['product'] = {
+                        "id": order.product.id,
+                        "name": order.product.name,
+                        "price": order.product.price,
+                        "discount": order.product.discount,
+                        "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
+                        "images_urls": images_urls_list,
+                        "is_unavailable": False
+                    }
+                else:
+                    order_dict['product'] = {
+                        "id": order.product_id or 0,
+                        "name": "Товар недоступен",
+                        "price": None,
+                        "discount": 0,
+                        "image_url": None,
+                        "images_urls": [],
+                        "is_unavailable": True
+                    }
+        elif order.product:
+            # Нет snapshot - используем актуальный товар (для старых заказов без snapshot)
+            images_urls_list = None
+            if order.product.images_urls:
                 try:
-                    order.product.images_urls = json.loads(order.product.images_urls)
+                    images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
                 except (json.JSONDecodeError, TypeError):
-                    order.product.images_urls = []
+                    images_urls_list = []
+            order_dict['product'] = {
+                "id": order.product.id,
+                "name": order.product.name,
+                "price": order.product.price,
+                "discount": order.product.discount,
+                "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
+                "images_urls": images_urls_list,
+                "is_unavailable": False
+            }
+        else:
+            # Товар удален и нет snapshot - показываем заглушку
+            order_dict['product'] = {
+                "id": order.product_id or 0,
+                "name": "Товар недоступен",
+                "price": None,
+                "discount": 0,
+                "image_url": None,
+                "images_urls": [],
+                "is_unavailable": True
+            }
+        
+        result.append(order_dict)
     
-    return orders
+    return result
 
 @router.delete("/history/clear")
 async def clear_orders_history(

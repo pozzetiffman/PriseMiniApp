@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from ..db import models, database
 from ..models import purchase as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
+from ..utils.product_snapshot import create_product_snapshot, get_product_display_info_from_snapshot
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -72,6 +73,130 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
     return TELEGRAM_BOT_TOKEN
 
+def get_product_info_for_response(purchase: models.Purchase, db: Session) -> Optional[dict]:
+    """
+    Получает информацию о товаре для ответа API.
+    ВСЕГДА использует snapshot если он есть - для изоляции данных товара на момент покупки.
+    """
+    # ВСЕГДА используем snapshot если он есть - для изоляции данных товара на момент покупки
+    # Это предотвращает изменения названия/цены товара от влияния на уже созданные покупки
+    if purchase.snapshot_id:
+        snapshot = db.query(models.UserProductSnapshot).filter(
+            models.UserProductSnapshot.snapshot_id == purchase.snapshot_id
+        ).first()
+        
+        if snapshot:
+            product_info = get_product_display_info_from_snapshot(snapshot)
+            if product_info:
+                # Вычисляем правильную цену используя ту же логику, что и для существующих товаров
+                calculated_price = get_product_price_from_dict(product_info)
+                product_info["price"] = calculated_price
+                # ВАЖНО: Обнуляем discount, так как цена уже вычислена со скидкой
+                # Это предотвращает двойное применение скидки на фронтенде
+                product_info["discount"] = 0
+                # ВАЖНО: Для purchases товар доступен (он был создан для покупки, когда был доступен)
+                product_info["is_unavailable"] = False
+                # Преобразуем images_urls в полные URL
+                if product_info.get("images_urls"):
+                    product_info["images_urls"] = [make_full_url(img_url) for img_url in product_info["images_urls"]]
+                if product_info.get("image_url"):
+                    product_info["image_url"] = make_full_url(product_info["image_url"])
+                return product_info
+            else:
+                # Snapshot существует, но не удалось получить информацию - fallback к актуальному товару
+                if purchase.product:
+                    product = purchase.product
+                    images_urls_list = None
+                    if product.images_urls:
+                        try:
+                            images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
+                        except (json.JSONDecodeError, TypeError):
+                            images_urls_list = []
+                    
+                    calculated_price = get_product_price_for_display(product)
+                    return {
+                        "id": product.id,
+                        "name": product.name,
+                        "price": calculated_price,
+                        "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
+                        "image_url": make_full_url(product.image_url) if product.image_url else None,
+                        "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else None,
+                        "is_for_sale": product.is_for_sale,
+                        "price_from": product.price_from,
+                        "price_to": product.price_to,
+                        "price_fixed": product.price_fixed,
+                        "price_type": product.price_type,
+                        "is_unavailable": False
+                    }
+        else:
+            # Snapshot не найден - fallback к актуальному товару
+            if purchase.product:
+                product = purchase.product
+                images_urls_list = None
+                if product.images_urls:
+                    try:
+                        images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
+                    except (json.JSONDecodeError, TypeError):
+                        images_urls_list = []
+                
+                calculated_price = get_product_price_for_display(product)
+                return {
+                    "id": product.id,
+                    "name": product.name,
+                    "price": calculated_price,
+                    "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
+                    "image_url": make_full_url(product.image_url) if product.image_url else None,
+                    "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else None,
+                    "is_for_sale": product.is_for_sale,
+                    "price_from": product.price_from,
+                    "price_to": product.price_to,
+                    "price_fixed": product.price_fixed,
+                    "price_type": product.price_type,
+                    "is_unavailable": False
+                }
+    
+    # Нет snapshot - используем актуальный товар (для старых покупок без snapshot)
+    if purchase.product:
+        product = purchase.product
+        images_urls_list = None
+        if product.images_urls:
+            try:
+                images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
+            except (json.JSONDecodeError, TypeError):
+                images_urls_list = []
+        
+        calculated_price = get_product_price_for_display(product)
+        return {
+            "id": product.id,
+            "name": product.name,
+            "price": calculated_price,
+            "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
+            "image_url": make_full_url(product.image_url) if product.image_url else None,
+            "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else None,
+            "is_for_sale": product.is_for_sale,
+            "price_from": product.price_from,
+            "price_to": product.price_to,
+            "price_fixed": product.price_fixed,
+            "price_type": product.price_type,
+            "is_unavailable": False
+        }
+    
+    # Товар удален и нет snapshot - возвращаем заглушку
+    return {
+        "id": purchase.product_id or 0,
+        "name": "Товар недоступен",
+        "price": None,
+        "discount": 0,
+        "image_url": None,
+        "images_urls": [],
+        "is_for_sale": False,
+        "price_from": None,
+        "price_to": None,
+        "price_fixed": None,
+        "price_type": "range",
+        "is_unavailable": True
+    }
+
 def get_product_price_for_display(product: models.Product) -> Optional[float]:
     """
     Получить правильную цену товара для отображения.
@@ -96,6 +221,33 @@ def get_product_price_for_display(product: models.Product) -> Optional[float]:
         if product.discount and product.discount > 0:
             return round(product.price * (1 - product.discount / 100), 2)
         return product.price
+
+def get_product_price_from_dict(product_dict: dict) -> Optional[float]:
+    """
+    Получить правильную цену товара из словаря (например, из snapshot).
+    Использует ту же логику, что и get_product_price_for_display.
+    """
+    is_for_sale = product_dict.get("is_for_sale", False)
+    
+    if is_for_sale:
+        price_type = product_dict.get("price_type", "range")
+        if price_type == 'fixed' and product_dict.get("price_fixed") is not None:
+            return product_dict.get("price_fixed")
+        elif price_type == 'range' and product_dict.get("price_from") is not None:
+            return product_dict.get("price_from")
+        elif price_type == 'range' and product_dict.get("price_to") is not None:
+            return product_dict.get("price_to")
+        # Если нет цены для продажи, возвращаем обычную цену (может быть None)
+        return product_dict.get("price")
+    else:
+        # Обычная цена со скидкой
+        price = product_dict.get("price")
+        if price is None:
+            return None  # Цена по запросу
+        discount = product_dict.get("discount", 0)
+        if discount and discount > 0:
+            return round(price * (1 - discount / 100), 2)
+        return price
 
 @router.post("/", response_model=schemas.Purchase)
 async def create_purchase(
@@ -195,9 +347,18 @@ async def create_purchase(
     # Сохраняем массив URL в JSON строку
     images_urls_json = json.dumps(images_urls) if images_urls else None
     
+    # Создаем snapshot товара на момент операции
+    snapshot_id = create_product_snapshot(
+        db=db,
+        product=product,
+        user_id=purchased_by_user_id,
+        operation_type='buy'
+    )
+    
     # Создаем заявку на покупку
     db_purchase = models.Purchase(
         product_id=product_id,
+        snapshot_id=snapshot_id,
         user_id=product.user_id,
         purchased_by_user_id=purchased_by_user_id,
         first_name=first_name,
@@ -332,6 +493,10 @@ async def create_purchase(
     # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
     video_url_full = convert_to_api_images_url(db_purchase.video_url) if db_purchase.video_url else None
     
+    # Получаем информацию о товаре (из snapshot или из продукта)
+    # Используем функцию get_product_info_for_response для единообразия
+    product_info = get_product_info_for_response(db_purchase, db)
+    
     # Преобразуем для ответа
     purchase_dict = {
         "id": db_purchase.id,
@@ -353,19 +518,7 @@ async def create_purchase(
         "images_urls": images_urls_list,
         "video_url": video_url_full,
         "status": db_purchase.status,
-        "product": {
-            "id": product.id,
-            "name": product.name,
-            "price": get_product_price_for_display(product),
-            "discount": product.discount,
-            "image_url": make_full_url(product.image_url) if product.image_url else None,
-            "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
-            "is_for_sale": product.is_for_sale,
-            "price_from": product.price_from,
-            "price_to": product.price_to,
-            "price_fixed": product.price_fixed,
-            "price_type": product.price_type
-        }
+        "product": product_info
     }
     
     return purchase_dict
@@ -391,18 +544,20 @@ async def get_my_purchases(
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Получаем только активные покупки (не завершенные и не отмененные)
-    purchases = db.query(models.Purchase).filter(
+    # Теперь не фильтруем по product_id, так как товар может быть удален, но snapshot сохранится
+    purchases = db.query(models.Purchase).options(
+        joinedload(models.Purchase.product),
+        joinedload(models.Purchase.snapshot)
+    ).filter(
         and_(
             models.Purchase.purchased_by_user_id == purchased_by_user_id,
             models.Purchase.is_cancelled == False,
-            models.Purchase.is_completed == False,
-            models.Purchase.product_id.isnot(None)  # Исключаем записи без товара
+            models.Purchase.is_completed == False
         )
     ).order_by(models.Purchase.created_at.desc()).all()
     
     result = []
     for purchase in purchases:
-        product = purchase.product
         # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
         images_urls_list = json.loads(purchase.images_urls) if purchase.images_urls else None
         if images_urls_list:
@@ -410,6 +565,9 @@ async def get_my_purchases(
         
         # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
         video_url_full = convert_to_api_images_url(purchase.video_url) if purchase.video_url else None
+        
+        # Получаем информацию о товаре (из snapshot или из продукта)
+        product_info = get_product_info_for_response(purchase, db)
         
         purchase_dict = {
             "id": purchase.id,
@@ -431,19 +589,7 @@ async def get_my_purchases(
             "images_urls": images_urls_list,
             "video_url": video_url_full,
             "status": purchase.status,
-            "product": {
-                "id": product.id,
-                "name": product.name,
-                "price": get_product_price_for_display(product),
-                "discount": product.discount,
-                "image_url": make_full_url(product.image_url) if product.image_url else None,
-                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
-                "is_for_sale": product.is_for_sale,
-                "price_from": product.price_from,
-                "price_to": product.price_to,
-                "price_fixed": product.price_fixed,
-                "price_type": product.price_type
-            } if product else None
+            "product": product_info
         }
         result.append(purchase_dict)
     
@@ -471,20 +617,21 @@ async def get_purchases_history(
     
     # Получаем только завершенные или отмененные покупки (история = неактивные)
     # Активные покупки показываются в разделе "Активные", а не в истории
-    purchases = db.query(models.Purchase).filter(
+    purchases = db.query(models.Purchase).options(
+        joinedload(models.Purchase.product),
+        joinedload(models.Purchase.snapshot)
+    ).filter(
         and_(
             models.Purchase.purchased_by_user_id == purchased_by_user_id,
             or_(
                 models.Purchase.is_completed == True,
                 models.Purchase.is_cancelled == True
-            ),
-            models.Purchase.product_id.isnot(None)  # Исключаем записи без товара
+            )
         )
     ).order_by(models.Purchase.created_at.desc()).all()
     
     result = []
     for purchase in purchases:
-        product = purchase.product
         # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
         images_urls_list = json.loads(purchase.images_urls) if purchase.images_urls else None
         if images_urls_list:
@@ -492,6 +639,9 @@ async def get_purchases_history(
         
         # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
         video_url_full = convert_to_api_images_url(purchase.video_url) if purchase.video_url else None
+        
+        # Получаем информацию о товаре (из snapshot или из продукта)
+        product_info = get_product_info_for_response(purchase, db)
         
         purchase_dict = {
             "id": purchase.id,
@@ -513,19 +663,7 @@ async def get_purchases_history(
             "images_urls": images_urls_list,
             "video_url": video_url_full,
             "status": purchase.status,
-            "product": {
-                "id": product.id,
-                "name": product.name,
-                "price": get_product_price_for_display(product),
-                "discount": product.discount,
-                "image_url": make_full_url(product.image_url) if product.image_url else None,
-                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
-                "is_for_sale": product.is_for_sale,
-                "price_from": product.price_from,
-                "price_to": product.price_to,
-                "price_fixed": product.price_fixed,
-                "price_type": product.price_type
-            } if product else None
+            "product": product_info
         }
         result.append(purchase_dict)
     
@@ -556,16 +694,15 @@ async def get_all_purchases(
     if viewer_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    purchases = db.query(models.Purchase).filter(
-        and_(
-            models.Purchase.user_id == user_id,
-            models.Purchase.product_id.isnot(None)  # Исключаем записи без товара
-        )
+    purchases = db.query(models.Purchase).options(
+        joinedload(models.Purchase.product),
+        joinedload(models.Purchase.snapshot)
+    ).filter(
+        models.Purchase.user_id == user_id
     ).order_by(models.Purchase.created_at.desc()).all()
     
     result = []
     for purchase in purchases:
-        product = purchase.product
         # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
         images_urls_list = json.loads(purchase.images_urls) if purchase.images_urls else None
         print(f"📷 [PURCHASES ALL] Purchase {purchase.id}: raw images_urls={purchase.images_urls}, parsed={images_urls_list}")
@@ -576,6 +713,9 @@ async def get_all_purchases(
         # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
         video_url_full = convert_to_api_images_url(purchase.video_url) if purchase.video_url else None
         print(f"🎥 [PURCHASES ALL] Purchase {purchase.id}: raw video_url={purchase.video_url}, converted={video_url_full}")
+        
+        # Получаем информацию о товаре (из snapshot или из продукта)
+        product_info = get_product_info_for_response(purchase, db)
         
         purchase_dict = {
             "id": purchase.id,
@@ -597,19 +737,7 @@ async def get_all_purchases(
             "images_urls": images_urls_list,
             "video_url": video_url_full,
             "status": purchase.status,
-            "product": {
-                "id": product.id,
-                "name": product.name,
-                "price": get_product_price_for_display(product),
-                "discount": product.discount,
-                "image_url": make_full_url(product.image_url) if product.image_url else None,
-                "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
-                "is_for_sale": product.is_for_sale,
-                "price_from": product.price_from,
-                "price_to": product.price_to,
-                "price_fixed": product.price_fixed,
-                "price_type": product.price_type
-            } if product else None
+            "product": product_info
         }
         result.append(purchase_dict)
     
@@ -659,8 +787,6 @@ async def update_purchase(
     db.commit()
     db.refresh(db_purchase)
     
-    product = db_purchase.product
-    
     # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
     images_urls_list = json.loads(db_purchase.images_urls) if db_purchase.images_urls else None
     if images_urls_list:
@@ -668,6 +794,9 @@ async def update_purchase(
     
     # Преобразуем video_url в полный URL через /api/images/ для обхода блокировки Telegram WebView
     video_url_full = convert_to_api_images_url(db_purchase.video_url) if db_purchase.video_url else None
+    
+    # Получаем информацию о товаре (из snapshot или из продукта)
+    product_info = get_product_info_for_response(db_purchase, db)
     
     purchase_dict = {
         "id": db_purchase.id,
@@ -689,19 +818,7 @@ async def update_purchase(
         "images_urls": images_urls_list,
         "video_url": video_url_full,
         "status": db_purchase.status,
-        "product": {
-            "id": product.id,
-            "name": product.name,
-            "price": get_product_price_for_display(product),
-            "discount": product.discount,
-            "image_url": make_full_url(product.image_url) if product.image_url else None,
-            "images_urls": [make_full_url(img_url) for img_url in json.loads(product.images_urls)] if product.images_urls else None,
-            "is_for_sale": product.is_for_sale,
-            "price_from": product.price_from,
-            "price_to": product.price_to,
-            "price_fixed": product.price_fixed,
-            "price_type": product.price_type
-        } if product else None
+        "product": product_info
     }
     
     return purchase_dict
