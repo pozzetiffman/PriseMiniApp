@@ -28,6 +28,20 @@
     --blur-large: blur(30px);
 }
 
+html {
+    /* Ограничиваем bounce эффект (как на странице избранного) - убираем серый блок, но сохраняем плавность */
+    overscroll-behavior-y: contain !important;
+    overscroll-behavior-x: none !important;
+    overscroll-behavior-block: contain !important;
+    overscroll-behavior-inline: none !important;
+    -webkit-overflow-scrolling: touch;
+    /* Предотвращаем pull-to-refresh и другие жесты */
+    touch-action: pan-y;
+    /* Дополнительная защита от серого блока при прокрутке */
+    height: 100%;
+    position: relative;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 50%, #1c1c1e 100%);
@@ -38,7 +52,18 @@ body {
     -webkit-user-select: none;
     user-select: none;
     min-height: 100vh;
+    height: 100%;
     position: relative;
+    /* Ограничиваем bounce эффект (как на странице избранного) - убираем серый блок, но сохраняем плавность */
+    overscroll-behavior-y: contain !important;
+    overscroll-behavior-x: none !important;
+    overscroll-behavior-block: contain !important;
+    overscroll-behavior-inline: none !important;
+    -webkit-overflow-scrolling: touch;
+    /* Предотвращаем pull-to-refresh и другие жесты */
+    touch-action: pan-y;
+    /* Дополнительная защита от серого блока (Bottom Safe Area Filler / Scroll Background) */
+    overflow-x: hidden;
     /* Скрываем scrollbar везде */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE и Edge */
@@ -62,6 +87,20 @@ body::before {
     z-index: 0;
 }
 
+/* Глобальные стили для кнопок - убираем синий фон и белую рамку Telegram */
+button {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:focus,
+button:active,
+button:focus-visible {
+    outline: none !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
 header {
     padding: 12px 16px;
     padding-bottom: max(12px, calc(12px + var(--tg-safe-area-inset-bottom, 0px)));
@@ -75,7 +114,7 @@ header {
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 100;
+    z-index: 300;
     box-shadow: 0 -8px 32px var(--shadow-glass),
                 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     min-height: 64px;
@@ -85,6 +124,171 @@ header {
     justify-items: center;
     gap: 12px;
     border-radius: 24px 24px 0 0;
+}
+
+/* Кнопка избранного в нижнем меню */
+.favorites-button {
+    padding: 0 14px;
+    background: linear-gradient(135deg, rgba(58, 58, 60, 0.75) 0%, rgba(44, 44, 46, 0.65) 100%);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    height: 44px;
+    line-height: 1;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 10;
+}
+
+.favorites-button .heart-icon-menu {
+    width: 20px;
+    height: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.favorites-button .heart-path-menu {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* КРИТИЧНО: По умолчанию сердечко БЕЗ заливки (пустое) */
+    fill: none !important;
+    stroke: rgba(255, 255, 255, 0.5) !important;
+    stroke-width: 1.5 !important;
+}
+
+/* Состояние: есть избранные - красное свечение (как у корзины зеленое) */
+.favorites-button.favorites-has-items {
+    box-shadow: 0 4px 16px rgba(255, 59, 48, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(255, 59, 48, 0.15);
+}
+
+.favorites-button.favorites-has-items .heart-path-menu {
+    fill: #ff3b30 !important;
+    stroke: none !important;
+    stroke-width: 0 !important;
+    filter: drop-shadow(0 0 6px rgba(255, 59, 48, 0.6));
+}
+
+/* Состояние: нет избранных - тонкий контур нейтрального цвета (БЕЗ ЗАЛИВКИ) */
+.favorites-button:not(.favorites-has-items) .heart-path-menu {
+    fill: none !important;
+    stroke: rgba(255, 255, 255, 0.5) !important;
+    stroke-width: 1.5 !important;
+}
+
+.favorites-button:hover {
+    background: linear-gradient(135deg, rgba(72, 72, 74, 0.85) 0%, rgba(58, 58, 60, 0.75) 100%);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px var(--shadow-medium),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    transform: translateY(-1px);
+}
+
+.favorites-button.favorites-has-items:hover {
+    box-shadow: 0 6px 24px rgba(255, 59, 48, 0.35),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+                0 4px 12px rgba(255, 59, 48, 0.25);
+}
+
+.favorites-button.favorites-has-items:hover .heart-path-menu {
+    filter: drop-shadow(0 0 8px rgba(255, 59, 48, 0.8));
+}
+
+.favorites-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+/* Скрытие кнопки избранного для админа */
+.favorites-button[style*="display: none"] {
+    display: none !important;
+}
+
+/* Иконка избранного на фото товара */
+/* Кнопка избранного - привязана к фото товара (imageDiv) */
+/* КРИТИЧНО: .product-image должен иметь position: relative для позиционирования сердечка */
+/* NOTE: position устанавливается явно в JS через imageDiv.style.position = 'relative' */
+.product-image {
+    position: relative; /* Контейнер для абсолютного позиционирования сердечка */
+}
+
+.favorite-button-card {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    background: rgba(0, 0, 0, 0.4) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: none !important;
+    padding: 6px;
+    margin: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 16;
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s ease;
+}
+
+/* Убираем все focus/active стили браузера */
+.favorite-button-card:focus,
+.favorite-button-card:focus-visible {
+    outline: none !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.favorite-button-card:active {
+    outline: none !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    transform: scale(0.95);
+}
+
+/* SVG сердечко - маленькое, пушистое */
+.favorite-heart {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.95);
+    stroke-width: 2;
+    transition: all 0.15s ease;
+}
+
+/* Состояние: выбрано - красная заливка + свечение */
+.favorite-button-card.favorite-active .favorite-heart {
+    fill: #ff3b30;
+    stroke: #ff3b30;
+    filter: drop-shadow(0 0 6px rgba(255, 59, 48, 0.6));
+}
+
+.favorite-button-card:hover {
+    background: rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.favorite-button-card:hover .favorite-heart {
+    transform: scale(1.1);
+}
+
+.favorite-button-card:active .favorite-heart {
+    transform: scale(0.95);
 }
 
 header > div:first-child {
@@ -857,10 +1061,21 @@ header h1 {
     padding: 12px;
     gap: 8px;
     min-height: auto;
+    position: relative; /* Для позиционирования кнопки избранного */
 }
 
 /* Скрываем изображение в режиме списка */
 #products-grid.products-list-view .product-image {
+    display: none !important;
+}
+
+/* Скрываем кнопку избранного на изображении в режиме списка */
+#products-grid.products-list-view .product-image .favorite-button-card:not(.favorite-button-list) {
+    display: none !important;
+}
+
+/* Скрываем кнопку избранного для режима списка в обычном режиме сетки */
+#products-grid:not(.products-list-view) .favorite-button-list {
     display: none !important;
 }
 
@@ -992,6 +1207,17 @@ header h1 {
     max-width: 100%;
 }
 
+/* Кнопка избранного в режиме списка (правый верхний угол карточки) */
+#products-grid.products-list-view .favorite-button-list {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    bottom: auto;
+    width: 24px;
+    height: 24px;
+    z-index: 15;
+}
+
 /* Адаптивность списка для мобильных */
 @media (max-width: 768px) {
     #products-grid.products-list-view .product-card {
@@ -1008,6 +1234,13 @@ header h1 {
         flex-direction: column;
         align-items: flex-start;
         gap: 6px;
+    }
+    
+    #products-grid.products-list-view .favorite-button-list {
+        top: 6px;
+        right: 6px;
+        width: 22px;
+        height: 22px;
     }
 }
 
@@ -1060,7 +1293,7 @@ header h1 {
     -webkit-backdrop-filter: var(--blur-small);
     border-radius: 12px;
     margin-bottom: 10px;
-    position: relative;
+    position: relative; /* КРИТИЧНО: для позиционирования сердечка - устанавливается также в JS */
     overflow: hidden;
     min-height: 150px;
     border: 1px solid var(--border-glass);
@@ -1203,6 +1436,7 @@ header h1 {
     text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     color: var(--text-secondary) !important;
     line-height: 1.5;
@@ -1677,6 +1911,133 @@ header h1 {
     top: 15px;
 }
 
+/* Страница избранного - дублирует структуру основной страницы */
+.favorites-page {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 200;
+    /* Убираем лишний фон - используем тот же что и основная страница */
+    background: transparent;
+    /* Safe-area отступ сверху, как у #app на главной странице */
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    /* Отступ снизу для фиксированного меню (как на главной странице в main) */
+    padding-bottom: calc(68px + var(--tg-safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Предотвращаем bounce эффект при прокрутке (серый блок снизу) */
+    overscroll-behavior-y: contain;
+    overscroll-behavior-x: none;
+    -webkit-overflow-scrolling: touch;
+    /* Предотвращаем pull-to-refresh и другие жесты */
+    touch-action: pan-y;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+    box-sizing: border-box;
+}
+
+.favorites-page::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+/* Кнопка возврата на странице избранного */
+.favorites-back-button {
+    padding: 8px 16px;
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    margin-bottom: 12px;
+}
+
+.favorites-back-button:hover {
+    background: rgba(90, 200, 250, 0.1);
+    border-color: rgba(90, 200, 250, 0.3);
+    transform: translateX(-2px);
+}
+
+.favorites-back-button:active {
+    transform: translateX(0) scale(0.98);
+}
+
+/* Основной контент страницы избранного - дублирует main */
+#favorites-main {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: visible;
+    padding: 12px; /* Отступ снизу теперь в .favorites-page */
+    position: relative;
+    box-sizing: border-box;
+}
+
+/* Сетка товаров на странице избранного - использует те же стили что и основная */
+#favorites-products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    padding: 0;
+}
+
+/* Скрываем элементы списка в режиме сетки на странице избранного */
+#favorites-products-grid.products-grid-view .product-top-badges-list,
+#favorites-products-grid.products-grid-view .product-name-list,
+#favorites-products-grid.products-grid-view .product-list-price-status,
+#favorites-products-grid.products-grid-view .favorite-button-list {
+    display: none !important;
+}
+
+#favorites-products-grid .loading {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-hint);
+    font-size: 16px;
+}
+
+/* Адаптивность для страницы избранного */
+@media (max-width: 480px) {
+    #favorites-products-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    #favorites-main {
+        padding: 10px;
+    }
+}
+
+/* Карточка избранного товара */
+.favorite-item-card {
+    margin: 0;
+    height: 100%;
+}
+
+.favorite-item-card:hover {
+    transform: translateY(-2px);
+}
+
+/* Кнопка удаления из избранного */
+.favorite-remove-btn:hover {
+    background: rgba(255, 59, 48, 0.7) !important;
+    border-color: rgba(255, 59, 48, 0.8) !important;
+    transform: scale(1.1);
+}
+
+.favorite-remove-btn:active {
+    transform: scale(0.95);
+}
+
 /* Исправление для полноэкранного режима */
 html, body {
     width: 100%;
@@ -1709,6 +2070,13 @@ html, body {
     z-index: 1;
     /* Safe-area ТОЛЬКО здесь для главной страницы */
     padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    /* Ограничиваем bounce эффект (как на странице избранного) - убираем серый блок, но сохраняем плавность */
+    overscroll-behavior-y: contain !important;
+    overscroll-behavior-x: none !important;
+    overscroll-behavior-block: contain !important;
+    overscroll-behavior-inline: none !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
 
 main {
@@ -1718,6 +2086,13 @@ main {
     overflow-y: visible; /* Разрешаем выпадающим спискам выходить за границы */
     padding: 12px 12px calc(68px + var(--tg-safe-area-inset-bottom, 0px)) 12px; /* Отступ для фиксированной шапки внизу + safe area */
     position: relative;
+    /* Ограничиваем bounce эффект (как на странице избранного) - убираем серый блок, но сохраняем плавность */
+    overscroll-behavior-y: contain !important;
+    overscroll-behavior-x: none !important;
+    overscroll-behavior-block: contain !important;
+    overscroll-behavior-inline: none !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
 
 /* Дополнительные стили для лучшей видимости на мобильных */

@@ -12,6 +12,7 @@ import { API_BASE } from '../api.js';
 // НОВЫЙ КОД (используется сейчас)
 import { showProductModal } from './products_modal.js'; // Импортируем из нового модуля
 // ========== END REFACTORING STEP 3.1 ==========
+import { checkFavorite, syncFavoritesCache, toggleFavorite } from '../favorites.js';
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
 import { isMobileDevice } from '../utils/products_utils.js';
 
@@ -26,13 +27,17 @@ export function initRenderProductsDependencies(dependencies) {
 }
 
 // Рендеринг товаров
-export function renderProducts(products) {
+export async function renderProducts(products) {
     if (!productsGridElement) {
         console.error('❌ productsGrid element not initialized!');
         return;
     }
     
     productsGridElement.innerHTML = '';
+    
+    // СИНХРОНИЗАЦИЯ: Загружаем все избранные товары сразу для синхронизации сердечек
+    // Важно: синхронизируем кэш ДО рендеринга товаров, чтобы сердечки отображались правильно
+    await syncFavoritesCache();
     
     // Отладочный вывод - проверяем, что приходит с сервера
     console.log('[RENDER DEBUG] Products received:', products);
@@ -136,6 +141,7 @@ export function renderProducts(products) {
         // Изображение
         const imageDiv = document.createElement('div');
         imageDiv.className = 'product-image';
+        // КРИТИЧНО: position: relative для позиционирования сердечка внутри imageDiv
         imageDiv.style.position = 'relative';
         imageDiv.style.overflow = 'hidden';
         imageDiv.style.aspectRatio = '3/4';
@@ -160,6 +166,113 @@ export function renderProducts(products) {
             hotOfferBadge.className = 'hot-offer-badge';
             hotOfferBadge.innerHTML = '🔥';
             hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+        }
+        
+        // Создаем кнопку избранного (сердечко) - SVG иконка на фото товара
+        // Кнопка избранного доступна только для клиентов, не для админа
+        const currentAppContextForFavorite = appContextGetter ? appContextGetter() : null;
+        const isClient = currentAppContextForFavorite && currentAppContextForFavorite.role === 'client';
+        
+        let favoriteButton = null;
+        let isFavorite = false;
+        
+        // Функция обновления состояния кнопки избранного
+        function updateFavoriteButtonState(button, favorite) {
+            // Работаем с новым SVG классом .favorite-heart
+            if (favorite) {
+                button.classList.add('favorite-active');
+            } else {
+                button.classList.remove('favorite-active');
+            }
+        }
+        
+        // Создаем кнопку избранного только для клиентов
+        if (isClient) {
+            favoriteButton = document.createElement('button');
+            favoriteButton.className = 'favorite-button-card';
+            favoriteButton.setAttribute('aria-label', 'Добавить в избранное');
+            favoriteButton.dataset.productId = prod.id;
+            
+            // SVG иконка сердца - симметричная форма
+            favoriteButton.innerHTML = `
+                <svg viewBox="0 0 24 24" class="favorite-heart" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+            `;
+            
+            // Проверяем статус избранного асинхронно (синхронизация с backend)
+            // Используем единый источник истины - API
+            // Проверяем что prod.id существует перед вызовом API
+            if (prod.id) {
+                checkFavorite(prod.id).then(favorite => {
+                    isFavorite = favorite;
+                    updateFavoriteButtonState(favoriteButton, favorite);
+                }).catch(() => {
+                    updateFavoriteButtonState(favoriteButton, false);
+                });
+            } else {
+                console.warn('⚠️ Product without ID, skipping favorite check:', prod);
+                updateFavoriteButtonState(favoriteButton, false);
+            }
+            
+            // Обработчик клика на кнопку избранного (optimistic UI)
+            favoriteButton.addEventListener('click', async (e) => {
+                e.stopPropagation(); // Предотвращаем открытие модального окна товара
+                e.preventDefault(); // Предотвращаем стандартное поведение
+                
+                // Optimistic UI - меняем состояние МГНОВЕННО
+                const newFavoriteState = !isFavorite;
+                isFavorite = newFavoriteState;
+                updateFavoriteButtonState(favoriteButton, newFavoriteState);
+                
+                // Также обновляем кнопку в режиме списка (если она уже создана)
+                const favoriteButtonList = card.querySelector('.favorite-button-list');
+                if (favoriteButtonList) {
+                    updateFavoriteButtonState(favoriteButtonList, newFavoriteState);
+                }
+                
+                // Запрос в API - асинхронно (в фоне)
+                // toggleFavorite автоматически обновляет кэш в favorites.js
+                try {
+                    const result = await toggleFavorite(prod.id);
+                    // Если ответ сервера отличается от optimistic состояния - синхронизируем
+                    if (result.is_favorite !== newFavoriteState) {
+                        isFavorite = result.is_favorite;
+                        updateFavoriteButtonState(favoriteButton, result.is_favorite);
+                        if (favoriteButtonList) {
+                            updateFavoriteButtonState(favoriteButtonList, result.is_favorite);
+                        }
+                    }
+                    
+                    // КРИТИЧНО: updateFavoritesCount уже вызывается в toggleFavorite
+                    // Но на всякий случай вызываем еще раз для гарантии обновления
+                    // (toggleFavorite уже обновил, но это не помешает)
+                    try {
+                        const { updateFavoritesCount } = await import('../../favorites.js');
+                        await updateFavoritesCount();
+                    } catch (importError) {
+                        // Не критично, toggleFavorite уже обновил состояние
+                    }
+                } catch (error) {
+                    console.error('❌ Error toggling favorite:', error);
+                    console.error('❌ Error details:', {
+                        message: error.message,
+                        stack: error.stack,
+                        productId: prod.id
+                    });
+                    // Откатываем optimistic изменение при ошибке
+                    isFavorite = !newFavoriteState;
+                    updateFavoriteButtonState(favoriteButton, !newFavoriteState);
+                    if (favoriteButtonList) {
+                        updateFavoriteButtonState(favoriteButtonList, !newFavoriteState);
+                    }
+                    
+                    // Показываем более информативное сообщение об ошибке
+                    const errorMessage = error.message || 'Ошибка при изменении избранного';
+                    console.error('❌ Showing error to user:', errorMessage);
+                    alert(errorMessage);
+                }
+            });
         }
         
         // Создаем badge скрытого товара (только для админа)
@@ -350,6 +463,11 @@ export function renderProducts(products) {
                 imageDiv.appendChild(hotOfferBadge);
             }
             
+            // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
+            if (favoriteButton) {
+                imageDiv.appendChild(favoriteButton);
+            }
+            
             // Добавляем badge резервации в нижней части фото
             if (reservedBadge) {
                 imageDiv.appendChild(reservedBadge);
@@ -377,6 +495,10 @@ export function renderProducts(products) {
                 }
                 if (reservedBadge) {
                     imageDiv.appendChild(reservedBadge);
+                }
+                // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
+                if (favoriteButton) {
+                    imageDiv.appendChild(favoriteButton);
                 }
             };
             
@@ -445,6 +567,10 @@ export function renderProducts(products) {
                     }
                     if (reservedBadge) {
                         imageDiv.appendChild(reservedBadge);
+                    }
+                    // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
+                    if (favoriteButton) {
+                        imageDiv.appendChild(favoriteButton);
                     }
                     
                     // Устанавливаем blob URL
@@ -521,6 +647,10 @@ export function renderProducts(products) {
                 if (reservedBadge) {
                     imageDiv.appendChild(reservedBadge);
                 }
+                // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
+                if (favoriteButton) {
+                    imageDiv.appendChild(favoriteButton);
+                }
                 
                 // Устанавливаем прямой URL
                 img.src = fullImg;
@@ -554,6 +684,11 @@ export function renderProducts(products) {
                 hotOfferBadge.style.right = '8px';
                 hotOfferBadge.style.left = 'auto';
                 imageDiv.appendChild(hotOfferBadge);
+            }
+            
+            // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
+            if (favoriteButton) {
+                imageDiv.appendChild(favoriteButton);
             }
             
             // Добавляем badge резервации в нижней части фото даже если нет изображения
@@ -677,10 +812,95 @@ export function renderProducts(products) {
             listPriceStatusContainer.appendChild(statusBadgeList);
         }
         
+        // Создаем кнопку избранного для режима списка (правый верхний угол карточки) - только для клиентов
+        let favoriteButtonList = null;
+        if (isClient) {
+            favoriteButtonList = document.createElement('button');
+            favoriteButtonList.className = 'favorite-button-card favorite-button-list';
+            favoriteButtonList.setAttribute('aria-label', 'Добавить в избранное');
+            favoriteButtonList.dataset.productId = prod.id;
+            
+            // SVG иконка сердца - симметричная форма
+            favoriteButtonList.innerHTML = `
+                <svg viewBox="0 0 24 24" class="favorite-heart" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+            `;
+            
+            // Проверяем статус избранного для режима списка
+            if (prod.id) {
+                checkFavorite(prod.id).then(favorite => {
+                    updateFavoriteButtonState(favoriteButtonList, favorite);
+                }).catch(() => {
+                    updateFavoriteButtonState(favoriteButtonList, false);
+                });
+            } else {
+                console.warn('⚠️ Product without ID in list view, skipping favorite check:', prod);
+                updateFavoriteButtonState(favoriteButtonList, false);
+            }
+            
+            // Обработчик клика на кнопку избранного в режиме списка (optimistic UI)
+            favoriteButtonList.addEventListener('click', async (e) => {
+                e.stopPropagation(); // Предотвращаем открытие модального окна товара
+                e.preventDefault(); // Предотвращаем стандартное поведение
+                
+                // Получаем текущее состояние
+                const currentState = favoriteButtonList.classList.contains('favorite-active');
+                
+                // Optimistic UI - меняем состояние МГНОВЕННО
+                const newFavoriteState = !currentState;
+                updateFavoriteButtonState(favoriteButtonList, newFavoriteState);
+                
+                // Также обновляем состояние основной кнопки на изображении (если она есть)
+                const favoriteButtonOnImage = card.querySelector('.favorite-button-card:not(.favorite-button-list)');
+                if (favoriteButtonOnImage) {
+                    updateFavoriteButtonState(favoriteButtonOnImage, newFavoriteState);
+                }
+                
+                // Запрос в API - асинхронно (в фоне)
+                // toggleFavorite автоматически обновляет кэш в favorites.js
+                try {
+                    const result = await toggleFavorite(prod.id);
+                    // Если ответ сервера отличается от optimistic состояния - синхронизируем
+                    if (result.is_favorite !== newFavoriteState) {
+                        updateFavoriteButtonState(favoriteButtonList, result.is_favorite);
+                        if (favoriteButtonOnImage) {
+                            updateFavoriteButtonState(favoriteButtonOnImage, result.is_favorite);
+                        }
+                    }
+                    
+                    // КРИТИЧНО: updateFavoritesCount уже вызывается в toggleFavorite
+                    // Но на всякий случай вызываем еще раз для гарантии обновления
+                    // (toggleFavorite уже обновил, но это не помешает)
+                    try {
+                        const { updateFavoritesCount } = await import('../../favorites.js');
+                        await updateFavoritesCount();
+                    } catch (importError) {
+                        // Не критично, toggleFavorite уже обновил состояние
+                    }
+                } catch (error) {
+                    console.error('❌ Error toggling favorite:', error);
+                    // Откатываем optimistic изменение при ошибке
+                    updateFavoriteButtonState(favoriteButtonList, !newFavoriteState);
+                    if (favoriteButtonOnImage) {
+                        updateFavoriteButtonState(favoriteButtonOnImage, !newFavoriteState);
+                    }
+                    
+                    const errorMessage = error.message || 'Ошибка при изменении избранного';
+                    alert(errorMessage);
+                }
+            });
+        }
+        
         // Вставляем элементы для режима списка в начало карточки
         card.insertBefore(topBadgesContainer, card.firstChild);
         card.insertBefore(nameDivList, topBadgesContainer.nextSibling);
         card.appendChild(listPriceStatusContainer);
+        
+        // Добавляем кнопку избранного в правый верхний угол карточки (для режима списка) - только для клиентов
+        if (favoriteButtonList) {
+            card.appendChild(favoriteButtonList);
+        }
         
         card.onclick = () => {
             // Используем экспортированную функцию напрямую

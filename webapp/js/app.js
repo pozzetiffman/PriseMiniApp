@@ -31,6 +31,7 @@ import { initModalsDependencies, setupModals } from './modals.js';
 // Импорт функций загрузки данных из отдельного модуля (рефакторинг)
 import { initDataDependencies, loadData, updateShopNameInHeader } from './data.js';
 // Импорт функций переключения вида карточек
+import { initFavorites, updateFavoritesCount } from './favorites.js';
 import { initCardViewToggle } from './handlers/cardViewToggle.js';
 
 // Глобальные переменные
@@ -133,6 +134,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentImages: currentImages,
         currentImageIndex: currentImageIndex
     };
+    
+    // Сохраняем modalState в window для использования в других модулях (например, favorites.js)
+    window.modalState = modalState;
     
     // Обновляем объект состояния при изменении переменных
     Object.defineProperty(modalState, 'currentImageLoadId', {
@@ -245,6 +249,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         appContext = await getContext(shopOwnerId);
         console.log('✅ Context loaded:', appContext);
         console.log('✅ Context bot_id:', appContext.bot_id, 'type:', typeof appContext.bot_id);
+        
+        if (!appContext) {
+            throw new Error('Context is null after loading');
+        }
     } catch (e) {
         console.error('❌ Failed to load context:', e);
         console.error('❌ Error details:', {
@@ -398,14 +406,98 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Обновляем заголовок с названием магазина (async функция)
     await updateShopNameInHeader();
     
-    // 9. Загружаем данные
-    await loadData();
+    // 9. Инициализируем избранное ДО загрузки данных (только для клиентов, не для админа)
+    try {
+        // Избранное доступно только для клиентов, не для админа
+        if (appContext.role === 'client') {
+            initFavorites();
+        } else {
+            // Скрываем кнопку избранного для админа
+            const favoritesButton = document.getElementById('favorites-button');
+            if (favoritesButton) {
+                favoritesButton.style.display = 'none';
+            }
+        }
+    } catch (e) {
+        // Показываем ошибку в заголовке
+        const userNameElement = document.getElementById('user-name');
+        if (userNameElement) {
+            userNameElement.textContent = `❌ Ошибка инициализации: ${e.message || 'Неизвестная ошибка'}`;
+        }
+    }
     
-    // 10. Обновляем корзину после загрузки данных
+    // 10. Загружаем данные
+    // Показываем статус загрузки в интерфейсе
+    if (productsGrid) {
+        productsGrid.innerHTML = '<p class="loading">🔄 Загрузка магазина...</p>';
+    }
+    
+    try {
+        await loadData();
+        // Если загрузка успешна, loadData сам обновит productsGrid
+    } catch (e) {
+        // Показываем детальную ошибку в интерфейсе
+        const errorMessage = e.message || 'Неизвестная ошибка';
+        const errorType = e.name || 'Error';
+        
+        if (productsGrid) {
+            productsGrid.innerHTML = `
+                <div style="padding: 20px; text-align: center;">
+                    <p class="loading" style="color: #ff6b6b; font-size: 18px; margin-bottom: 10px;">
+                        ❌ Ошибка загрузки магазина
+                    </p>
+                    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">
+                        ${errorMessage}
+                    </p>
+                    <p style="color: var(--text-hint); font-size: 12px;">
+                        Тип ошибки: ${errorType}
+                    </p>
+                </div>
+            `;
+        }
+        
+        // Также показываем в заголовке
+        const userNameElement = document.getElementById('user-name');
+        if (userNameElement) {
+            const originalText = userNameElement.textContent;
+            userNameElement.textContent = '❌ Ошибка загрузки';
+            setTimeout(() => {
+                if (userNameElement.textContent === '❌ Ошибка загрузки') {
+                    userNameElement.textContent = originalText;
+                }
+            }, 5000);
+        }
+    }
+    
+    // 11. Обновляем корзину после загрузки данных
     setTimeout(async () => {
         console.log('🛒 Обновление корзины после загрузки данных...');
-        await updateCartUI();
+        try {
+            await updateCartUI();
+        } catch (e) {
+            console.error('❌ Error updating cart:', e);
+        }
     }, 500);
+    
+    // 12. Обновляем счетчик избранного (только для клиентов, не для админа)
+    if (appContext.role === 'client') {
+        setTimeout(async () => {
+            console.log('❤️ Обновление счетчика избранного...');
+            try {
+                await updateFavoritesCount();
+            } catch (e) {
+                console.error('❌ Error updating favorites count:', e);
+            }
+        }, 600);
+    }
+    
+    // Обновляем счетчик избранного при открытии модального окна корзины (только для клиентов)
+    if (appContext.role === 'client') {
+        const cartButton = document.getElementById('cart-button');
+        if (cartButton) {
+            cartButton.addEventListener('click', updateFavoritesCount);
+        }
+    }
 });
 
 
