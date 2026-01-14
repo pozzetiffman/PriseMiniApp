@@ -108,6 +108,7 @@ class SoldProduct(Base):
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     quantity = Column(Integer, default=1)  # Количество проданного товара
     sold_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время продажи
+    snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент продажи
     
     product = relationship("Product", backref="sold_records")
     category = relationship("Category", backref="sold_products")
@@ -134,8 +135,35 @@ class Order(Base):
     notes = Column(Text, nullable=True)  # Примечание
     delivery_method = Column(String, nullable=True)  # Способ доставки (delivery/pickup)
     status = Column(String, default='pending')  # Статус заказа (pending/completed/cancelled)
+    snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент заказа
     
     product = relationship("Product", backref="orders")
+
+class Sale(Base):
+    __tablename__ = "sales"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)  # ID товара
+    user_id = Column(BigInteger, index=True)  # ID владельца магазина (создателя товара)
+    sold_by_user_id = Column(BigInteger, index=True)  # ID пользователя, который продал товар
+    quantity = Column(Integer, default=1)  # Количество проданного товара
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время создания продажи
+    is_completed = Column(Boolean, default=False)  # Выполнена ли продажа
+    is_cancelled = Column(Boolean, default=False)  # Отменена ли продажа
+    # Поля формы оформления продажи
+    promo_code = Column(String, nullable=True)  # Промокод
+    first_name = Column(String, nullable=True)  # Имя
+    last_name = Column(String, nullable=True)  # Фамилия
+    middle_name = Column(String, nullable=True)  # Отчество
+    phone_country_code = Column(String, nullable=True)  # Код страны телефона
+    phone_number = Column(String, nullable=True)  # Номер телефона
+    email = Column(String, nullable=True)  # Почта
+    notes = Column(Text, nullable=True)  # Примечание
+    delivery_method = Column(String, nullable=True)  # Способ доставки (delivery/pickup)
+    status = Column(String, default='pending')  # Статус продажи (pending/completed/cancelled)
+    snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент продажи
+    
+    product = relationship("Product", backref="sales")
 
 class Purchase(Base):
     __tablename__ = "purchases"
@@ -160,6 +188,7 @@ class Purchase(Base):
     images_urls = Column(Text, nullable=True)  # JSON массив URL изображений (до 5 фото)
     video_url = Column(String, nullable=True)  # URL видео (1 видео)
     status = Column(String, default='pending')  # Статус покупки (pending/completed/cancelled)
+    snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент покупки
     
     product = relationship("Product", backref="purchases")
 
@@ -184,6 +213,20 @@ class Bot(Base):
     direct_link_name = Column(String, nullable=True)  # Название Direct Link (например, "shop", "TGshowcase_bot")
     created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время регистрации
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # Время обновления
+
+class UserProductSnapshot(Base):
+    __tablename__ = "user_product_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    snapshot_id = Column(String, unique=True, index=True)  # Уникальный идентификатор snapshot (UUID)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)  # ID оригинального товара
+    user_id = Column(BigInteger, index=True)  # ID пользователя, для которого создан snapshot
+    operation_type = Column(String, index=True)  # Тип операции: 'order', 'sell', 'buy'
+    snapshot_json = Column(Text, nullable=True)  # JSON с данными товара на момент создания snapshot
+    status_at_time = Column(String, nullable=True)  # Статус товара на момент создания snapshot
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время создания snapshot
+    
+    product = relationship("Product", backref="snapshots")
 
 
 

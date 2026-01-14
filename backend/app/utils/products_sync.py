@@ -7,6 +7,7 @@
 
 from sqlalchemy.orm import Session
 from ..db import models
+from .products_utils import normalize_category_id
 
 
 def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session, old_name: str, old_price: float):
@@ -53,20 +54,8 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 ).first()
             
             if matching:
-                # Находим соответствующую категорию в этом боте по имени
-                category_id_for_bot = None
-                if db_product.category_id:
-                    original_category = db.query(models.Category).filter(
-                        models.Category.id == db_product.category_id
-                    ).first()
-                    if original_category:
-                        matching_category = db.query(models.Category).filter(
-                            models.Category.user_id == user_id,
-                            models.Category.bot_id == bot.id,
-                            models.Category.name == original_category.name
-                        ).first()
-                        if matching_category:
-                            category_id_for_bot = matching_category.id
+                # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                 
                 # Обновляем товар, включая новое имя
                 matching.name = db_product.name
@@ -112,20 +101,8 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                     ).first()
                 
                 if not existing:
-                    # Находим соответствующую категорию в этом боте по имени
-                    category_id_for_bot = None
-                    if db_product.category_id:
-                        original_category = db.query(models.Category).filter(
-                            models.Category.id == db_product.category_id
-                        ).first()
-                        if original_category:
-                            matching_category = db.query(models.Category).filter(
-                                models.Category.user_id == user_id,
-                                models.Category.bot_id == bot.id,
-                                models.Category.name == original_category.name
-                            ).first()
-                            if matching_category:
-                                category_id_for_bot = matching_category.id
+                    # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                    category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                     
                     # Создаем новый товар
                     new_product = models.Product(
@@ -181,20 +158,8 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
             ).first()
         
         if matching_main:
-            # Находим соответствующую категорию в основном боте по имени
-            category_id_for_main = None
-            if db_product.category_id:
-                original_category = db.query(models.Category).filter(
-                    models.Category.id == db_product.category_id
-                ).first()
-                if original_category:
-                    matching_category = db.query(models.Category).filter(
-                        models.Category.user_id == user_id,
-                        models.Category.bot_id == None,
-                        models.Category.name == original_category.name
-                    ).first()
-                    if matching_category:
-                        category_id_for_main = matching_category.id
+            # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+            category_id_for_main = normalize_category_id(db_product.category_id, None, user_id, db)
             
             # Обновляем товар, включая новое имя
             matching_main.name = db_product.name
@@ -250,20 +215,8 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 ).first()
             
             if matching:
-                # Находим соответствующую категорию в этом боте по имени
-                category_id_for_bot = None
-                if db_product.category_id:
-                    original_category = db.query(models.Category).filter(
-                        models.Category.id == db_product.category_id
-                    ).first()
-                    if original_category:
-                        matching_category = db.query(models.Category).filter(
-                            models.Category.user_id == user_id,
-                            models.Category.bot_id == bot.id,
-                            models.Category.name == original_category.name
-                        ).first()
-                        if matching_category:
-                            category_id_for_bot = matching_category.id
+                # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                 
                 # Обновляем товар, включая новое имя
                 matching.name = db_product.name
@@ -332,21 +285,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     ).first()
                 
                 if not existing:
-                    # Находим соответствующую категорию в этом боте по имени
-                    category_id_for_bot = None
-                    if db_product.category_id:
-                        original_category = db.query(models.Category).filter(
-                            models.Category.id == db_product.category_id
-                        ).first()
-                        if original_category:
-                            # Ищем категорию с таким же именем в этом боте
-                            matching_category = db.query(models.Category).filter(
-                                models.Category.user_id == user_id,
-                                models.Category.bot_id == bot.id,
-                                models.Category.name == original_category.name
-                            ).first()
-                            if matching_category:
-                                category_id_for_bot = matching_category.id
+                    # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                    category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                     
                     # Создаем копию товара для этого бота
                     new_product = models.Product(
@@ -395,21 +335,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     ).first()
                 
                 if matching:
-                    # Находим соответствующую категорию в этом боте по имени
-                    category_id_for_bot = None
-                    if db_product.category_id:
-                        original_category = db.query(models.Category).filter(
-                            models.Category.id == db_product.category_id
-                        ).first()
-                        if original_category:
-                            # Ищем категорию с таким же именем в этом боте
-                            matching_category = db.query(models.Category).filter(
-                                models.Category.user_id == user_id,
-                                models.Category.bot_id == bot.id,
-                                models.Category.name == original_category.name
-                            ).first()
-                            if matching_category:
-                                category_id_for_bot = matching_category.id
+                    # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                    category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                     
                     matching.name = db_product.name  # Обновляем название
                     matching.description = db_product.description
@@ -481,20 +408,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 ).first()
             
             if existing_main:
-                # Если товар с таким именем уже есть - обновляем его
-                category_id_for_main = None
-                if db_product.category_id:
-                    original_category = db.query(models.Category).filter(
-                        models.Category.id == db_product.category_id
-                    ).first()
-                    if original_category:
-                        matching_category = db.query(models.Category).filter(
-                            models.Category.user_id == user_id,
-                            models.Category.bot_id == None,
-                            models.Category.name == original_category.name
-                        ).first()
-                        if matching_category:
-                            category_id_for_main = matching_category.id
+                # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                category_id_for_main = normalize_category_id(db_product.category_id, None, user_id, db)
                 
                 existing_main.name = db_product.name  # Обновляем название
                 existing_main.description = db_product.description
@@ -524,21 +439,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     db_product.sync_product_id = existing_main.sync_product_id
                 print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={existing_main.sync_product_id}) to main bot (UPDATE existing)")
             elif not existing_main:
-                # Находим соответствующую категорию в основном боте по имени
-                category_id_for_main = None
-                if db_product.category_id:
-                    original_category = db.query(models.Category).filter(
-                        models.Category.id == db_product.category_id
-                    ).first()
-                    if original_category:
-                        # Ищем категорию с таким же именем в основном боте
-                        matching_category = db.query(models.Category).filter(
-                            models.Category.user_id == user_id,
-                            models.Category.bot_id == None,
-                            models.Category.name == original_category.name
-                        ).first()
-                        if matching_category:
-                            category_id_for_main = matching_category.id
+                # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                category_id_for_main = normalize_category_id(db_product.category_id, None, user_id, db)
                 
                 # Создаем копию товара в основном боте
                 new_product = models.Product(
@@ -603,20 +505,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     ).first()
                 
                 if existing:
-                    # Обновляем существующий товар
-                    category_id_for_bot = None
-                    if db_product.category_id:
-                        original_category = db.query(models.Category).filter(
-                            models.Category.id == db_product.category_id
-                        ).first()
-                        if original_category:
-                            matching_category = db.query(models.Category).filter(
-                                models.Category.user_id == user_id,
-                                models.Category.bot_id == bot.id,
-                                models.Category.name == original_category.name
-                            ).first()
-                            if matching_category:
-                                category_id_for_bot = matching_category.id
+                    # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                    category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                     
                     existing.description = db_product.description
                     existing.price = db_product.price  # Обновляем цену при синхронизации
@@ -640,20 +530,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         existing.sync_product_id = sync_id
                     print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE existing)")
                 elif not existing:
-                    # Находим соответствующую категорию в этом боте по имени
-                    category_id_for_bot = None
-                    if db_product.category_id:
-                        original_category = db.query(models.Category).filter(
-                            models.Category.id == db_product.category_id
-                        ).first()
-                        if original_category:
-                            matching_category = db.query(models.Category).filter(
-                                models.Category.user_id == user_id,
-                                models.Category.bot_id == bot.id,
-                                models.Category.name == original_category.name
-                            ).first()
-                            if matching_category:
-                                category_id_for_bot = matching_category.id
+                    # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                    category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                     
                     new_product = models.Product(
                         name=db_product.name,
@@ -713,21 +591,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     sync_id = matching_main.sync_product_id
             
             if matching_main:
-                # Находим соответствующую категорию в основном боте по имени
-                category_id_for_main = None
-                if db_product.category_id:
-                    original_category = db.query(models.Category).filter(
-                        models.Category.id == db_product.category_id
-                    ).first()
-                    if original_category:
-                        # Ищем категорию с таким же именем в основном боте
-                        matching_category = db.query(models.Category).filter(
-                            models.Category.user_id == user_id,
-                            models.Category.bot_id == None,
-                            models.Category.name == original_category.name
-                        ).first()
-                        if matching_category:
-                            category_id_for_main = matching_category.id
+                # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                category_id_for_main = normalize_category_id(db_product.category_id, None, user_id, db)
                 
                 matching_main.name = db_product.name  # Обновляем название
                 matching_main.description = db_product.description
@@ -780,20 +645,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     ).first()
                 
                 if matching:
-                    # Находим соответствующую категорию в этом боте по имени
-                    category_id_for_bot = None
-                    if db_product.category_id:
-                        original_category = db.query(models.Category).filter(
-                            models.Category.id == db_product.category_id
-                        ).first()
-                        if original_category:
-                            matching_category = db.query(models.Category).filter(
-                                models.Category.user_id == user_id,
-                                models.Category.bot_id == bot.id,
-                                models.Category.name == original_category.name
-                            ).first()
-                            if matching_category:
-                                category_id_for_bot = matching_category.id
+                    # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+                    category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                     
                     matching.name = db_product.name  # Обновляем название
                     matching.description = db_product.description

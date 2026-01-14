@@ -334,8 +334,7 @@ async def get_shop_sales(
     
     # Получаем продажи, где пользователь - владелец магазина, и продажа не отменена
     sales = db.query(models.Sale).options(
-        joinedload(models.Sale.product),
-        joinedload(models.Sale.snapshot)
+        joinedload(models.Sale.product)
     ).filter(
         and_(
             models.Sale.user_id == user_id,
@@ -463,8 +462,7 @@ async def get_my_sales(
     
     # Получаем продажи, где пользователь - продавец, продажа не отменена и не завершена
     sales = db.query(models.Sale).options(
-        joinedload(models.Sale.product),
-        joinedload(models.Sale.snapshot)
+        joinedload(models.Sale.product)
     ).filter(
         and_(
             models.Sale.sold_by_user_id == user_id,

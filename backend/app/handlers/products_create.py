@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 from ..db import models, database
-from ..utils.products_utils import str_to_bool, make_full_url
+from ..utils.products_utils import str_to_bool, make_full_url, normalize_category_id
 from ..utils.products_sync import sync_product_to_all_bots
 from ..utils.telegram_auth import validate_init_data_multi_bot
 
@@ -164,10 +164,13 @@ async def create_product(
                 final_bot_id = None  # Основной бот
                 print(f"ℹ️ No connected bot found for user {user_id}, using main bot (bot_id=None)")
 
+    # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
+    normalized_category_id = normalize_category_id(category_id, final_bot_id, user_id, db)
+
     db_product = models.Product(
         name=name,
         price=price,
-        category_id=category_id,
+        category_id=normalized_category_id,
         user_id=user_id,
         bot_id=final_bot_id,  # Если bot_id указан - создаем для независимого магазина бота
         description=description,

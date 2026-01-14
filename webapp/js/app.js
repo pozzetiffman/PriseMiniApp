@@ -33,6 +33,8 @@ import { initDataDependencies, loadData, updateShopNameInHeader } from './data.j
 // Импорт функций переключения вида карточек
 import { initFavorites, updateFavoritesCount } from './favorites.js';
 import { initCardViewToggle } from './handlers/cardViewToggle.js';
+// Импорт remoteLogger для отладки
+import { initRemoteLogger } from './utils/remoteLogger.js';
 
 // Глобальные переменные
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
@@ -79,6 +81,9 @@ let currentImageLoadId = 0; // Уникальный ID для отслежива
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async () => {
+    // 0. Инициализируем remoteLogger ПЕРВЫМ, чтобы перехватить все логи
+    initRemoteLogger();
+    
     console.log('📄 DOMContentLoaded - инициализация приложения');
     
     // 1. Инициализируем Telegram WebApp

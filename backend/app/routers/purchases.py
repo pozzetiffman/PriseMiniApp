@@ -546,8 +546,7 @@ async def get_my_purchases(
     # Получаем только активные покупки (не завершенные и не отмененные)
     # Теперь не фильтруем по product_id, так как товар может быть удален, но snapshot сохранится
     purchases = db.query(models.Purchase).options(
-        joinedload(models.Purchase.product),
-        joinedload(models.Purchase.snapshot)
+        joinedload(models.Purchase.product)
     ).filter(
         and_(
             models.Purchase.purchased_by_user_id == purchased_by_user_id,
@@ -618,8 +617,7 @@ async def get_purchases_history(
     # Получаем только завершенные или отмененные покупки (история = неактивные)
     # Активные покупки показываются в разделе "Активные", а не в истории
     purchases = db.query(models.Purchase).options(
-        joinedload(models.Purchase.product),
-        joinedload(models.Purchase.snapshot)
+        joinedload(models.Purchase.product)
     ).filter(
         and_(
             models.Purchase.purchased_by_user_id == purchased_by_user_id,
@@ -695,8 +693,7 @@ async def get_all_purchases(
         raise HTTPException(status_code=403, detail="Access denied")
     
     purchases = db.query(models.Purchase).options(
-        joinedload(models.Purchase.product),
-        joinedload(models.Purchase.snapshot)
+        joinedload(models.Purchase.product)
     ).filter(
         models.Purchase.user_id == user_id
     ).order_by(models.Purchase.created_at.desc()).all()

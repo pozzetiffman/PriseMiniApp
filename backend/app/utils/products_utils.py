@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from sqlalchemy.orm import Session
 from ..db import models
 
@@ -84,4 +85,63 @@ def str_to_bool(value: str) -> bool:
     if isinstance(value, bool):
         return value
     return value.lower() in ('true', '1', 'yes', 'on')
+
+
+def normalize_category_id(category_id: Optional[int], target_bot_id: Optional[int], user_id: int, db: Session) -> Optional[int]:
+    """
+    Нормализует category_id для гарантии инварианта product.bot_id === category.bot_id.
+    
+    Гарантирует, что category_id (если указан) принадлежит целевому боту (target_bot_id).
+    Если категория не принадлежит целевому боту, ищет категорию с тем же именем в целевом боте.
+    
+    Args:
+        category_id: ID категории для нормализации (может быть None)
+        target_bot_id: ID целевого бота (None для основного бота)
+        user_id: ID пользователя (владельца магазина)
+        db: Сессия базы данных
+        
+    Returns:
+        Правильный category_id для целевого бота, или None если категория не найдена
+    """
+    # Если category_id не указан, возвращаем None
+    if category_id is None:
+        return None
+    
+    # Нормализуем типы: приводим к int
+    category_id = int(category_id)
+    if target_bot_id is not None:
+        target_bot_id = int(target_bot_id)
+    
+    # Проверяем, что категория существует и принадлежит целевому боту
+    category = db.query(models.Category).filter(
+        models.Category.id == category_id,
+        models.Category.user_id == user_id
+    ).first()
+    
+    if not category:
+        # Категория не найдена - возвращаем None
+        print(f"⚠️ WARNING: Category with id={category_id} not found for user_id={user_id}, returning None")
+        return None
+    
+    # Проверяем соответствие bot_id
+    if category.bot_id == target_bot_id:
+        # Категория принадлежит целевому боту - всё правильно
+        return category_id
+    else:
+        # Категория не принадлежит целевому боту - ищем категорию с тем же именем в целевом боте
+        print(f"⚠️ WARNING: Category id={category_id} (bot_id={category.bot_id}) does not match target_bot_id={target_bot_id}, searching by name")
+        
+        matching_category = db.query(models.Category).filter(
+            models.Category.user_id == user_id,
+            models.Category.bot_id == target_bot_id,
+            models.Category.name == category.name
+        ).first()
+        
+        if matching_category:
+            print(f"✅ Found matching category id={matching_category.id} (name='{category.name}') for target_bot_id={target_bot_id}")
+            return matching_category.id
+        else:
+            # Категория с таким именем не найдена в целевом боте
+            print(f"⚠️ WARNING: Category with name='{category.name}' not found in target_bot_id={target_bot_id}, returning None")
+            return None
 

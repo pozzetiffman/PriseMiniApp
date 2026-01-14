@@ -417,8 +417,7 @@ async def get_shop_orders(
     
     # Получаем заказы, где пользователь - владелец магазина, и заказ не отменен
     orders = db.query(models.Order).options(
-        joinedload(models.Order.product),
-        joinedload(models.Order.snapshot)
+        joinedload(models.Order.product)
     ).filter(
         and_(
             models.Order.user_id == user_id,
@@ -547,8 +546,7 @@ async def get_my_orders(
     # Получаем заказы, где пользователь - заказчик, заказ не отменен и не завершен
     # В корзине показываем только активные заказы (не завершенные и не отмененные)
     orders = db.query(models.Order).options(
-        joinedload(models.Order.product),
-        joinedload(models.Order.snapshot)
+        joinedload(models.Order.product)
     ).filter(
         and_(
             models.Order.ordered_by_user_id == user_id,
@@ -677,8 +675,7 @@ async def get_orders_history(
     # Получаем только завершенные или отмененные заказы (история = неактивные)
     # Активные заказы показываются в разделе "Активные", а не в истории
     orders = db.query(models.Order).options(
-        joinedload(models.Order.product),
-        joinedload(models.Order.snapshot)
+        joinedload(models.Order.product)
     ).filter(
         and_(
             models.Order.ordered_by_user_id == user_id,

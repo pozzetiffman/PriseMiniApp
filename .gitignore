@@ -62,9 +62,24 @@ backend/static/uploads/*.gif
 backend/static/uploads/*.webp
 
 
+# =========================
+# 🔥 CRITICAL DATA (DO NOT COMMIT)
+# =========================
 
+# Databases (explicit paths)
+backend/*.db
+backend/**/*.db
+backend/**/*.sqlite
+backend/**/*.sqlite3
 
+# Uploads (ignore WHOLE directory)
+backend/static/uploads/
+backend/uploads/
+uploads/
 
+# Media / user content
+media/
+storage/
 
 
 
