@@ -4,6 +4,7 @@
 // Импорты зависимостей
 import { getCurrentShopSettings } from './admin.js';
 import { cancelReservationAPI, createReservationAPI } from './api.js';
+import { closeProductPage } from './handlers/products_modal.js';
 
 // Зависимости, которые будут переданы из app.js
 let appContextGetter = null; // Функция-геттер для получения appContext
@@ -265,10 +266,16 @@ export async function createReservation(productId, hours, quantity = 1) {
         const quantityText = quantity > 1 ? ` (${quantity} шт.)` : '';
         alert(`✅ Товар зарезервирован на ${hours} ${hours === 1 ? 'час' : hours === 2 ? 'часа' : 'часов'}${quantityText}`);
         
-        if (modalElement) {
-            modalElement.style.display = 'none';
+        // Закрываем страницу товара вместо модального окна
+        try {
+            if (typeof closeProductPage === 'function') {
+                closeProductPage();
+            } else {
+                console.warn('⚠️ closeProductPage is not a function');
+            }
+        } catch (e) {
+            console.error('❌ Error closing product page:', e);
         }
-        document.body.style.overflow = 'auto';
         
         // Обновляем данные и корзину
         setTimeout(async () => {
@@ -305,8 +312,15 @@ export async function cancelReservation(reservationId, productId) {
         await cancelReservationAPI(reservationId);
         await safeAlert('✅ Резервация снята');
         
-        if (modalElement) {
-            modalElement.style.display = 'none';
+        // Закрываем страницу товара вместо модального окна
+        try {
+            if (typeof closeProductPage === 'function') {
+                closeProductPage();
+            } else {
+                console.warn('⚠️ closeProductPage is not a function');
+            }
+        } catch (e) {
+            console.error('❌ Error closing product page:', e);
         }
         document.body.style.overflow = 'auto';
         

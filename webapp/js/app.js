@@ -4,7 +4,7 @@ import { getContext } from './api.js';
 import { initCart, loadCart, loadOrders, loadPurchases, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { initSettingsModal, openSettings } from './handlers/admin_settings_modal.js';
 import { initProfile, setupProfileButton } from './profile.js';
-import { getInitData, getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
+import { getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 // Импорт функций категорий из отдельного модуля (рефакторинг)
 import {
     categoriesHierarchy,
@@ -63,8 +63,9 @@ window.getAppContext = function() {
 const userNameElement = document.getElementById('user-name');
 const categoriesNav = document.getElementById('categories-nav');
 const productsGrid = document.getElementById('products-grid');
-const modal = document.getElementById('product-modal');
-const modalClose = document.querySelector('.modal-close');
+// Product modal больше не используется - заменен на product-page
+// const modal = document.getElementById('product-modal');
+// const modalClose = document.querySelector('.modal-close');
 const reservationModal = document.getElementById('reservation-modal');
 const reservationClose = document.querySelector('.reservation-close');
 const orderModal = document.getElementById('order-modal');
@@ -125,6 +126,49 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
         // === ИСПРАВЛЕНИЕ: Graceful degradation - initTelegram больше не бросает ошибки ===
         await initTelegram();
+        
+        // 1.1. КРИТИЧНО: Предотвращаем закрытие приложения свайпом вниз
+        // Блокируем вертикальные свайпы вниз, которые могут закрыть приложение
+        let preventCloseStartY = 0;
+        let preventCloseStartTime = 0;
+        let preventCloseStartX = 0;
+        
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                preventCloseStartY = e.touches[0].clientY;
+                preventCloseStartX = e.touches[0].clientX;
+                preventCloseStartTime = Date.now();
+            }
+        }, { passive: true });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (e.touches.length !== 1) return;
+            
+            const currentY = e.touches[0].clientY;
+            const currentX = e.touches[0].clientX;
+            const dy = currentY - preventCloseStartY;
+            const dx = Math.abs(currentX - preventCloseStartX);
+            const dt = Date.now() - preventCloseStartTime;
+            
+            // Проверяем, что это именно вертикальный жест (не диагональный)
+            const isVerticalSwipe = dy > 0 && dy > dx * 2;
+            
+            // Блокируем быстрые свайпы вниз от начала страницы (которые могут закрыть приложение)
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+            const isAtTop = scrollTop < 100; // Близко к началу страницы
+            
+            // Блокируем только если:
+            // 1. Мы в начале страницы
+            // 2. Это вертикальный жест вниз (не диагональный)
+            // 3. Жест быстрый (может быть попыткой закрыть приложение)
+            if (isAtTop && isVerticalSwipe && dy > 50 && dt < 500) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('[APP] 🚫 Блокирован свайп вниз для предотвращения закрытия приложения');
+            }
+        }, { passive: false });
+        
+        console.log('✅ Обработчики предотвращения закрытия приложения активированы');
         
         // 2. Ждем немного, чтобы initData стал доступен
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -220,7 +264,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentProductGetter: () => currentProduct, // Функция-геттер для получения currentProduct
         currentProductSetter: (val) => { currentProduct = val; }, // Функция-сеттер для установки currentProduct
         appContextGetter: () => appContext, // Функция-геттер для получения appContext
-        modal: modal, // Элемент модального окна товара
+        modal: null, // Product modal больше не используется - заменен на product-page
         loadData: loadData, // Функция для загрузки данных
         allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
         showSellModal: showSellModal, // Функция для показа модального окна продажи (используется в markAsSold)
@@ -230,8 +274,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     initProductsDependencies({
         productsGrid: productsGrid,
         appContext: () => appContext, // Передаем функцию-геттер для получения актуального appContext
-        // Зависимости для showProductModal и showModalImage
-        modal: modal,
+        // Зависимости для showProductModal (теперь showProductPage)
+        modal: null, // Product modal больше не используется - заменен на product-page
         modalState: modalState,
         loadData: loadData,
         showEditProductModal: showEditProductModal,
@@ -249,7 +293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentProductGetter: () => currentProduct, // Функция-геттер для получения currentProduct
         allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
         reservationModal: reservationModal, // DOM элемент модального окна резервации
-        modal: modal, // DOM элемент модального окна товара
+        modal: null, // Product modal больше не используется - заменен на product-page
         loadData: loadData, // Функция для загрузки данных
         updateCartUI: updateCartUI, // Функция для обновления корзины
         loadCart: loadCart // Функция для загрузки корзины
@@ -260,7 +304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         appContextGetter: () => appContext, // Функция-геттер для получения appContext
         allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
         orderModal: orderModal, // DOM элемент модального окна заказа
-        modal: modal, // DOM элемент модального окна товара
+        modal: null, // Product modal больше не используется - заменен на product-page
         loadData: loadData, // Функция для загрузки данных
         updateCartUI: updateCartUI, // Функция для обновления корзины
         loadOrders: loadOrders // Функция для загрузки заказов
@@ -269,7 +313,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4.6 Инициализируем зависимости для модуля продаж
     initPurchasesDependencies({
         appContextGetter: () => appContext, // Функция-геттер для получения appContext
-        modal: modal, // DOM элемент модального окна товара
+        modal: null, // Product modal больше не используется - заменен на product-page
         loadData: loadData, // Функция для загрузки данных
         updateCartUI: updateCartUI, // Функция для обновления корзины
         loadPurchases: loadPurchases // Функция для загрузки продаж
@@ -359,8 +403,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // 4.7 Инициализируем зависимости для модуля модальных окон
     initModalsDependencies({
-        modal: modal,
-        modalClose: modalClose,
+        modal: null, // Product modal больше не используется - заменен на product-page
+        modalClose: null, // Product modal больше не используется - заменен на product-page
         reservationModal: reservationModal,
         reservationClose: reservationClose,
         orderModal: orderModal,

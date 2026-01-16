@@ -3,6 +3,7 @@
 
 // Импорты зависимостей
 import { resetOrderForm, showOrderStep } from './orders.js';
+import { closeProductPage } from './handlers/products_modal.js';
 
 // Зависимости, которые будут переданы из app.js
 let modalElement = null; // DOM элемент модального окна товара
@@ -173,9 +174,23 @@ export function setupModals() {
         };
     }
     
+    // Обработчик кнопки "назад" на странице товара
+    const productPageBack = document.getElementById('product-page-back');
+    if (productPageBack) {
+        productPageBack.onclick = () => {
+            closeProductPage();
+        };
+    }
+    
     // Закрытие по Escape
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+            // Закрываем страницу товара
+            const productPage = document.getElementById('product-page');
+            if (productPage && (productPage.style.display === 'block' || productPage.style.display === 'flex')) {
+                closeProductPage();
+            }
+            
             if (modalElement && (modalElement.style.display === 'flex' || modalElement.style.display === 'block')) {
                 modalElement.style.display = 'none';
                 document.body.style.overflow = 'auto';
