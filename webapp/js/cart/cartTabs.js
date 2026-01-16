@@ -22,39 +22,75 @@ import { loadCart, loadOrders, loadPurchases } from './cartActive.js';
 import { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory } from './cartHistory.js';
 
 /**
+ * Вспомогательная функция для поиска элементов корзины
+ * Ищет элемент сначала в странице корзины (если она видна), затем в модальном окне
+ * @param {string} elementId - ID элемента для поиска
+ * @returns {HTMLElement|null} - Найденный элемент или null
+ */
+function findCartElement(elementId) {
+    // ВАЖНО: Сначала всегда проверяем страницу корзины (даже если она скрыта)
+    // так как мы используем страницу, а не модальное окно
+    const cartPage = document.getElementById('cart-page');
+    if (cartPage) {
+        const element = cartPage.querySelector(`#${elementId}`);
+        if (element) {
+            return element;
+        }
+    }
+    
+    // Если не найдено на странице, ищем в модальном окне (для обратной совместимости)
+    const cartModal = document.getElementById('cart-modal');
+    if (cartModal) {
+        const element = cartModal.querySelector(`#${elementId}`);
+        if (element) {
+            return element;
+        }
+    }
+    
+    // Если не найдено нигде, используем стандартный getElementById (fallback)
+    return document.getElementById(elementId);
+}
+
+/**
  * Переключение основных вкладок корзины
  * Управляет отображением секций: reservations, orders, purchases
  * @param {string} tabName - Имя вкладки для переключения ('reservations', 'orders', 'purchases')
  */
 export function switchCartTab(tabName) {
     console.log(`🛒 switchCartTab: switching to tab "${tabName}"`);
-    const tabs = document.querySelectorAll('.cart-tab');
-    const reservationsSection = document.getElementById('reservations-section');
-    const ordersSection = document.getElementById('orders-section');
-    const purchasesSection = document.getElementById('purchases-section');
-    
-    if (!tabs || tabs.length === 0) {
-        console.warn('⚠️ Cart tabs not found');
-        return;
-    }
-    
-    if (!reservationsSection || !ordersSection || !purchasesSection) {
-        console.warn('⚠️ Cart sections not found');
-        return;
-    }
+    try {
+        // ВАЖНО: Сначала всегда проверяем страницу корзины (даже если она скрыта)
+        // так как мы используем страницу, а не модальное окно
+        const cartPage = document.getElementById('cart-page');
+        const cartModal = document.getElementById('cart-modal');
+        const container = cartPage || cartModal || null;
+        
+        if (!container) {
+            console.warn('⚠️ Cart page and modal not found');
+            return;
+        }
+        
+        const tabs = container.querySelectorAll('.cart-tab');
+        const reservationsSection = container.querySelector('#reservations-section');
+        const ordersSection = container.querySelector('#orders-section');
+        const purchasesSection = container.querySelector('#purchases-section');
+        
+        if (!tabs || tabs.length === 0) {
+            console.warn('⚠️ Cart tabs not found');
+            return;
+        }
+        
+        if (!reservationsSection || !ordersSection || !purchasesSection) {
+            console.warn('⚠️ Cart sections not found');
+            return;
+        }
     
     // Проверяем, что вкладка видима перед переключением
     const targetTab = Array.from(tabs).find(tab => tab.dataset.tab === tabName);
     if (targetTab && (targetTab.style.display === 'none' || targetTab.classList.contains('hidden'))) {
         console.warn(`⚠️ Cannot switch to hidden tab: ${tabName}`);
-        // Переключаемся на первую видимую вкладку
-        const firstVisibleTab = Array.from(tabs).find(tab => 
-            tab.style.display !== 'none' && !tab.classList.contains('hidden')
-        );
-        if (firstVisibleTab) {
-            console.log(`🛒 Switching to first visible tab: ${firstVisibleTab.dataset.tab}`);
-            switchCartTab(firstVisibleTab.dataset.tab);
-        }
+        // НЕ переключаемся автоматически - это может вызвать рекурсию и блокировку
+        // Просто возвращаемся без переключения
         return;
     }
     
@@ -72,15 +108,40 @@ export function switchCartTab(tabName) {
     purchasesSection.style.display = 'none';
     
     // Показываем нужную секцию и активируем первую подвкладку
+    // КРИТИЧНО: switchCartSubtab делает API вызовы, поэтому вызываем его асинхронно
+    // чтобы не блокировать выполнение
     if (tabName === 'reservations') {
         reservationsSection.style.display = 'block';
-        switchCartSubtab('reservations-active');
+        // Вызываем асинхронно, чтобы не блокировать
+        setTimeout(() => {
+            try {
+                switchCartSubtab('reservations-active');
+            } catch (err) {
+                console.error('❌ Error in switchCartSubtab for reservations:', err);
+            }
+        }, 0);
     } else if (tabName === 'orders') {
         ordersSection.style.display = 'block';
-        switchCartSubtab('orders-active');
+        setTimeout(() => {
+            try {
+                switchCartSubtab('orders-active');
+            } catch (err) {
+                console.error('❌ Error in switchCartSubtab for orders:', err);
+            }
+        }, 0);
     } else if (tabName === 'purchases') {
         purchasesSection.style.display = 'block';
-        switchCartSubtab('purchases-active');
+        setTimeout(() => {
+            try {
+                switchCartSubtab('purchases-active');
+            } catch (err) {
+                console.error('❌ Error in switchCartSubtab for purchases:', err);
+            }
+        }, 0);
+    }
+    } catch (error) {
+        console.error('❌ Error in switchCartTab:', error);
+        // Не бросаем ошибку дальше, чтобы не ломать приложение
     }
 }
 // ========== END REFACTORING STEP 6.1 ==========
@@ -93,30 +154,30 @@ export function switchCartTab(tabName) {
  */
 export function switchCartSubtab(subtabName) {
     console.log(`🛒 switchCartSubtab: switching to subtab "${subtabName}"`);
-    
-    // Определяем основную вкладку по имени подвкладки
-    let mainTab = '';
-    let activeContainer = null;
-    let historyContainer = null;
-    
-    if (subtabName.startsWith('reservations-')) {
-        mainTab = 'reservations';
-        activeContainer = document.getElementById('cart-items');
-        historyContainer = document.getElementById('reservations-history-items');
-    } else if (subtabName.startsWith('orders-')) {
-        mainTab = 'orders';
-        activeContainer = document.getElementById('orders-items');
-        historyContainer = document.getElementById('orders-history-items');
-    } else if (subtabName.startsWith('purchases-')) {
-        mainTab = 'purchases';
-        activeContainer = document.getElementById('purchases-items');
-        historyContainer = document.getElementById('purchases-history-items');
-    }
-    
-    if (!activeContainer || !historyContainer) {
-        console.warn('⚠️ Cart subtab containers not found');
-        return;
-    }
+    try {
+        // Определяем основную вкладку по имени подвкладки
+        let mainTab = '';
+        let activeContainer = null;
+        let historyContainer = null;
+        
+        if (subtabName.startsWith('reservations-')) {
+            mainTab = 'reservations';
+            activeContainer = findCartElement('cart-items');
+            historyContainer = findCartElement('reservations-history-items');
+        } else if (subtabName.startsWith('orders-')) {
+            mainTab = 'orders';
+            activeContainer = findCartElement('orders-items');
+            historyContainer = findCartElement('orders-history-items');
+        } else if (subtabName.startsWith('purchases-')) {
+            mainTab = 'purchases';
+            activeContainer = findCartElement('purchases-items');
+            historyContainer = findCartElement('purchases-history-items');
+        }
+        
+        if (!activeContainer || !historyContainer) {
+            console.warn('⚠️ Cart subtab containers not found');
+            return;
+        }
     
     // Обновляем активные подвкладки в текущей секции
     const currentSection = document.getElementById(`${mainTab}-section`);
@@ -148,26 +209,40 @@ export function switchCartSubtab(subtabName) {
             }
         } else if (mainTab === 'orders') {
             console.log('🛒 Loading active orders...');
-            loadOrders();
+            loadOrders().catch(err => {
+                console.warn('⚠️ Error loading orders:', err);
+            });
         } else if (mainTab === 'purchases') {
             console.log('🛒 Loading active sales...');
-            loadPurchases();
+            loadPurchases().catch(err => {
+                console.warn('⚠️ Error loading purchases:', err);
+            });
         }
     } else if (subtabName.endsWith('-history')) {
         activeContainer.style.display = 'none';
         historyContainer.style.display = 'block';
         
-        // Загружаем историю
+        // Загружаем историю (не блокируем выполнение при ошибках)
         if (mainTab === 'reservations') {
             console.log('🛒 Loading reservations history...');
-            loadReservationsHistory();
+            loadReservationsHistory().catch(err => {
+                console.warn('⚠️ Error loading reservations history:', err);
+            });
         } else if (mainTab === 'orders') {
             console.log('🛒 Loading orders history...');
-            loadOrdersHistory();
+            loadOrdersHistory().catch(err => {
+                console.warn('⚠️ Error loading orders history:', err);
+            });
         } else if (mainTab === 'purchases') {
             console.log('🛒 Loading sales history...');
-            loadPurchasesHistory();
+            loadPurchasesHistory().catch(err => {
+                console.warn('⚠️ Error loading purchases history:', err);
+            });
         }
+    }
+    } catch (error) {
+        console.error('❌ Error in switchCartSubtab:', error);
+        // Не бросаем ошибку дальше, чтобы не ломать приложение
     }
 }
 // ========== END REFACTORING STEP 6.2 ==========
@@ -179,72 +254,110 @@ export function switchCartSubtab(subtabName) {
  * и обновляет видимость соответствующих вкладок
  * @returns {Promise<{hasReservations: boolean, hasOrders: boolean, hasPurchases: boolean}>} Объект с информацией о наличии данных
  */
+// Вспомогательная функция для добавления таймаута к промису
+function withTimeout(promise, timeoutMs = 5000, errorMessage = 'Operation timed out') {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        )
+    ]);
+}
+
 export async function updateCartTabsVisibility() {
     console.log('🛒 updateCartTabsVisibility: Checking data availability...');
     
     try {
-        // Проверяем резервации (активные + история)
+        // Проверяем резервации (активные + история) с таймаутом
         let hasReservations = false;
         try {
-            const activeReservations = await fetchUserReservations();
+            const activeReservations = await withTimeout(
+                fetchUserReservations(), 
+                3000, 
+                'Timeout fetching reservations'
+            );
             const activeCount = (activeReservations || []).filter(r => r.is_active === true).length;
             
             let historyCount = 0;
             try {
-                const historyReservations = await fetchReservationsHistory();
+                const historyReservations = await withTimeout(
+                    fetchReservationsHistory(), 
+                    3000, 
+                    'Timeout fetching reservations history'
+                );
                 historyCount = (historyReservations || []).filter(r => r.is_active === false).length;
             } catch (e) {
-                console.warn('⚠️ Failed to fetch reservations history for visibility check:', e);
+                console.warn('⚠️ Failed to fetch reservations history for visibility check:', e.message);
             }
             
             hasReservations = activeCount > 0 || historyCount > 0;
             console.log(`🛒 Reservations: ${activeCount} active, ${historyCount} history, hasData: ${hasReservations}`);
         } catch (e) {
-            console.warn('⚠️ Failed to check reservations:', e);
+            console.warn('⚠️ Failed to check reservations:', e.message);
         }
         
-        // Проверяем заказы (активные + история)
+        // Проверяем заказы (активные + история) с таймаутом
         let hasOrders = false;
         try {
-            const activeOrders = await getMyOrdersAPI();
+            const activeOrders = await withTimeout(
+                getMyOrdersAPI(), 
+                3000, 
+                'Timeout fetching orders'
+            );
             const activeCount = (activeOrders || []).filter(o => !o.is_completed && !o.is_cancelled).length;
             
             let historyCount = 0;
             try {
-                const historyOrders = await getOrdersHistoryAPI();
+                const historyOrders = await withTimeout(
+                    getOrdersHistoryAPI(), 
+                    3000, 
+                    'Timeout fetching orders history'
+                );
                 historyCount = (historyOrders || []).filter(o => o.is_completed === true || o.is_cancelled === true).length;
             } catch (e) {
-                console.warn('⚠️ Failed to fetch orders history for visibility check:', e);
+                console.warn('⚠️ Failed to fetch orders history for visibility check:', e.message);
             }
             
             hasOrders = activeCount > 0 || historyCount > 0;
             console.log(`🛒 Orders: ${activeCount} active, ${historyCount} history, hasData: ${hasOrders}`);
         } catch (e) {
-            console.warn('⚠️ Failed to check orders:', e);
+            console.warn('⚠️ Failed to check orders:', e.message);
         }
         
-        // Проверяем продажи (активные + история)
+        // Проверяем продажи (активные + история) с таймаутом
         let hasPurchases = false;
         try {
-            const allPurchases = await getMyPurchasesAPI();
+            const allPurchases = await withTimeout(
+                getMyPurchasesAPI(), 
+                3000, 
+                'Timeout fetching purchases'
+            );
             const activeCount = (allPurchases || []).filter(p => !p.is_completed && !p.is_cancelled).length;
             
             let historyCount = 0;
             try {
-                const historyPurchases = await getPurchasesHistoryAPI();
+                const historyPurchases = await withTimeout(
+                    getPurchasesHistoryAPI(), 
+                    3000, 
+                    'Timeout fetching purchases history'
+                );
                 historyCount = (historyPurchases || []).filter(p => p.is_completed === true || p.is_cancelled === true).length;
             } catch (e) {
-                console.warn('⚠️ Failed to fetch purchases history for visibility check:', e);
+                console.warn('⚠️ Failed to fetch purchases history for visibility check:', e.message);
             }
             
             hasPurchases = activeCount > 0 || historyCount > 0;
             console.log(`🛒 Purchases: ${activeCount} active, ${historyCount} history, hasData: ${hasPurchases}`);
         } catch (e) {
-            console.warn('⚠️ Failed to check purchases:', e);
+            console.warn('⚠️ Failed to check purchases:', e.message);
         }
         
         // Обновляем видимость вкладок
-        const tabs = document.querySelectorAll('.cart-tab');
+        // ВАЖНО: Сначала всегда проверяем страницу корзины (даже если она скрыта)
+        const cartPage = document.getElementById('cart-page');
+        const cartModal = document.getElementById('cart-modal');
+        const container = cartPage || cartModal;
+        const tabs = container ? container.querySelectorAll('.cart-tab') : document.querySelectorAll('.cart-tab');
         const reservationsTab = Array.from(tabs).find(tab => tab.dataset.tab === 'reservations');
         const ordersTab = Array.from(tabs).find(tab => tab.dataset.tab === 'orders');
         const purchasesTab = Array.from(tabs).find(tab => tab.dataset.tab === 'purchases');
@@ -279,16 +392,15 @@ export async function updateCartTabsVisibility() {
             }
         }
         
-        // Если текущая активная вкладка скрыта, переключаемся на первую доступную
+        // КРИТИЧНО: НЕ вызываем switchCartTab здесь при обновлении видимости!
+        // switchCartTab вызывает switchCartSubtab, который делает API вызовы и может блокировать загрузку.
+        // Переключение вкладки должно происходить только при явном действии пользователя или при открытии корзины.
+        // Если текущая активная вкладка скрыта, просто убираем класс active, но НЕ переключаемся автоматически
         const activeTab = Array.from(tabs).find(tab => tab.classList.contains('active'));
         if (activeTab && (activeTab.style.display === 'none' || activeTab.classList.contains('hidden'))) {
-            const firstVisibleTab = Array.from(tabs).find(tab => 
-                tab.style.display !== 'none' && !tab.classList.contains('hidden')
-            );
-            if (firstVisibleTab) {
-                console.log(`🛒 Switching to first visible tab: ${firstVisibleTab.dataset.tab}`);
-                switchCartTab(firstVisibleTab.dataset.tab);
-            }
+            // Просто убираем класс active, но НЕ вызываем switchCartTab (это сделает пользователь или при открытии корзины)
+            activeTab.classList.remove('active');
+            console.log(`🛒 Active tab is hidden, removed active class (will be set when cart is opened)`);
         }
         
         console.log(`🛒 Tabs visibility updated: Reservations=${hasReservations}, Orders=${hasOrders}, Purchases=${hasPurchases}`);

@@ -54,6 +54,63 @@
                 <div id="product-page-reservation-button" class="product-page-reservation-button"></div>
             </div>
         </div>
+        
+        <!-- Страница корзины (отдельная страница вместо модального окна) -->
+        <div id="cart-page" class="cart-page" style="display: none;">
+            <div class="cart-page-header">
+                <button id="cart-page-back" class="cart-page-back">← Назад</button>
+            </div>
+            <div class="cart-page-content">
+                <h2 class="cart-page-title">🛒 Мои заказы</h2>
+                <div class="cart-tabs">
+                    <button class="cart-tab active" data-tab="reservations">🔒 Резервации</button>
+                    <button class="cart-tab" data-tab="orders">🛒 Заказы</button>
+                    <button class="cart-tab" data-tab="purchases">💰 Продажи</button>
+                </div>
+                
+                <!-- Резервации -->
+                <div id="reservations-section" class="cart-section">
+                    <div class="cart-subtabs">
+                        <button class="cart-subtab active" data-subtab="reservations-active">Активные</button>
+                        <button class="cart-subtab" data-subtab="reservations-history">📜 История</button>
+                    </div>
+                    <div id="cart-items" class="cart-items">
+                        <!-- Зарезервированные товары будут здесь -->
+                    </div>
+                    <div id="reservations-history-items" class="cart-items" style="display: none;">
+                        <!-- История резерваций будет здесь -->
+                    </div>
+                </div>
+                
+                <!-- Заказы -->
+                <div id="orders-section" class="cart-section" style="display: none;">
+                    <div class="cart-subtabs">
+                        <button class="cart-subtab active" data-subtab="orders-active">Активные</button>
+                        <button class="cart-subtab" data-subtab="orders-history">📜 История</button>
+                    </div>
+                    <div id="orders-items" class="cart-items">
+                        <!-- Заказанные товары будут здесь -->
+                    </div>
+                    <div id="orders-history-items" class="cart-items" style="display: none;">
+                        <!-- История заказов будет здесь -->
+                    </div>
+                </div>
+                
+                <!-- Продажи -->
+                <div id="purchases-section" class="cart-section" style="display: none;">
+                    <div class="cart-subtabs">
+                        <button class="cart-subtab active" data-subtab="purchases-active">Активные</button>
+                        <button class="cart-subtab" data-subtab="purchases-history">📜 История</button>
+                    </div>
+                    <div id="purchases-items" class="cart-items">
+                        <!-- Заявки на продажу будут здесь -->
+                    </div>
+                    <div id="purchases-history-items" class="cart-items" style="display: none;">
+                        <!-- История продаж будет здесь -->
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <!-- Модальное окно для детального просмотра товара -->

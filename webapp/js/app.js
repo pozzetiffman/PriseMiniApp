@@ -121,11 +121,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         initRemoteLogger();
         
         console.log('📄 DOMContentLoaded - инициализация приложения');
+        console.log('[APP INIT] Step 1: Initializing Telegram...');
         
         // 1. Инициализируем Telegram WebApp
         // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
         // === ИСПРАВЛЕНИЕ: Graceful degradation - initTelegram больше не бросает ошибки ===
         await initTelegram();
+        console.log('[APP INIT] Step 1: Telegram initialized');
         
         // 1.1. КРИТИЧНО: Предотвращаем закрытие приложения свайпом вниз
         // Блокируем вертикальные свайпы вниз, которые могут закрыть приложение
@@ -176,6 +178,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 3. Проверяем, что Telegram доступен
         // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
         // === ИСПРАВЛЕНИЕ: Graceful degradation вместо throw ===
+        // === ИСПРАВЛЕНИЕ: Поддержка режима отладки через параметр URL ===
+        const urlParams = new URLSearchParams(window.location.search);
+        const debugUser = urlParams.get('debug_user');
+        const isDebugMode = debugUser !== null;
+        
+        // Сохраняем isDebugMode в глобальной области для использования в других местах
+        window.isDebugMode = isDebugMode;
+        
         let telegramUser = null;
         try {
             telegramUser = requireTelegram();
@@ -190,22 +200,45 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         if (telegramUser && telegramUser.isFallback) {
-            // === ИСПРАВЛЕНИЕ: Показываем понятное сообщение вместо падения ===
-            const errorMessage = 'Приложение должно быть открыто через Telegram-бота';
-            if (productsGrid) {
-                productsGrid.innerHTML = `
-                    <div style="padding: 20px; text-align: center; color: #fff;">
-                        <p style="font-size: 16px; margin-bottom: 12px;">⚠️</p>
-                        <p style="font-size: 14px; line-height: 1.5;">${errorMessage}</p>
-                    </div>
-                `;
+            if (isDebugMode) {
+                // В режиме отладки продолжаем работу с fallback данными
+                console.warn('⚠️ [APP] Режим отладки: продолжаем без Telegram данных');
+                console.warn('⚠️ [APP] Используется debug_user из URL:', debugUser);
+                // Создаем fallback контекст для отладки
+                telegramUser = {
+                    id: parseInt(debugUser) || 1,
+                    isFallback: false, // Помечаем как не fallback, чтобы продолжить
+                    isDebugMode: true
+                };
+            } else {
+                // === ИСПРАВЛЕНИЕ: Показываем понятное сообщение вместо падения ===
+                const errorMessage = 'Приложение должно быть открыто через Telegram-бота';
+                if (productsGrid) {
+                    productsGrid.innerHTML = `
+                        <div style="padding: 20px; text-align: center; color: #fff;">
+                            <p style="font-size: 16px; margin-bottom: 12px;">⚠️</p>
+                            <p style="font-size: 14px; line-height: 1.5;">${errorMessage}</p>
+                            <p style="font-size: 12px; margin-top: 12px; opacity: 0.7;">Для отладки добавьте ?debug_user=1 в URL</p>
+                        </div>
+                    `;
+                }
+                console.warn('⚠️ [APP] Остановка инициализации из-за отсутствия Telegram данных:', telegramUser.fallbackReason);
+                return; // НЕ продолжаем инициализацию, НЕ вызываем loadData
             }
-            console.warn('⚠️ [APP] Остановка инициализации из-за отсутствия Telegram данных:', telegramUser.fallbackReason);
-            return; // НЕ продолжаем инициализацию, НЕ вызываем loadData
         }
         
-        // 4. Инициализируем cartModal
-        setupCartModal();
+        // 4. Инициализируем cartModal (не блокируем инициализацию)
+        // Выполняем в следующем тике event loop, чтобы не блокировать основной поток
+        console.log('[APP INIT] Step 4: Setting up cart modal (async)...');
+        setTimeout(() => {
+            try {
+                setupCartModal();
+                console.log('[APP INIT] Step 4: Cart modal setup completed');
+            } catch (err) {
+                console.error('❌ Error in setupCartModal:', err);
+                // Не блокируем инициализацию при ошибке
+            }
+        }, 0);
     
     // 4.0 Инициализируем зависимости для модуля фильтров
     initFiltersDependencies({
@@ -324,6 +357,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Проверяем параметры URL:
         // 1. user_id (прямой параметр)
         // 2. start (из Mini App ссылки: t.me/botusername/shop?start=store_user_id)
+        // 3. debug_user (для режима отладки)
         const urlParams = new URLSearchParams(window.location.search);
         let shopOwnerId = null;
         
@@ -340,6 +374,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const userIdStr = startParam.replace('store_', '');
                 shopOwnerId = parseInt(userIdStr, 10);
             }
+        }
+        
+        // Вариант 3: Режим отладки (debug_user)
+        if (!shopOwnerId && window.isDebugMode) {
+            const debugUserParam = urlParams.get('debug_user');
+            shopOwnerId = parseInt(debugUserParam) || 1;
+            console.log('[APP INIT] Debug mode: using shopOwnerId from debug_user:', shopOwnerId);
         }
         
         appContext = await getContext(shopOwnerId);
@@ -558,14 +599,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     // 11. Обновляем корзину после загрузки данных
+    // КРИТИЧНО: Обновление корзины происходит ТОЛЬКО после полной загрузки данных
+    // чтобы не блокировать инициализацию приложения
     setTimeout(async () => {
-        console.log('🛒 Обновление корзины после загрузки данных...');
+        console.log('[APP INIT] Step 11: Updating cart UI after data load...');
         try {
             await updateCartUI();
+            console.log('[APP INIT] Step 11: Cart UI updated successfully');
+            
+            // Запускаем периодическое обновление корзины (каждые 30 секунд)
+            // Это делается здесь, а не в initCart(), чтобы не блокировать инициализацию
+            setInterval(() => {
+                updateCartUI().catch(err => {
+                    console.warn('⚠️ Error in periodic cart update:', err);
+                });
+            }, 30000);
         } catch (e) {
             console.error('❌ Error updating cart:', e);
         }
-    }, 500);
+    }, 1000); // Запускаем через 1 секунду после загрузки данных
     
     // 12. Обновляем счетчик избранного (только для клиентов, не для админа)
     if (appContext.role === 'client') {

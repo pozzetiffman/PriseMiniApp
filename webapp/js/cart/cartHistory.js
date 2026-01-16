@@ -19,12 +19,42 @@ import { createImageContainer, getProductImageUrl } from '../utils/imageUtils.js
 import { formatDateToMoscow } from '../utils/dateUtils.js';
 
 /**
+ * Вспомогательная функция для поиска элементов корзины
+ * Ищет элемент сначала в странице корзины (если она видна), затем в модальном окне
+ * @param {string} elementId - ID элемента для поиска
+ * @returns {HTMLElement|null} - Найденный элемент или null
+ */
+function findCartElement(elementId) {
+    // ВАЖНО: Сначала всегда проверяем страницу корзины (даже если она скрыта)
+    // так как мы используем страницу, а не модальное окно
+    const cartPage = document.getElementById('cart-page');
+    if (cartPage) {
+        const element = cartPage.querySelector(`#${elementId}`);
+        if (element) {
+            return element;
+        }
+    }
+    
+    // Если не найдено на странице, ищем в модальном окне (для обратной совместимости)
+    const cartModal = document.getElementById('cart-modal');
+    if (cartModal) {
+        const element = cartModal.querySelector(`#${elementId}`);
+        if (element) {
+            return element;
+        }
+    }
+    
+    // Если не найдено нигде, используем стандартный getElementById (fallback)
+    return document.getElementById(elementId);
+}
+
+/**
  * Загрузка истории резерваций
  * Отображает список неактивных резерваций в истории корзины
  */
 export async function loadReservationsHistory() {
     console.log('🛒 loadReservationsHistory: Starting...');
-    const historyItems = document.getElementById('reservations-history-items');
+    const historyItems = findCartElement('reservations-history-items');
     if (!historyItems) {
         console.error('❌ loadReservationsHistory: reservations-history-items element not found');
         return;
@@ -159,7 +189,7 @@ export async function loadReservationsHistory() {
  */
 export async function loadOrdersHistory() {
     console.log('🛒 loadOrdersHistory: Starting...');
-    const historyItems = document.getElementById('orders-history-items');
+    const historyItems = findCartElement('orders-history-items');
     if (!historyItems) {
         console.error('❌ loadOrdersHistory: orders-history-items element not found');
         return;
@@ -292,7 +322,7 @@ export async function loadOrdersHistory() {
  */
 export async function loadPurchasesHistory() {
     console.log('🛒 loadPurchasesHistory: Starting...');
-    const historyItems = document.getElementById('purchases-history-items');
+    const historyItems = findCartElement('purchases-history-items');
     if (!historyItems) {
         console.error('❌ loadPurchasesHistory: purchases-history-items element not found');
         return;

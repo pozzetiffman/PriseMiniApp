@@ -27,12 +27,13 @@ export { switchCartSubtab, switchCartTab, updateCartTabsVisibility };
 // ========== END REFACTORING STEP 6.1, 6.2, 6.3 ==========
 // ========== REFACTORING STEP 7.1, 7.2, 7.3: cartInit.js ==========
 // НОВЫЙ КОД (используется сейчас)
-    import { initCart as initCartFromModule, setupCartButton as setupCartButtonFromModule, setupCartModal as setupCartModalFromModule } from './cart/cartInit.js';
+    import { closeCartPage as closeCartPageFromModule, initCart as initCartFromModule, setupCartButton as setupCartButtonFromModule, setupCartModal as setupCartModalFromModule } from './cart/cartInit.js';
 // Используем функции внутри модуля
 const initCart = initCartFromModule;
 const setupCartButton = setupCartButtonFromModule;
 const setupCartModal = setupCartModalFromModule;
-export { initCart, setupCartButton, setupCartModal };
+const closeCartPage = closeCartPageFromModule;
+export { closeCartPage, initCart, setupCartButton, setupCartModal };
 // ========== END REFACTORING STEP 7.1, 7.2, 7.3 ==========
 // ========== REFACTORING STEP 8.1, 8.2, 8.3, 8.4, 8.5, 8.6: cartUI.js ==========
 // НОВЫЙ КОД (используется сейчас)

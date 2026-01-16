@@ -19,15 +19,45 @@ import { createImageContainer, getProductImageUrl } from '../utils/imageUtils.js
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
 
 /**
+ * Вспомогательная функция для поиска элементов корзины
+ * Ищет элемент сначала в странице корзины (если она видна), затем в модальном окне
+ * @param {string} elementId - ID элемента для поиска
+ * @returns {HTMLElement|null} - Найденный элемент или null
+ */
+function findCartElement(elementId) {
+    // ВАЖНО: Сначала всегда проверяем страницу корзины (даже если она скрыта)
+    // так как мы используем страницу, а не модальное окно
+    const cartPage = document.getElementById('cart-page');
+    if (cartPage) {
+        const element = cartPage.querySelector(`#${elementId}`);
+        if (element) {
+            return element;
+        }
+    }
+    
+    // Если не найдено на странице, ищем в модальном окне (для обратной совместимости)
+    const cartModal = document.getElementById('cart-modal');
+    if (cartModal) {
+        const element = cartModal.querySelector(`#${elementId}`);
+        if (element) {
+            return element;
+        }
+    }
+    
+    // Если не найдено нигде, используем стандартный getElementById (fallback)
+    return document.getElementById(elementId);
+}
+
+/**
  * Загрузка активных резерваций в корзину
  * Отображает список активных резерваций текущего пользователя
  * @param {Function} [updateCartUI] - Опциональная функция для обновления UI корзины (вызывается при отсутствии резерваций)
  */
 export async function loadCart(updateCartUI = null) {
     console.log('🛒 loadCart: Starting...');
-    const cartItems = document.getElementById('cart-items');
+    const cartItems = findCartElement('cart-items');
     if (!cartItems) {
-        console.error('❌ loadCart: cart-items element not found - modal may not be ready yet');
+        console.error('❌ loadCart: cart-items element not found - cart page may not be ready yet');
         // Не блокируем выполнение, просто возвращаемся
         return;
     }
@@ -193,7 +223,7 @@ export async function loadCart(updateCartUI = null) {
  */
 export async function loadOrders() {
     console.log('🛒 loadOrders: Starting...');
-    const ordersItems = document.getElementById('orders-items');
+    const ordersItems = findCartElement('orders-items');
     if (!ordersItems) {
         console.error('❌ loadOrders: orders-items element not found');
         return;
@@ -300,7 +330,7 @@ export async function loadOrders() {
  */
 export async function loadPurchases() {
     console.log('🛒 loadPurchases: Starting...');
-    const purchasesItems = document.getElementById('purchases-items');
+    const purchasesItems = findCartElement('purchases-items');
     if (!purchasesItems) {
         console.error('❌ loadPurchases: purchases-items element not found');
         return;
