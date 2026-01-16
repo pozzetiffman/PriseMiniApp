@@ -553,8 +553,24 @@ async def get_my_purchases(
         )
     ).order_by(models.Purchase.created_at.desc()).all()
     
-    result = []
+    # Фильтруем продажи, у которых нет product_id и нет информации о товаре (такие продажи не должны попадать в корзину)
+    valid_purchases = []
     for purchase in purchases:
+        # Проверяем, есть ли у продажи product_id
+        has_product_id = purchase.product_id is not None
+        
+        if not has_product_id:
+            continue
+        
+        # Если есть product_id, проверяем, существует ли товар или есть snapshot
+        product_info = get_product_info_for_response(purchase, db)
+        if not product_info or product_info.get("is_unavailable", True):
+            continue
+        
+        valid_purchases.append(purchase)
+    
+    result = []
+    for purchase in valid_purchases:
         # Преобразуем images_urls в полные URL через /api/images/ для обхода блокировки Telegram WebView
         images_urls_list = json.loads(purchase.images_urls) if purchase.images_urls else None
         if images_urls_list:

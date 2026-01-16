@@ -553,9 +553,51 @@ async def get_my_orders(
         )
     ).order_by(models.Order.created_at.desc()).all()
     
+    # Фильтруем заказы, у которых нет product_id и нет валидного snapshot (такие заказы не должны попадать в корзину)
+    valid_orders = []
+    for order in orders:
+        has_snapshot = order.snapshot_id is not None
+        has_product_id = order.product_id is not None
+        
+        # Если нет ни product_id, ни snapshot - пропускаем
+        if not has_snapshot and not has_product_id:
+            continue
+        
+        # Если есть product_id, проверяем, существует ли товар
+        if has_product_id:
+            product = db.query(models.Product).filter(models.Product.id == order.product_id).first()
+            if not product:
+                continue
+        # Если есть только snapshot (без product_id), проверяем, что snapshot содержит валидную информацию
+        elif has_snapshot:
+            snapshot = db.query(models.UserProductSnapshot).filter(
+                models.UserProductSnapshot.snapshot_id == order.snapshot_id
+            ).first()
+            if not snapshot:
+                continue
+            
+            # Проверяем, что из snapshot можно получить валидную информацию о товаре
+            product_info = get_product_display_info_from_snapshot(snapshot)
+            if not product_info or not product_info.get("name"):
+                continue
+            
+            # КРИТИЧНО: Проверяем, существует ли товар из snapshot в БД и доступен ли он
+            # Если товар был удален (snapshot.product_id == None) или товар скрыт - не показываем в активной корзине
+            if snapshot.product_id:
+                product = db.query(models.Product).filter(models.Product.id == snapshot.product_id).first()
+                if not product:
+                    continue
+                if product.is_hidden:
+                    continue
+            else:
+                # Товар был удален (product_id в snapshot стал NULL)
+                continue
+        
+        valid_orders.append(order)
+    
     # Формируем ответ с информацией о товаре из snapshot или из продукта
     result = []
-    for order in orders:
+    for order in valid_orders:
         order_dict = schemas.Order.model_validate(order).model_dump(mode='json')
         
         # ВСЕГДА используем snapshot если он есть - для изоляции данных товара на момент заказа

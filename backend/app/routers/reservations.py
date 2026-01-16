@@ -654,6 +654,8 @@ async def get_cart_reservations(
         )
     ).order_by(models.Reservation.created_at.desc()).all()
     
+    print(f"🔍 [CART DEBUG] After filtering (is_active=True, reserved_until > now): {len(reservations)} reservations")
+    
     # Фильтруем резервации, у которых товар существует (товар мог быть удален)
     # И группируем по sync_product_id, чтобы не показывать дубликаты синхронизированных товаров
     valid_reservations = []

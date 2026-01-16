@@ -22,23 +22,53 @@ import { getPurchasesHistoryAPI } from '../api/purchases.js';
 /**
  * Получение активных резерваций для корзины
  * Backend уже возвращает только активные резервации текущего пользователя
+ * Дополнительно фильтруем для надежности (по is_active и времени истечения)
  * @returns {Promise<Array>} Массив активных резерваций
  */
 export async function fetchActiveReservations() {
-    // Backend уже вернул только активные резервации для корзины (где текущий пользователь - резервирующий)
-    // Backend уже проверил is_active и reserved_until, просто используем все
-    const activeReservations = await fetchUserReservations();
-    return activeReservations;
+    try {
+        const allReservations = await fetchUserReservations();
+        // Дополнительно фильтруем активные резервации для надежности
+        // Проверяем is_active и время истечения (reserved_until)
+        const now = new Date();
+        const activeReservations = (allReservations || []).filter(r => {
+            if (!r.is_active) return false;
+            
+            // Проверяем время истечения резервации
+            if (r.reserved_until) {
+                let reservedUntilStr = r.reserved_until;
+                // Нормализуем формат даты
+                if (!reservedUntilStr.endsWith('Z') && !reservedUntilStr.includes('+') && !reservedUntilStr.includes('-', 10)) {
+                    reservedUntilStr = reservedUntilStr + 'Z';
+                }
+                const reservedUntil = new Date(reservedUntilStr);
+                if (reservedUntil <= now) {
+                    // Резервация истекла
+                    return false;
+                }
+            }
+            
+            return true;
+        });
+        
+        return activeReservations;
+    } catch (e) {
+        console.warn('⚠️ fetchActiveReservations: Failed to fetch reservations for cart UI:', e);
+        return [];
+    }
 }
 
 /**
  * Получение активных заказов для корзины
+ * API может вернуть все заказы, поэтому дополнительно фильтруем активные
  * @returns {Promise<Array>} Массив активных заказов (пустой массив в случае ошибки)
  */
 export async function fetchActiveOrders() {
     let activeOrders = [];
     try {
-        activeOrders = await getMyOrdersAPI();
+        const allOrders = await getMyOrdersAPI();
+        // Дополнительно фильтруем на случай, если API вернет все заказы
+        activeOrders = (allOrders || []).filter(o => !o.is_completed && !o.is_cancelled);
     } catch (e) {
         console.warn('⚠️ fetchActiveOrders: Failed to fetch orders for cart UI:', e);
         activeOrders = [];

@@ -72,9 +72,27 @@ export async function loadCart(updateCartUI = null) {
         console.log('🛒 loadCart: Got reservations:', reservations.length);
         console.log('🛒 loadCart: Reservations data:', reservations);
         
-        // Backend уже проверил is_active и reserved_until, просто используем все
-        const activeReservations = reservations.filter(r => r.is_active === true);
-        console.log('🛒 loadCart: Active reservations:', activeReservations.length);
+        // Фильтруем активные резервации (проверяем is_active и время истечения)
+        const now = new Date();
+        const activeReservations = reservations.filter(r => {
+            if (!r.is_active) return false;
+            
+            // Проверяем время истечения резервации
+            if (r.reserved_until) {
+                let reservedUntilStr = r.reserved_until;
+                // Нормализуем формат даты
+                if (!reservedUntilStr.endsWith('Z') && !reservedUntilStr.includes('+') && !reservedUntilStr.includes('-', 10)) {
+                    reservedUntilStr = reservedUntilStr + 'Z';
+                }
+                const reservedUntil = new Date(reservedUntilStr);
+                if (reservedUntil <= now) {
+                    // Резервация истекла
+                    return false;
+                }
+            }
+            
+            return true;
+        });
         
         if (activeReservations.length === 0) {
             console.log('🛒 loadCart: No active reservations');
@@ -233,15 +251,19 @@ export async function loadOrders() {
     
     try {
         console.log('🛒 loadOrders: Fetching orders from API...');
-        const orders = await getMyOrdersAPI();
-        console.log('🛒 loadOrders: Got orders:', orders ? orders.length : 0, orders);
+        const allOrders = await getMyOrdersAPI();
+        console.log('🛒 loadOrders: Got orders:', allOrders ? allOrders.length : 0, allOrders);
+        
+        // Фильтруем только активные заказы (не завершенные и не отмененные)
+        const orders = (allOrders || []).filter(o => !o.is_completed && !o.is_cancelled);
+        console.log(`🛒 loadOrders: Filtered to ${orders.length} active orders from ${allOrders ? allOrders.length : 0} total`);
         
         if (!orders || orders.length === 0) {
-            ordersItems.innerHTML = '<p class="loading">У вас нет заказов</p>';
+            ordersItems.innerHTML = '<p class="loading">У вас нет активных заказов</p>';
             return;
         }
         
-        // Рендерим список заказов
+        // Рендерим список активных заказов
         ordersItems.innerHTML = '';
         for (const order of orders) {
             try {
