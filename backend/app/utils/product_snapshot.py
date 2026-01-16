@@ -12,7 +12,7 @@ def create_product_snapshot(
     operation_type: str = 'order'
 ) -> str:
     """
-    Создает snapshot товара на момент операции (заказ, продажа, покупка).
+    Создает snapshot товара на момент операции (заказ, продажа, покупка, резервация).
     Это необходимо для изоляции данных товара - даже если товар будет изменен или удален,
     snapshot сохранит его состояние на момент операции.
     
@@ -20,7 +20,7 @@ def create_product_snapshot(
         db: Сессия базы данных
         product: Объект товара
         user_id: ID пользователя, для которого создается snapshot
-        operation_type: Тип операции ('order', 'sell', 'buy')
+        operation_type: Тип операции ('order', 'sell', 'buy', 'reservation')
     
     Returns:
         snapshot_id: Уникальный идентификатор snapshot (UUID строка)

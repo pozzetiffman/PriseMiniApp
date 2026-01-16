@@ -469,13 +469,24 @@ async def get_shop_orders(
                             images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
                         except (json.JSONDecodeError, TypeError):
                             images_urls_list = []
+                    # Вычисляем правильную цену используя ту же логику, что и для snapshot
+                    calculated_price = get_product_price_from_dict({
+                        "price": order.product.price,
+                        "discount": order.product.discount or 0,
+                        "is_for_sale": order.product.is_for_sale or False,
+                        "price_type": order.product.price_type or 'range',
+                        "price_fixed": order.product.price_fixed,
+                        "price_from": order.product.price_from,
+                        "price_to": order.product.price_to
+                    })
+                    
                     order_dict['product'] = {
                         "id": order.product.id,
                         "name": order.product.name,
-                        "price": order.product.price,
-                        "discount": order.product.discount,
+                        "price": calculated_price,
+                        "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
                         "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
-                        "images_urls": images_urls_list,
+                        "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
                         "is_unavailable": False
                     }
                 else:
@@ -496,13 +507,25 @@ async def get_shop_orders(
                     images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
                 except (json.JSONDecodeError, TypeError):
                     images_urls_list = []
+            
+            # Вычисляем правильную цену используя ту же логику, что и для snapshot
+            calculated_price = get_product_price_from_dict({
+                "price": order.product.price,
+                "discount": order.product.discount or 0,
+                "is_for_sale": order.product.is_for_sale or False,
+                "price_type": order.product.price_type or 'range',
+                "price_fixed": order.product.price_fixed,
+                "price_from": order.product.price_from,
+                "price_to": order.product.price_to
+            })
+            
             order_dict['product'] = {
                 "id": order.product.id,
                 "name": order.product.name,
-                "price": order.product.price,
-                "discount": order.product.discount,
+                "price": calculated_price,
+                "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
                 "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
-                "images_urls": images_urls_list,
+                "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
                 "is_unavailable": False
             }
         else:
@@ -640,13 +663,24 @@ async def get_my_orders(
                             images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
                         except (json.JSONDecodeError, TypeError):
                             images_urls_list = []
+                    # Вычисляем правильную цену используя ту же логику, что и для snapshot
+                    calculated_price = get_product_price_from_dict({
+                        "price": order.product.price,
+                        "discount": order.product.discount or 0,
+                        "is_for_sale": order.product.is_for_sale or False,
+                        "price_type": order.product.price_type or 'range',
+                        "price_fixed": order.product.price_fixed,
+                        "price_from": order.product.price_from,
+                        "price_to": order.product.price_to
+                    })
+                    
                     order_dict['product'] = {
                         "id": order.product.id,
                         "name": order.product.name,
-                        "price": order.product.price,
-                        "discount": order.product.discount,
+                        "price": calculated_price,
+                        "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
                         "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
-                        "images_urls": images_urls_list,
+                        "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
                         "is_unavailable": False
                     }
                 else:
@@ -667,13 +701,25 @@ async def get_my_orders(
                     images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
                 except (json.JSONDecodeError, TypeError):
                     images_urls_list = []
+            
+            # Вычисляем правильную цену используя ту же логику, что и для snapshot
+            calculated_price = get_product_price_from_dict({
+                "price": order.product.price,
+                "discount": order.product.discount or 0,
+                "is_for_sale": order.product.is_for_sale or False,
+                "price_type": order.product.price_type or 'range',
+                "price_fixed": order.product.price_fixed,
+                "price_from": order.product.price_from,
+                "price_to": order.product.price_to
+            })
+            
             order_dict['product'] = {
                 "id": order.product.id,
                 "name": order.product.name,
-                "price": order.product.price,
-                "discount": order.product.discount,
+                "price": calculated_price,
+                "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
                 "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
-                "images_urls": images_urls_list,
+                "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
                 "is_unavailable": False
             }
         else:
@@ -772,13 +818,24 @@ async def get_orders_history(
                             images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
                         except (json.JSONDecodeError, TypeError):
                             images_urls_list = []
+                    # Вычисляем правильную цену используя ту же логику, что и для snapshot
+                    calculated_price = get_product_price_from_dict({
+                        "price": order.product.price,
+                        "discount": order.product.discount or 0,
+                        "is_for_sale": order.product.is_for_sale or False,
+                        "price_type": order.product.price_type or 'range',
+                        "price_fixed": order.product.price_fixed,
+                        "price_from": order.product.price_from,
+                        "price_to": order.product.price_to
+                    })
+                    
                     order_dict['product'] = {
                         "id": order.product.id,
                         "name": order.product.name,
-                        "price": order.product.price,
-                        "discount": order.product.discount,
+                        "price": calculated_price,
+                        "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
                         "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
-                        "images_urls": images_urls_list,
+                        "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
                         "is_unavailable": False
                     }
                 else:
@@ -799,13 +856,25 @@ async def get_orders_history(
                     images_urls_list = json.loads(order.product.images_urls) if isinstance(order.product.images_urls, str) else order.product.images_urls
                 except (json.JSONDecodeError, TypeError):
                     images_urls_list = []
+            
+            # Вычисляем правильную цену используя ту же логику, что и для snapshot
+            calculated_price = get_product_price_from_dict({
+                "price": order.product.price,
+                "discount": order.product.discount or 0,
+                "is_for_sale": order.product.is_for_sale or False,
+                "price_type": order.product.price_type or 'range',
+                "price_fixed": order.product.price_fixed,
+                "price_from": order.product.price_from,
+                "price_to": order.product.price_to
+            })
+            
             order_dict['product'] = {
                 "id": order.product.id,
                 "name": order.product.name,
-                "price": order.product.price,
-                "discount": order.product.discount,
+                "price": calculated_price,
+                "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
                 "image_url": make_full_url(order.product.image_url) if order.product.image_url else None,
-                "images_urls": images_urls_list,
+                "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
                 "is_unavailable": False
             }
         else:

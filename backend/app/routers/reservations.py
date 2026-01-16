@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 from ..db import models, database
 from ..models import reservation as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
+from ..utils.product_snapshot import create_product_snapshot, get_product_display_info_from_snapshot
+from ..utils.products_utils import make_full_url
+import json
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -19,6 +22,43 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGR
 WEBAPP_URL = os.getenv("WEBAPP_URL", "")
 
 router = APIRouter(prefix="/api/reservations", tags=["reservations"])
+
+def get_product_price_from_dict(product_dict: dict) -> Optional[float]:
+    """
+    Получить правильную цену товара из словаря (например, из snapshot).
+    Использует ту же логику, что и для обычных товаров.
+    
+    ВАЖНО: product_dict["price"] должна быть ОРИГИНАЛЬНОЙ ценой БЕЗ скидки.
+    Скидка применяется только здесь один раз.
+    """
+    is_for_sale = product_dict.get("is_for_sale", False)
+    
+    if is_for_sale:
+        price_type = product_dict.get("price_type", "range")
+        if price_type == 'fixed' and product_dict.get("price_fixed") is not None:
+            return product_dict.get("price_fixed")
+        elif price_type == 'range' and product_dict.get("price_from") is not None:
+            return product_dict.get("price_from")
+        elif price_type == 'range' and product_dict.get("price_to") is not None:
+            return product_dict.get("price_to")
+        # Если нет цены для продажи, возвращаем обычную цену (может быть None)
+        price = product_dict.get("price")
+        if price is None:
+            return None
+        # Для товаров "на продажу" без указания цены для продажи, применяем скидку к обычной цене
+        discount = product_dict.get("discount", 0)
+        if discount and discount > 0:
+            return round(price * (1 - discount / 100), 2)
+        return price
+    else:
+        # Обычный товар - применяем скидку к цене
+        price = product_dict.get("price")
+        if price is None:
+            return None
+        discount = product_dict.get("discount", 0)
+        if discount and discount > 0:
+            return round(price * (1 - discount / 100), 2)
+        return price
 
 def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     """
@@ -253,6 +293,16 @@ async def create_reservation(
     print(f"DEBUG: All checks passed! Creating reservation for user {reserved_by_user_id}, product {product_id}, quantity={quantity}")
     print(f"DEBUG: Creating reservation - reserved_until={reserved_until}, quantity={quantity}")
     
+    # КРИТИЧНО: Создаем snapshot товара на момент резервации для изоляции данных
+    # Это гарантирует, что товар останется доступным в корзине даже если админ удалит или изменит его
+    snapshot_id = create_product_snapshot(
+        db=db,
+        product=product,
+        user_id=reserved_by_user_id,
+        operation_type='reservation'
+    )
+    print(f"📸 Created snapshot {snapshot_id} for reservation of product {product.id}")
+    
     # Создаем резервации
     # ВСЕГДА создаем резервации только для выбранного товара (product_id) в количестве quantity
     # Не создаем резервации для всех синхронизированных продуктов, так как пользователь выбрал конкретный товар
@@ -265,11 +315,12 @@ async def create_reservation(
             user_id=product.user_id,
             reserved_by_user_id=reserved_by_user_id,
             reserved_until=reserved_until,
-            is_active=True
+            is_active=True,
+            snapshot_id=snapshot_id  # Связываем с snapshot для изоляции данных товара
         )
         db.add(reservation)
         created_reservations.append(reservation)
-        print(f"DEBUG: Created reservation {i+1}/{quantity} for product_id={product.id} (bot_id={product.bot_id})")
+        print(f"DEBUG: Created reservation {i+1}/{quantity} for product_id={product.id} (bot_id={product.bot_id}) with snapshot_id={snapshot_id}")
     
     db.commit()
     for res in created_reservations:
@@ -621,7 +672,7 @@ async def get_user_reservations(
     
     return valid_reservations
 
-@router.get("/cart", response_model=List[schemas.Reservation])
+@router.get("/cart")
 async def get_cart_reservations(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     db: Session = Depends(database.get_db)
@@ -656,30 +707,95 @@ async def get_cart_reservations(
     
     print(f"🔍 [CART DEBUG] After filtering (is_active=True, reserved_until > now): {len(reservations)} reservations")
     
-    # Фильтруем резервации, у которых товар существует (товар мог быть удален)
-    # И группируем по sync_product_id, чтобы не показывать дубликаты синхронизированных товаров
+    # Фильтруем резервации и используем snapshot для изоляции данных товара
+    # Группируем по sync_product_id, чтобы не показывать дубликаты синхронизированных товаров
     valid_reservations = []
     seen_sync_ids = set()  # Для отслеживания уже добавленных товаров по sync_product_id
     
     for reservation in reservations:
-        product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
-        if product:
-            # Используем sync_product_id для группировки (если есть) или product_id
-            sync_id = product.sync_product_id or product.id
-            
+        # КРИТИЧНО: Используем snapshot если он есть - для изоляции данных товара на момент резервации
+        # Это гарантирует, что товар останется доступным в корзине даже если админ удалит или изменит его
+        has_valid_product = False
+        product_info = None
+        
+        if reservation.snapshot_id:
+            # Используем snapshot для изоляции данных товара
+            snapshot = db.query(models.UserProductSnapshot).filter(
+                models.UserProductSnapshot.snapshot_id == reservation.snapshot_id
+            ).first()
+            if snapshot:
+                product_info = get_product_display_info_from_snapshot(snapshot)
+                if product_info:
+                    # Вычисляем правильную цену используя ту же логику, что и для существующих товаров
+                    calculated_price = get_product_price_from_dict(product_info)
+                    product_info["price"] = calculated_price
+                    # ВАЖНО: Обнуляем discount, так как цена уже вычислена со скидкой
+                    product_info["discount"] = 0
+                    # ВАЖНО: Для резерваций товар доступен (он был зарезервирован, когда был доступен)
+                    product_info["is_unavailable"] = False
+                    # Преобразуем images_urls в полные URL
+                    if product_info.get("images_urls"):
+                        product_info["images_urls"] = [make_full_url(img_url) for img_url in product_info["images_urls"]]
+                    if product_info.get("image_url"):
+                        product_info["image_url"] = make_full_url(product_info["image_url"])
+                    has_valid_product = True
+                    # Используем product_id из snapshot для группировки
+                    sync_id = product_info.get("id") or reservation.product_id
+        else:
+            # Fallback: используем актуальный товар (для обратной совместимости со старыми резервациями)
+            product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
+            if product:
+                sync_id = product.sync_product_id or product.id
+                has_valid_product = True
+                # Формируем product_info из актуального товара для frontend
+                images_urls_list = None
+                if product.images_urls:
+                    try:
+                        images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
+                    except (json.JSONDecodeError, TypeError):
+                        images_urls_list = []
+                
+                calculated_price = get_product_price_from_dict({
+                    "price": product.price,
+                    "discount": product.discount or 0,
+                    "is_for_sale": product.is_for_sale or False,
+                    "price_type": product.price_type or 'range',
+                    "price_fixed": product.price_fixed,
+                    "price_from": product.price_from,
+                    "price_to": product.price_to
+                })
+                
+                product_info = {
+                    "id": product.id,
+                    "name": product.name,
+                    "description": product.description,
+                    "price": calculated_price,
+                    "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
+                    "image_url": make_full_url(product.image_url) if product.image_url else None,
+                    "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
+                    "is_unavailable": False
+                }
+        
+        if has_valid_product:
             # Если это первый раз, когда мы видим этот sync_product_id, добавляем резервацию
             if sync_id not in seen_sync_ids:
-                valid_reservations.append(reservation)
+                # Добавляем данные товара из snapshot в резервацию (для frontend)
+                reservation_dict = schemas.Reservation.model_validate(reservation).model_dump(mode='json')
+                if product_info:
+                    reservation_dict['product'] = product_info
+                    print(f"✅ Added reservation {reservation.id} with snapshot_id={reservation.snapshot_id}, product_name={product_info.get('name')} to cart")
+                else:
+                    print(f"⚠️ Added reservation {reservation.id} but product_info is None")
+                valid_reservations.append(reservation_dict)
                 seen_sync_ids.add(sync_id)
-                print(f"✅ Added reservation {reservation.id} for product {product.id} (sync_id={sync_id}) to cart")
             else:
                 # Это дубликат синхронизированного товара - пропускаем
-                print(f"⏭️ Skipped duplicate reservation {reservation.id} for product {product.id} (sync_id={sync_id} already in cart)")
+                print(f"⏭️ Skipped duplicate reservation {reservation.id} (sync_id={sync_id} already in cart)")
         else:
-            # Товар был удален, деактивируем резервацию
+            # Товар был удален и snapshot недоступен, деактивируем резервацию
             reservation.is_active = False
             db.commit()
-            print(f"⚠️ Deactivated reservation {reservation.id} - product {reservation.product_id} not found")
+            print(f"⚠️ Deactivated reservation {reservation.id} - product {reservation.product_id} not found and snapshot unavailable")
     
     print(f"📦 Cart: {len(valid_reservations)} unique products (from {len(reservations)} total reservations)")
     

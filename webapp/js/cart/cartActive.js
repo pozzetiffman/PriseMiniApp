@@ -106,46 +106,80 @@ export async function loadCart(updateCartUI = null) {
         
         console.log('🛒 loadCart: Processing', activeReservations.length, 'reservations');
         for (const reservation of activeReservations) {
-            console.log('🛒 loadCart: Processing reservation:', reservation.id, 'product_id:', reservation.product_id, 'user_id:', reservation.user_id);
+            console.log('🛒 loadCart: Processing reservation:', reservation.id, 'product_id:', reservation.product_id, 'snapshot_id:', reservation.snapshot_id);
             
-            // Проверяем наличие обязательных полей
-            if (!reservation.user_id || !reservation.product_id) {
-                console.error('❌ loadCart: Reservation missing required fields:', {
-                    id: reservation.id,
-                    user_id: reservation.user_id,
-                    product_id: reservation.product_id
-                });
+            // КРИТИЧНО: Используем product из snapshot (изоляция данных товара)
+            // Backend теперь возвращает product из snapshot в reservation.product
+            // Это гарантирует, что товар останется доступным даже если админ удалит или изменит его
+            let product = reservation.product;
+            
+            // Fallback: если product не пришел из snapshot, загружаем по product_id (для обратной совместимости)
+            if (!product) {
+                // Проверяем наличие обязательных полей
+                if (!reservation.user_id || !reservation.product_id) {
+                    console.error('❌ loadCart: Reservation missing required fields:', {
+                        id: reservation.id,
+                        user_id: reservation.user_id,
+                        product_id: reservation.product_id
+                    });
+                    continue;
+                }
+                
+                try {
+                    // Получаем товар напрямую по его ID (из любого магазина)
+                    const productUrl = `${API_BASE}/api/products/${reservation.product_id}`;
+                    console.log('🛒 loadCart: Fetching product by ID (fallback):', productUrl);
+                    
+                    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+                    const TIMEOUT_MS = 5000; // 5 секунд для каждого товара
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => {
+                        controller.abort();
+                    }, TIMEOUT_MS);
+                    
+                    try {
+                        const productResponse = await fetch(productUrl, {
+                            headers: getBaseHeadersNoAuth(),
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        
+                        if (!productResponse.ok) {
+                            const errorText = await productResponse.text();
+                            console.error(`❌ loadCart: Failed to fetch product ${reservation.product_id}:`, productResponse.status, errorText);
+                            continue;
+                        }
+                        
+                        product = await productResponse.json();
+                    } catch (fetchError) {
+                        clearTimeout(timeoutId);
+                        
+                        // Обработка ошибки таймаута
+                        if (fetchError.name === 'AbortError') {
+                            console.error(`❌ loadCart: Timeout fetching product ${reservation.product_id}`);
+                            continue; // Пропускаем этот товар
+                        }
+                        
+                        console.error('❌ Error loading cart item:', fetchError);
+                        console.error('❌ Reservation:', reservation);
+                        console.error('❌ Error stack:', fetchError.stack);
+                        continue;
+                    }
+                } catch (e) {
+                    console.error('❌ Error loading cart item:', e);
+                    console.error('❌ Reservation:', reservation);
+                    console.error('❌ Error stack:', e.stack);
+                    continue;
+                }
+            }
+            
+            if (!product || !product.name) {
+                console.error('❌ loadCart: Product data is invalid:', product);
                 continue;
             }
             
-            try {
-                // Получаем товар напрямую по его ID (из любого магазина)
-                const productUrl = `${API_BASE}/api/products/${reservation.product_id}`;
-                console.log('🛒 loadCart: Fetching product by ID:', productUrl);
-                
-                // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
-                const TIMEOUT_MS = 5000; // 5 секунд для каждого товара
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => {
-                    controller.abort();
-                }, TIMEOUT_MS);
-                
-                try {
-                    const productResponse = await fetch(productUrl, {
-                        headers: getBaseHeadersNoAuth(),
-                        signal: controller.signal
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (!productResponse.ok) {
-                        const errorText = await productResponse.text();
-                        console.error(`❌ loadCart: Failed to fetch product ${reservation.product_id}:`, productResponse.status, errorText);
-                        continue;
-                    }
-                    
-                    const product = await productResponse.json();
-                console.log('🛒 loadCart: Found product:', product.name, 'id:', product.id);
+            console.log('🛒 loadCart: Using product from snapshot:', product.name, 'id:', product.id);
                 
                 // Использование импортированной функции для расчета времени до истечения резервации
                 const timeText = calculateReservationTimeLeft(reservation.reserved_until);
@@ -191,28 +225,10 @@ export async function loadCart(updateCartUI = null) {
                     ${cancelButton}
                 `;
                 
-                // Вставляем контейнер изображения в начало
-                cartItem.insertBefore(imageContainer, cartItem.firstChild);
-                    cartItems.appendChild(cartItem);
-                    console.log('🛒 loadCart: Added cart item for product:', product.name);
-                } catch (fetchError) {
-                    clearTimeout(timeoutId);
-                    
-                    // Обработка ошибки таймаута
-                    if (fetchError.name === 'AbortError') {
-                        console.error(`❌ loadCart: Timeout fetching product ${reservation.product_id}`);
-                        continue; // Пропускаем этот товар
-                    }
-                    
-                    console.error('❌ Error loading cart item:', fetchError);
-                    console.error('❌ Reservation:', reservation);
-                    console.error('❌ Error stack:', fetchError.stack);
-                }
-            } catch (e) {
-                console.error('❌ Error loading cart item:', e);
-                console.error('❌ Reservation:', reservation);
-                console.error('❌ Error stack:', e.stack);
-            }
+            // Вставляем контейнер изображения в начало
+            cartItem.insertBefore(imageContainer, cartItem.firstChild);
+            cartItems.appendChild(cartItem);
+            console.log('🛒 loadCart: Added cart item for product:', product.name);
         }
         
         console.log('🛒 loadCart: Completed, total items:', cartItems.children.length);
@@ -267,23 +283,30 @@ export async function loadOrders() {
         ordersItems.innerHTML = '';
         for (const order of orders) {
             try {
-                // Получаем товар напрямую по его ID (из любого магазина)
-                if (!order.product_id) {
-                    console.warn('🛒 loadOrders: Order missing product_id:', order.id);
-                    continue;
+                // КРИТИЧНО: Используем product из snapshot (изоляция данных товара)
+                // Backend возвращает product из snapshot в order.product
+                // Это гарантирует, что товар останется доступным даже если админ удалит или изменит его
+                let product = order.product;
+                
+                // Fallback: если product не пришел из snapshot, загружаем по product_id (для обратной совместимости)
+                if (!product && order.product_id) {
+                    const productUrl = `${API_BASE}/api/products/${order.product_id}`;
+                    const productResponse = await fetch(productUrl, {
+                        headers: getBaseHeadersNoAuth()
+                    });
+                    
+                    if (!productResponse.ok) {
+                        console.warn(`🛒 loadOrders: Failed to fetch product ${order.product_id}:`, productResponse.status);
+                        continue;
+                    }
+                    
+                    product = await productResponse.json();
                 }
                 
-                const productUrl = `${API_BASE}/api/products/${order.product_id}`;
-                const productResponse = await fetch(productUrl, {
-                    headers: getBaseHeadersNoAuth()
-                });
-                
-                if (!productResponse.ok) {
-                    console.warn(`🛒 loadOrders: Failed to fetch product ${order.product_id}:`, productResponse.status);
+                if (!product || !product.name) {
+                    console.warn('🛒 loadOrders: Order missing valid product:', order.id);
                     continue;
                 }
-                
-                const product = await productResponse.json();
                 
                 // Использование импортированных функций из утилит
                 const imageUrl = getProductImageUrl(product, API_BASE);

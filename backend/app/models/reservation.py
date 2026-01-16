@@ -15,6 +15,7 @@ class Reservation(ReservationBase):
     reserved_by_user_id: int  # Кто зарезервировал
     created_at: datetime
     is_active: bool
+    snapshot_id: Optional[str] = None  # ID snapshot товара на момент резервации
 
     class Config:
         from_attributes = True

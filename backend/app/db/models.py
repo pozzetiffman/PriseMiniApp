@@ -67,6 +67,7 @@ class Reservation(Base):
     reserved_until = Column(DateTime, index=True)  # До какого времени зарезервировано
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)  # Активна ли резервация
+    snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент резервации
     
     product = relationship("Product", backref="reservations")
 
