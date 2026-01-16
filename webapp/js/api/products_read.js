@@ -23,16 +23,42 @@ export async function fetchProducts(shopOwnerId, categoryId = null, botId = null
         const data = await apiRequest(url, {
             headers: getBaseHeadersNoAuth()
         });
-        console.log("✅ Products fetched:", data.length);
-        return data;
+        
+        // === ИСПРАВЛЕНИЕ: Валидация данных товаров ===
+        if (!Array.isArray(data)) {
+            console.warn('⚠️ [PRODUCTS API] Response is not an array:', typeof data);
+            return [];
+        }
+        
+        // === ИСПРАВЛЕНИЕ: Валидация товаров с невалидными category_id ===
+        const validProducts = data.filter(prod => {
+            if (!prod || typeof prod.id !== 'number') {
+                console.warn('⚠️ [PRODUCTS API] Пропущен невалидный товар:', prod);
+                return false;
+            }
+            
+            // Если category_id указан, он должен быть числом или null
+            if (prod.category_id !== null && prod.category_id !== undefined && typeof prod.category_id !== 'number') {
+                console.warn(`⚠️ [PRODUCTS API] Товар ${prod.id} имеет невалидный category_id:`, prod.category_id, '- устанавливаем null');
+                prod.category_id = null;
+            }
+            
+            return true;
+        });
+        
+        console.log("✅ Products fetched:", validProducts.length, `(из ${data.length})`);
+        return validProducts;
     } catch (e) {
         console.error("❌ Error fetching products:", e);
+        console.error("❌ Error details:", {
+            message: e.message,
+            stack: e.stack,
+            name: e.name
+        });
         throw e;
     }
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] fetchProducts() loaded from api/products_read.js');
 
 // ========== END REFACTORING STEP 4.1 ==========
 
@@ -53,8 +79,6 @@ export async function getSoldProductsAPI(shopOwnerId) {
     }
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getSoldProductsAPI() loaded from api/products_read.js');
 
 // ========== END REFACTORING STEP 4.2 ==========
 

@@ -166,7 +166,7 @@ export function updateProductFilterOptions() {
 }
 
 // Применение фильтров к товарам
-export function applyFilters() {
+export async function applyFilters() {
     const allProducts = allProductsGetter ? allProductsGetter() : [];
     const productFilters = productFiltersGetter ? productFiltersGetter() : {};
     const selectedCategoryIds = selectedCategoryIdsGetter ? selectedCategoryIdsGetter() : new Set();
@@ -175,36 +175,32 @@ export function applyFilters() {
     const currentCategoryId = currentCategoryIdGetter ? currentCategoryIdGetter() : null;
     const productsGrid = productsGridElement;
     
-    if (allProducts.length === 0) {
-        // Если товары еще не загружены, просто рендерим пустой список
-        if (productsGrid) {
-            productsGrid.innerHTML = '<p class="loading">Загрузка товаров...</p>';
-        }
-        return;
-    }
-    
     let filteredProducts = [...allProducts];
     
     // Фильтр по категориям
-    // Если выбраны подкатегории через выпадающие списки, применяем их
+    // === ИСПРАВЛЕНИЕ: Логика фильтрации категорий ===
+    // 1. Если выбраны категории через selectedCategoryIds - фильтруем по ним
+    // 2. Если выбрана основная категория (selectedMainCategoryId) - показываем товары из неё И из всех подкатегорий
+    // 3. Если выбран currentCategoryId (старый способ) - фильтруем по нему
     if (selectedCategoryIds.size > 0) {
+        // Выбраны конкретные категории (основная + подкатегории или только подкатегории)
         filteredProducts = filteredProducts.filter(prod => {
             return selectedCategoryIds.has(prod.category_id);
         });
     } else if (selectedMainCategoryId !== null) {
-        // Если выбрана основная категория, но не выбраны подкатегории
-        // Показываем товары из всех её подкатегорий (если они есть)
-        const selectedMainCategory = categoriesHierarchy.find(cat => cat.id === selectedMainCategoryId);
-        if (selectedMainCategory && selectedMainCategory.subcategories && selectedMainCategory.subcategories.length > 0) {
-            // Основная категория с подкатегориями - показываем товары из всех подкатегорий
-            const subcategoryIds = new Set(selectedMainCategory.subcategories.map(sub => sub.id));
+        // Выбрана основная категория, но selectedCategoryIds пуст (не должно происходить после исправления выше)
+        // На всякий случай оставляем fallback логику
+        const selectedMainCategory = categoriesHierarchy.find(cat => cat && cat.id === selectedMainCategoryId) || null;
+        if (selectedMainCategory) {
+            const categoryIds = new Set([selectedMainCategoryId]);
+            // Добавляем все подкатегории
+            if (selectedMainCategory.subcategories && Array.isArray(selectedMainCategory.subcategories)) {
+                selectedMainCategory.subcategories.forEach(sub => {
+                    categoryIds.add(sub.id);
+                });
+            }
             filteredProducts = filteredProducts.filter(prod => {
-                return subcategoryIds.has(prod.category_id);
-            });
-        } else if (selectedMainCategory && (!selectedMainCategory.subcategories || selectedMainCategory.subcategories.length === 0)) {
-            // Основная категория без подкатегорий - показываем товары из самой категории
-            filteredProducts = filteredProducts.filter(prod => {
-                return prod.category_id === selectedMainCategoryId;
+                return categoryIds.has(prod.category_id);
             });
         }
     } else if (currentCategoryId !== null) {
@@ -316,7 +312,7 @@ export function applyFilters() {
     
     // Рендерим отфильтрованные товары
     if (renderProductsCallback) {
-        renderProductsCallback(filteredProducts);
+        await renderProductsCallback(filteredProducts);
     }
 }
 

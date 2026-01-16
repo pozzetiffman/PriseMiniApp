@@ -52,8 +52,6 @@ export async function createOrderAPI(orderData) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] createOrderAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.1 ==========
 
@@ -77,8 +75,6 @@ export async function getShopOrdersAPI() {
     return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getShopOrdersAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.2 ==========
 
@@ -102,8 +98,6 @@ export async function getUserUsernameAPI(userId) {
     return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getUserUsernameAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.3 ==========
 
@@ -112,23 +106,49 @@ console.log('✅ [REFACTORING] getUserUsernameAPI() loaded from api/orders.js');
 export async function getMyOrdersAPI() {
     const url = `${API_BASE}/api/orders/my`;
     console.log(`Fetching my orders from: ${url}`);
+
+    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+    const TIMEOUT_MS = 10000; // 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, TIMEOUT_MS);
     
-    const response = await fetch(url, {
-        headers: getBaseHeaders()
-    });
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`My orders error: ${response.status} - ${errorText}`);
+    try {
+        const response = await fetch(url, {
+            headers: getBaseHeaders(),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`My orders error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log(`✅ My orders fetched: ${data.length}`);
+        return data;
+    } catch (e) {
+        clearTimeout(timeoutId);
+        
+        // Обработка ошибки таймаута
+        if (e.name === 'AbortError') {
+            console.error("❌ getMyOrdersAPI timeout after", TIMEOUT_MS, "ms");
+            throw new Error("Таймаут загрузки заказов. Сервер не отвечает.");
+        }
+        
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching orders:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу.");
+        }
+        
+        throw e;
     }
-    
-    const data = await response.json();
-    console.log(`✅ My orders fetched: ${data.length}`);
-    return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getMyOrdersAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.4 ==========
 
@@ -138,22 +158,48 @@ export async function getOrdersHistoryAPI() {
     const url = `${API_BASE}/api/orders/history`;
     console.log(`Fetching orders history from: ${url}`);
     
-    const response = await fetch(url, {
-        headers: getBaseHeaders()
-    });
+    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+    const TIMEOUT_MS = 10000; // 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, TIMEOUT_MS);
     
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Orders history error: ${response.status} - ${errorText}`);
+    try {
+        const response = await fetch(url, {
+            headers: getBaseHeaders(),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Orders history error: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log(`✅ Orders history fetched: ${data.length}`);
+        return data;
+    } catch (e) {
+        clearTimeout(timeoutId);
+        
+        // Обработка ошибки таймаута
+        if (e.name === 'AbortError') {
+            console.error("❌ getOrdersHistoryAPI timeout after", TIMEOUT_MS, "ms");
+            throw new Error("Таймаут загрузки истории заказов. Сервер не отвечает.");
+        }
+        
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching orders history:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу.");
+        }
+        
+        throw e;
     }
-    
-    const data = await response.json();
-    console.log(`✅ Orders history fetched: ${data.length}`);
-    return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getOrdersHistoryAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.5 ==========
 
@@ -185,8 +231,6 @@ export async function completeOrderAPI(orderId) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] completeOrderAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.6 ==========
 
@@ -218,8 +262,6 @@ export async function cancelOrderAPI(orderId) {
     return true;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] cancelOrderAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.7 ==========
 
@@ -251,8 +293,6 @@ export async function deleteOrderAPI(orderId) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] deleteOrderAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.8 ==========
 
@@ -288,8 +328,6 @@ export async function deleteOrdersAPI(orderIds) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] deleteOrdersAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.9 ==========
 
@@ -321,8 +359,6 @@ export async function clearOrdersHistoryAPI() {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] clearOrdersHistoryAPI() loaded from api/orders.js');
 
 // ========== END REFACTORING STEP 8.10 ==========
 

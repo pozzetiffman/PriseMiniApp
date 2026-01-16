@@ -35,8 +35,6 @@ export async function toggleHotOffer(productId, shopOwnerId, isHotOffer) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] toggleHotOffer() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.1 ==========
 
@@ -72,8 +70,6 @@ export async function updateProductAPI(productId, shopOwnerId, price, discount) 
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updateProductAPI() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.2 ==========
 
@@ -109,8 +105,6 @@ export async function updateProductNameDescriptionAPI(productId, shopOwnerId, na
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updateProductNameDescriptionAPI() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.3 ==========
 
@@ -148,8 +142,6 @@ export async function updateProductQuantityAPI(productId, shopOwnerId, quantity,
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updateProductQuantityAPI() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.4 ==========
 
@@ -189,8 +181,6 @@ export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMade
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updateProductMadeToOrderAPI() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.5 ==========
 
@@ -230,8 +220,6 @@ export async function updateProductQuantityShowEnabledAPI(productId, shopOwnerId
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updateProductQuantityShowEnabledAPI() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.6 ==========
 
@@ -277,8 +265,6 @@ export async function updateProductForSaleAPI(productId, shopOwnerId, forSaleDat
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updateProductForSaleAPI() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.7 ==========
 
@@ -319,8 +305,6 @@ export async function bulkUpdateAllProductsMadeToOrderAPI(isMadeToOrder) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] bulkUpdateAllProductsMadeToOrderAPI() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.8 ==========
 
@@ -360,8 +344,6 @@ export async function updateProductHiddenAPI(productId, shopOwnerId, isHidden) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updateProductHiddenAPI() loaded from api/products_update.js');
 
 // ========== END REFACTORING STEP 5.9 ==========
 

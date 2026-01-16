@@ -16,10 +16,20 @@ export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
     }
     console.log("📂 Fetching categories from:", url, "botId:", botId, "flat:", flat);
     
+    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+    const TIMEOUT_MS = 10000; // 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, TIMEOUT_MS);
+    
     try {
         const response = await fetch(url, {
-            headers: getBaseHeadersNoAuth()
+            headers: getBaseHeadersNoAuth(),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
             const errorText = await response.text();
@@ -27,10 +37,43 @@ export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
             throw new Error(`Ошибка загрузки категорий: ${response.status} - ${errorText}`);
         }
         
-        const data = await response.json();
+        // === ИСПРАВЛЕНИЕ: Безопасный парсинг JSON с защитой от ошибок ===
+        let data = null;
+        try {
+            const responseText = await response.text();
+            console.log("📂 Categories response text length:", responseText.length);
+            
+            // === ИСПРАВЛЕНИЕ: Проверка на пустой ответ ===
+            if (!responseText || responseText.trim() === '') {
+                console.warn('⚠️ [CATEGORIES API] Empty response, returning empty array');
+                return [];
+            }
+            
+            data = JSON.parse(responseText);
+        } catch (parseError) {
+            console.error("❌ JSON parse error in categories:", parseError);
+            console.error("❌ Response status:", response.status);
+            console.error("❌ Response text preview:", responseText?.substring(0, 200));
+            throw new Error(`Ошибка парсинга категорий: ${parseError.message}`);
+        }
+        
+        // === ИСПРАВЛЕНИЕ: Валидация данных категорий ===
+        if (!Array.isArray(data)) {
+            console.warn('⚠️ [CATEGORIES API] Response is not an array:', typeof data, data);
+            return [];
+        }
+        
         console.log("✅ Categories fetched:", data.length);
         return data;
     } catch (e) {
+        clearTimeout(timeoutId);
+        
+        // Обработка ошибки таймаута
+        if (e.name === 'AbortError') {
+            console.error("❌ Categories request timeout after", TIMEOUT_MS, "ms");
+            throw new Error("Таймаут загрузки категорий. Сервер не отвечает. Попробуйте позже.");
+        }
+        
         // Обработка сетевых ошибок
         if (e.name === 'TypeError' && e.message.includes('fetch')) {
             console.error("❌ Network error fetching categories:", e);

@@ -22,8 +22,6 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGR
 WEBAPP_URL = os.getenv("WEBAPP_URL", "")
 API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", os.getenv("WEBAPP_URL", "https://unmaneuvered-chronogrammatically-otelia.ngrok-free.dev"))
 
-print(f"DEBUG: Purchase router initialized - TELEGRAM_BOT_TOKEN={'SET' if TELEGRAM_BOT_TOKEN else 'NOT SET'}, WEBAPP_URL={WEBAPP_URL}, API_PUBLIC_URL={API_PUBLIC_URL}")
-
 router = APIRouter(prefix="/api/purchases", tags=["purchases"])
 
 def make_full_url(path: str) -> str:

@@ -21,10 +21,12 @@ function waitForTelegramWebApp(maxAttempts = 50, delay = 100) {
             }
             
             if (attempts >= maxAttempts) {
-                const errorMsg = '❌ КРИТИЧЕСКАЯ ОШИБКА: Telegram WebApp не найден. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
-                console.error(errorMsg);
-                console.error('⚠️ Попытки:', attempts, 'window.Telegram:', window.Telegram);
-                reject(new Error(errorMsg));
+                // === ИСПРАВЛЕНИЕ: Graceful degradation вместо reject ===
+                const errorMsg = '⚠️ Telegram WebApp не найден. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
+                console.warn(errorMsg);
+                console.warn('⚠️ Попытки:', attempts, 'window.Telegram:', window.Telegram);
+                // НЕ выбрасываем ошибку - просто разрешаем промис, проверка будет в requireTelegram()
+                resolve();
                 return;
             }
             
@@ -38,17 +40,16 @@ function waitForTelegramWebApp(maxAttempts = 50, delay = 100) {
 export async function initTelegram() {
     // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
     // Ждем загрузки Telegram WebApp скрипта
-    try {
-        await waitForTelegramWebApp();
-    } catch (e) {
-        throw e;
-    }
+    // === ИСПРАВЛЕНИЕ: Graceful degradation - waitForTelegramWebApp больше не бросает ошибки ===
+    await waitForTelegramWebApp();
     
     // Проверяем наличие Telegram WebApp
     if (!window.Telegram || !window.Telegram.WebApp) {
-        const errorMsg = '❌ КРИТИЧЕСКАЯ ОШИБКА: Telegram WebApp не найден. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
-        console.error(errorMsg);
-        throw new Error(errorMsg);
+        // === ИСПРАВЛЕНИЕ: Graceful degradation вместо throw ===
+        console.warn('⚠️ [initTelegram] Telegram WebApp не найден, продолжаем с fallback');
+        // НЕ выбрасываем ошибку, проверка будет в requireTelegram()
+        tg = null;
+        return false; // Возвращаем false вместо throw
     }
     
     tg = window.Telegram.WebApp;
@@ -100,7 +101,6 @@ export function getInitData() {
     
     // Способ 1: через tg.initData (основной способ)
     if (tg.initData && typeof tg.initData === 'string' && tg.initData.length > 0) {
-        console.log('✅ getInitData: Got from tg.initData, length:', tg.initData.length);
         return tg.initData;
     }
     
@@ -108,7 +108,6 @@ export function getInitData() {
     if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
         const initData = window.Telegram.WebApp.initData;
         if (typeof initData === 'string' && initData.length > 0) {
-            console.log('✅ getInitData: Got from window.Telegram.WebApp.initData, length:', initData.length);
             return initData;
         }
     }
@@ -123,23 +122,36 @@ export function getInitData() {
 /**
  * Проверить, что приложение запущено в Telegram
  * Согласно аудиту: приложение работает ТОЛЬКО через Telegram
- * @returns {boolean}
- * @throws {Error} если Telegram недоступен
+ * @returns {Object|null} Объект пользователя Telegram или fallback-объект, или null
+ * При отсутствии initData возвращает fallback-объект вместо throw Error
  */
 export function requireTelegram() {
     if (!isTelegramAvailable()) {
-        const errorMsg = '❌ КРИТИЧЕСКАЯ ОШИБКА: Telegram WebApp недоступен. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
-        console.error(errorMsg);
-        throw new Error(errorMsg);
+        const errorMsg = '⚠️ Telegram WebApp недоступен. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
+        console.warn(errorMsg);
+        // === ИСПРАВЛЕНИЕ: Graceful degradation вместо throw ===
+        return {
+            id: null,
+            isFallback: true,
+            fallbackReason: 'telegram_not_available'
+        };
     }
     
-    if (!tg.initDataUnsafe?.user) {
-        const errorMsg = '❌ КРИТИЧЕСКАЯ ОШИБКА: Данные пользователя Telegram не найдены. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
-        console.error(errorMsg);
-        throw new Error(errorMsg);
+    // === ИСПРАВЛЕНИЕ: Безопасная проверка tg перед обращением к свойствам ===
+    if (!tg || !tg.initDataUnsafe || !tg.initDataUnsafe.user) {
+        const errorMsg = '⚠️ Данные пользователя Telegram не найдены. Приложение должно открываться ТОЛЬКО через Telegram-бота.';
+        console.warn(errorMsg);
+        // === ИСПРАВЛЕНИЕ: Graceful degradation вместо throw ===
+        return {
+            id: null,
+            isFallback: true,
+            fallbackReason: 'user_data_not_found'
+        };
     }
     
-    return true;
+    // === Возвращаем объект пользователя для совместимости ===
+    // Для обратной совместимости: возвращаем user объект (truthy)
+    return tg.initDataUnsafe.user;
 }
 
 /**

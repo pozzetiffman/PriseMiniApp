@@ -32,8 +32,6 @@ export async function deleteProductAPI(productId, shopOwnerId) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] deleteProductAPI() loaded from api/products_delete.js');
 
 // ========== END REFACTORING STEP 6.1 ==========
 
@@ -65,8 +63,6 @@ export async function markProductSoldAPI(productId, shopOwnerId, quantity = 1) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] markProductSoldAPI() loaded from api/products_delete.js');
 
 // ========== END REFACTORING STEP 6.2 ==========
 
@@ -98,8 +94,6 @@ export async function deleteSoldProductAPI(soldId, shopOwnerId) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] deleteSoldProductAPI() loaded from api/products_delete.js');
 
 // ========== END REFACTORING STEP 6.3 ==========
 
@@ -135,8 +129,6 @@ export async function deleteSoldProductsAPI(soldIds, shopOwnerId) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] deleteSoldProductsAPI() loaded from api/products_delete.js');
 
 // ========== END REFACTORING STEP 6.4 ==========
 

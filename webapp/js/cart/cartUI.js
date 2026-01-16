@@ -25,11 +25,9 @@ import { getPurchasesHistoryAPI } from '../api/purchases.js';
  * @returns {Promise<Array>} Массив активных резерваций
  */
 export async function fetchActiveReservations() {
-    console.log('🛒 fetchActiveReservations: Fetching active reservations...');
     // Backend уже вернул только активные резервации для корзины (где текущий пользователь - резервирующий)
     // Backend уже проверил is_active и reserved_until, просто используем все
     const activeReservations = await fetchUserReservations();
-    console.log(`🛒 fetchActiveReservations: Got ${activeReservations.length} active cart reservations from server`);
     return activeReservations;
 }
 
@@ -38,11 +36,9 @@ export async function fetchActiveReservations() {
  * @returns {Promise<Array>} Массив активных заказов (пустой массив в случае ошибки)
  */
 export async function fetchActiveOrders() {
-    console.log('🛒 fetchActiveOrders: Fetching active orders...');
     let activeOrders = [];
     try {
         activeOrders = await getMyOrdersAPI();
-        console.log(`🛒 fetchActiveOrders: Got ${activeOrders ? activeOrders.length : 0} orders from server`);
     } catch (e) {
         console.warn('⚠️ fetchActiveOrders: Failed to fetch orders for cart UI:', e);
         activeOrders = [];
@@ -56,13 +52,11 @@ export async function fetchActiveOrders() {
  * @returns {Promise<Array>} Массив активных продаж (пустой массив в случае ошибки)
  */
 export async function fetchActivePurchases() {
-    console.log('🛒 fetchActivePurchases: Fetching active purchases...');
     let activePurchases = [];
     try {
         const allPurchases = await getMyPurchasesAPI();
         // Дополнительно фильтруем на случай, если API вернет все продажи
         activePurchases = (allPurchases || []).filter(p => !p.is_completed && !p.is_cancelled);
-        console.log(`🛒 fetchActivePurchases: Got ${activePurchases.length} active purchases from server (filtered from ${allPurchases ? allPurchases.length : 0} total)`);
     } catch (e) {
         console.warn('⚠️ fetchActivePurchases: Failed to fetch purchases for cart UI:', e);
         activePurchases = [];
@@ -76,7 +70,6 @@ export async function fetchActivePurchases() {
  * @returns {Promise<boolean>} true если найдена хотя бы одна запись в истории
  */
 export async function checkHistoryExists() {
-    console.log('🛒 checkHistoryExists: Checking for history...');
     let hasHistory = false;
     
     try {
@@ -85,7 +78,6 @@ export async function checkHistoryExists() {
         const historyReservationsCount = (historyReservations || []).filter(r => r.is_active === false).length;
         if (historyReservationsCount > 0) {
             hasHistory = true;
-            console.log(`🛒 checkHistoryExists: Found ${historyReservationsCount} history reservations`);
             return hasHistory;
         }
     } catch (e) {
@@ -99,7 +91,6 @@ export async function checkHistoryExists() {
             const historyOrdersCount = (historyOrders || []).filter(o => o.is_completed === true || o.is_cancelled === true).length;
             if (historyOrdersCount > 0) {
                 hasHistory = true;
-                console.log(`🛒 checkHistoryExists: Found ${historyOrdersCount} history orders`);
                 return hasHistory;
             }
         } catch (e) {
@@ -114,7 +105,6 @@ export async function checkHistoryExists() {
             const historyPurchasesCount = (historyPurchases || []).filter(p => p.is_completed === true || p.is_cancelled === true).length;
             if (historyPurchasesCount > 0) {
                 hasHistory = true;
-                console.log(`🛒 checkHistoryExists: Found ${historyPurchasesCount} history purchases`);
                 return hasHistory;
             }
         } catch (e) {
@@ -122,7 +112,6 @@ export async function checkHistoryExists() {
         }
     }
     
-    console.log(`🛒 checkHistoryExists: Has history: ${hasHistory}`);
     return hasHistory;
 }
 
@@ -197,8 +186,6 @@ export function updateCartButtonVisibility(cartButton, cartCount, totalItems, ha
  * Основная функция для обновления состояния корзины и видимости кнопки
  */
 export async function updateCartUI() {
-    console.log('🛒🛒🛒 ========== updateCartUI START ==========');
-    
     // Получаем элементы DOM корзины
     const cartButton = document.getElementById('cart-button');
     const cartCount = document.getElementById('cart-count');
@@ -219,33 +206,11 @@ export async function updateCartUI() {
         
         // Общее количество активных элементов в корзине (резервации + заказы + продажи)
         const totalItems = activeReservations.length + (activeOrders ? activeOrders.length : 0) + (activePurchases ? activePurchases.length : 0);
-        console.log(`🛒 Total active cart items: ${totalItems} (${activeReservations.length} reservations + ${activeOrders ? activeOrders.length : 0} orders + ${activePurchases ? activePurchases.length : 0} purchases)`);
-        console.log(`🛒 Has history: ${hasHistory}`);
         
         // Удаляем дебаг-индикатор, если он был создан ранее
         const existingDebugIndicator = document.getElementById('cart-debug-indicator');
         if (existingDebugIndicator) {
             existingDebugIndicator.remove();
-        }
-        
-        // Логирование деталей для отладки
-        if (totalItems > 0 || hasHistory) {
-            console.log(`🛒🛒🛒 ПОКАЗЫВАЕМ КОРЗИНУ! Найдено ${activeReservations.length} активных резерваций, ${activeOrders ? activeOrders.length : 0} заказов и ${activePurchases ? activePurchases.length : 0} продаж`);
-            console.log(`🛒🛒🛒 Резервации:`, activeReservations.map(r => ({
-                id: r.id,
-                product_id: r.product_id,
-                reserved_by: r.reserved_by_user_id,
-                is_active: r.is_active,
-                reserved_until: r.reserved_until
-            })));
-            console.log(`🛒🛒🛒 Заказы:`, activeOrders ? activeOrders.map(o => ({
-                id: o.id,
-                product_id: o.product_id,
-                is_completed: o.is_completed,
-                is_cancelled: o.is_cancelled
-            })) : []);
-        } else {
-            console.log(`❌ Cart button hidden - no active items or history (found ${activeReservations.length} active reservations, ${activeOrders ? activeOrders.length : 0} active orders, ${activePurchases ? activePurchases.length : 0} active sales, hasHistory: ${hasHistory})`);
         }
         
         // Обновляем видимость кнопки корзины
@@ -259,7 +224,5 @@ export async function updateCartUI() {
             cartButton.style.pointerEvents = 'none';
         }
     }
-    
-    console.log('🛒🛒🛒 ========== updateCartUI END ==========');
 }
 

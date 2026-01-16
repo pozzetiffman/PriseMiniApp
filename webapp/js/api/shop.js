@@ -10,8 +10,11 @@ export async function getContext(shopOwnerId = null) {
     // #endregion
     
     // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
-    // requireTelegram() бросает исключение если Telegram недоступен
-    requireTelegram();
+    // === ИСПРАВЛЕНИЕ: Проверка fallback состояния ===
+    const telegramUser = requireTelegram();
+    if (telegramUser && telegramUser.isFallback) {
+        throw new Error('Приложение должно открываться через Telegram-бота');
+    }
     
     // Получаем заголовки с initData
     const headers = getBaseHeaders();

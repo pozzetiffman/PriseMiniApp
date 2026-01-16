@@ -31,7 +31,6 @@ import { initModalsDependencies, setupModals } from './modals.js';
 // Импорт функций загрузки данных из отдельного модуля (рефакторинг)
 import { initDataDependencies, loadData, updateShopNameInHeader } from './data.js';
 // Импорт функций переключения вида карточек
-import { initFavorites, updateFavoritesCount } from './favorites.js';
 import { initCardViewToggle } from './handlers/cardViewToggle.js';
 // Импорт remoteLogger для отладки
 import { initRemoteLogger } from './utils/remoteLogger.js';
@@ -79,36 +78,90 @@ let currentImages = [];
 let currentProduct = null;
 let currentImageLoadId = 0; // Уникальный ID для отслеживания актуальности загрузки изображения
 
+// Безопасная ленивая загрузка модуля favorites (необязательный модуль)
+async function tryInitFavorites(appContext) {
+    if (!appContext || appContext.role !== 'client') return;
+
+    try {
+        const module = await import('./favorites.js');
+        if (module.initFavorites) {
+            module.initFavorites();
+        }
+        if (module.updateFavoritesCount) {
+            setTimeout(() => {
+                module.updateFavoritesCount().catch(() => {
+                    // Игнорируем ошибки обновления счетчика
+                });
+            }, 500);
+        }
+    } catch (e) {
+        // favorites — необязательный модуль
+        // отсутствие файла НЕ должно ломать магазин
+    }
+}
+
+// Безопасный вызов updateFavoritesCount
+async function tryUpdateFavoritesCount() {
+    try {
+        const module = await import('./favorites.js');
+        if (module.updateFavoritesCount) {
+            await module.updateFavoritesCount();
+        }
+    } catch (e) {
+        // Игнорируем ошибки, модуль необязательный
+    }
+}
+
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async () => {
-    // 0. Инициализируем remoteLogger ПЕРВЫМ, чтобы перехватить все логи
-    initRemoteLogger();
-    
-    console.log('📄 DOMContentLoaded - инициализация приложения');
-    
-    // 1. Инициализируем Telegram WebApp
-    // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
+    // === ИСПРАВЛЕНИЕ: Глобальная защита от падения приложения ===
     try {
+        // 0. Инициализируем remoteLogger ПЕРВЫМ, чтобы перехватить все логи
+        initRemoteLogger();
+        
+        console.log('📄 DOMContentLoaded - инициализация приложения');
+        
+        // 1. Инициализируем Telegram WebApp
+        // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
+        // === ИСПРАВЛЕНИЕ: Graceful degradation - initTelegram больше не бросает ошибки ===
         await initTelegram();
-    } catch (e) {
-        productsGrid.innerHTML = `<p class="loading">${e.message}</p>`;
-        return;
-    }
-    
-    // 2. Ждем немного, чтобы initData стал доступен
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // 3. Проверяем, что Telegram доступен
-    // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
-    try {
-        requireTelegram();
-    } catch (e) {
-        productsGrid.innerHTML = `<p class="loading">${e.message}</p>`;
-        return;
-    }
-    
-    // 4. Инициализируем cartModal
-    setupCartModal();
+        
+        // 2. Ждем немного, чтобы initData стал доступен
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // 3. Проверяем, что Telegram доступен
+        // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
+        // === ИСПРАВЛЕНИЕ: Graceful degradation вместо throw ===
+        let telegramUser = null;
+        try {
+            telegramUser = requireTelegram();
+        } catch (e) {
+            // Если requireTelegram все еще выбросил ошибку (не должно произойти после исправления)
+            console.warn('⚠️ [APP] requireTelegram завершился с ошибкой:', e.message);
+            telegramUser = {
+                id: null,
+                isFallback: true,
+                fallbackReason: 'error_in_require_telegram'
+            };
+        }
+        
+        if (telegramUser && telegramUser.isFallback) {
+            // === ИСПРАВЛЕНИЕ: Показываем понятное сообщение вместо падения ===
+            const errorMessage = 'Приложение должно быть открыто через Telegram-бота';
+            if (productsGrid) {
+                productsGrid.innerHTML = `
+                    <div style="padding: 20px; text-align: center; color: #fff;">
+                        <p style="font-size: 16px; margin-bottom: 12px;">⚠️</p>
+                        <p style="font-size: 14px; line-height: 1.5;">${errorMessage}</p>
+                    </div>
+                `;
+            }
+            console.warn('⚠️ [APP] Остановка инициализации из-за отсутствия Telegram данных:', telegramUser.fallbackReason);
+            return; // НЕ продолжаем инициализацию, НЕ вызываем loadData
+        }
+        
+        // 4. Инициализируем cartModal
+        setupCartModal();
     
     // 4.0 Инициализируем зависимости для модуля фильтров
     initFiltersDependencies({
@@ -242,18 +295,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (startParam && startParam.startsWith('store_')) {
                 const userIdStr = startParam.replace('store_', '');
                 shopOwnerId = parseInt(userIdStr, 10);
-                console.log('📡 Found start parameter, extracted user_id:', shopOwnerId);
             }
         }
         
-        console.log('📡 Loading context, shopOwnerId:', shopOwnerId);
-        console.log('📡 Telegram instance:', getTelegramInstance());
-        console.log('📡 initData available:', !!getInitData());
-        console.log('📡 initDataUnsafe:', getTelegramInstance()?.initDataUnsafe);
-        
         appContext = await getContext(shopOwnerId);
-        console.log('✅ Context loaded:', appContext);
-        console.log('✅ Context bot_id:', appContext.bot_id, 'type:', typeof appContext.bot_id);
         
         if (!appContext) {
             throw new Error('Context is null after loading');
@@ -285,7 +330,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     can_view_categories: true
                 }
             };
-            console.log('✅ Using fallback context:', appContext);
         } else {
             // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
             // Если контекст не загрузился - это критическая ошибка
@@ -415,7 +459,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         // Избранное доступно только для клиентов, не для админа
         if (appContext.role === 'client') {
-            initFavorites();
+            await tryInitFavorites(appContext);
         } else {
             // Скрываем кнопку избранного для админа
             const favoritesButton = document.getElementById('favorites-button');
@@ -432,11 +476,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     // 10. Загружаем данные
-    // Показываем статус загрузки в интерфейсе
-    if (productsGrid) {
-        productsGrid.innerHTML = '<p class="loading">🔄 Загрузка магазина...</p>';
-    }
-    
     try {
         await loadData();
         // Если загрузка успешна, loadData сам обновит productsGrid
@@ -487,12 +526,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 12. Обновляем счетчик избранного (только для клиентов, не для админа)
     if (appContext.role === 'client') {
         setTimeout(async () => {
-            console.log('❤️ Обновление счетчика избранного...');
-            try {
-                await updateFavoritesCount();
-            } catch (e) {
-                console.error('❌ Error updating favorites count:', e);
-            }
+            await tryUpdateFavoritesCount();
         }, 600);
     }
     
@@ -500,9 +534,75 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (appContext.role === 'client') {
         const cartButton = document.getElementById('cart-button');
         if (cartButton) {
-            cartButton.addEventListener('click', updateFavoritesCount);
+            cartButton.addEventListener('click', tryUpdateFavoritesCount);
         }
     }
+    // === ИСПРАВЛЕНИЕ: Конец основного блока инициализации ===
+    } catch (e) {
+        // === ИСПРАВЛЕНИЕ: Глобальный обработчик ошибок для предотвращения "Load failed" ===
+        console.error('❌ [APP] Критическая ошибка при инициализации:', e);
+        console.error('❌ [APP] Error details:', {
+            message: e.message,
+            stack: e.stack,
+            name: e.name
+        });
+        
+        // Показываем понятное сообщение пользователю вместо падения
+        const errorMessage = 'Ошибка при запуске приложения. Пожалуйста, перезагрузите страницу или откройте через Telegram-бота.';
+        const productsGridEl = document.getElementById('products-grid');
+        if (productsGridEl) {
+            productsGridEl.innerHTML = `
+                <div style="padding: 20px; text-align: center; color: #fff;">
+                    <p style="font-size: 16px; margin-bottom: 12px;">⚠️</p>
+                    <p style="font-size: 14px; line-height: 1.5;">${errorMessage}</p>
+                    <p style="font-size: 12px; margin-top: 12px; opacity: 0.7;">${e.message || 'Неизвестная ошибка'}</p>
+                </div>
+            `;
+        } else {
+            // Если productsGrid еще не доступен, показываем через document.body
+            document.body.innerHTML = `
+                <div style="padding: 20px; text-align: center; color: #fff; background: #1c1c1e; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+                    <div>
+                        <p style="font-size: 16px; margin-bottom: 12px;">⚠️</p>
+                        <p style="font-size: 14px; line-height: 1.5;">${errorMessage}</p>
+                        <p style="font-size: 12px; margin-top: 12px; opacity: 0.7;">${e.message || 'Неизвестная ошибка'}</p>
+                    </div>
+                </div>
+            `;
+        }
+    }
+});
+
+// === ИСПРАВЛЕНИЕ: Глобальный обработчик необработанных ошибок ===
+window.addEventListener('error', (event) => {
+    console.error('❌ [GLOBAL] Необработанная ошибка:', event.error);
+    console.error('❌ [GLOBAL] Error details:', {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error
+    });
+    
+    // Предотвращаем стандартное поведение (показ в консоли)
+    event.preventDefault();
+    
+    // Показываем сообщение пользователю только если это критическая ошибка
+    const productsGrid = document.getElementById('products-grid');
+    if (productsGrid && !productsGrid.innerHTML.includes('⚠️')) {
+        productsGrid.innerHTML = `
+            <div style="padding: 20px; text-align: center; color: #fff;">
+                <p style="font-size: 16px; margin-bottom: 12px;">⚠️</p>
+                <p style="font-size: 14px; line-height: 1.5;">Произошла ошибка. Пожалуйста, перезагрузите страницу.</p>
+            </div>
+        `;
+    }
+});
+
+// === ИСПРАВЛЕНИЕ: Глобальный обработчик необработанных промисов ===
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('❌ [GLOBAL] Необработанное отклонение промиса:', event.reason);
+    event.preventDefault(); // Предотвращаем вывод в консоль
 });
 
 

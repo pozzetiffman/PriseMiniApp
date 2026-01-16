@@ -9,20 +9,48 @@ import { API_BASE, getBaseHeaders } from './config.js';
 export async function fetchUserReservations() {
     const url = `${API_BASE}/api/reservations/cart`;
     console.log(`Fetching cart reservations from: ${url}`);
-    const response = await fetch(url, {
-        headers: getBaseHeaders()
-    });
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Reservations error: ${response.status} - ${errorText}`);
+    
+    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+    const TIMEOUT_MS = 10000; // 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, TIMEOUT_MS);
+    
+    try {
+        const response = await fetch(url, {
+            headers: getBaseHeaders(),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Reservations error: ${response.status} - ${errorText}`);
+        }
+        const data = await response.json();
+        console.log(`📦 fetchUserReservations: Got ${data.length} cart reservations`);
+        return data;
+    } catch (e) {
+        clearTimeout(timeoutId);
+        
+        // Обработка ошибки таймаута
+        if (e.name === 'AbortError') {
+            console.error("❌ fetchUserReservations timeout after", TIMEOUT_MS, "ms");
+            throw new Error("Таймаут загрузки резерваций. Сервер не отвечает.");
+        }
+        
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching reservations:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу.");
+        }
+        
+        throw e;
     }
-    const data = await response.json();
-    console.log(`📦 fetchUserReservations: Got ${data.length} cart reservations`);
-    return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] fetchUserReservations() loaded from api/reservations.js');
 
 // ========== END REFACTORING STEP 7.1 ==========
 
@@ -31,23 +59,50 @@ console.log('✅ [REFACTORING] fetchUserReservations() loaded from api/reservati
 export async function fetchReservationsHistory() {
     const url = `${API_BASE}/api/reservations/history`;
     console.log(`Fetching reservations history from: ${url}`);
-    const response = await fetch(url, {
-        headers: getBaseHeaders()
-    });
     
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Reservations history error:", response.status, errorText);
-        throw new Error(`Reservations history error: ${response.status} - ${errorText}`);
+    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+    const TIMEOUT_MS = 10000; // 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, TIMEOUT_MS);
+    
+    try {
+        const response = await fetch(url, {
+            headers: getBaseHeaders(),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Reservations history error:", response.status, errorText);
+            throw new Error(`Reservations history error: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log(`📜 fetchReservationsHistory: Got ${data.length} reservations`);
+        return data;
+    } catch (e) {
+        clearTimeout(timeoutId);
+        
+        // Обработка ошибки таймаута
+        if (e.name === 'AbortError') {
+            console.error("❌ fetchReservationsHistory timeout after", TIMEOUT_MS, "ms");
+            throw new Error("Таймаут загрузки истории резерваций. Сервер не отвечает.");
+        }
+        
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching reservations history:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу.");
+        }
+        
+        throw e;
     }
-    
-    const data = await response.json();
-    console.log(`📜 fetchReservationsHistory: Got ${data.length} reservations`);
-    return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] fetchReservationsHistory() loaded from api/reservations.js');
 
 // ========== END REFACTORING STEP 7.2 ==========
 
@@ -79,8 +134,6 @@ export async function createReservationAPI(productId, hours, quantity = 1) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] createReservationAPI() loaded from api/reservations.js');
 
 // ========== END REFACTORING STEP 7.3 ==========
 
@@ -112,8 +165,6 @@ export async function cancelReservationAPI(reservationId) {
     return true;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] cancelReservationAPI() loaded from api/reservations.js');
 
 // ========== END REFACTORING STEP 7.4 ==========
 
@@ -145,8 +196,6 @@ export async function clearReservationsHistoryAPI() {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] clearReservationsHistoryAPI() loaded from api/reservations.js');
 
 // ========== END REFACTORING STEP 7.5 ==========
 

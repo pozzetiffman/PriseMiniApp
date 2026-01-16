@@ -28,10 +28,8 @@ class ChannelResponse(BaseModel):
 @router.get("/", response_model=List[ChannelResponse])
 def get_channels(user_id: int = Query(...), db: Session = Depends(database.get_db)):
     """Получить все каналы пользователя"""
-    print(f"DEBUG: get_channels called with user_id={user_id}, type={type(user_id)}")
     try:
         channels = db.query(Channel).filter(Channel.user_id == user_id).all()
-        print(f"DEBUG: Found {len(channels)} channels for user {user_id}")
         return channels if channels else []
     except Exception as e:
         print(f"ERROR: Exception in get_channels: {e}")

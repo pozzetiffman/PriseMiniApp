@@ -5,7 +5,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 from .db import database, models
+from .db.schema_check import log_schema_status
 from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots, purchases, debug
+
+# Проверяем целостность схемы БД перед созданием таблиц
+log_schema_status()
 
 # Создаем таблицы базы данных
 models.Base.metadata.create_all(bind=database.engine)

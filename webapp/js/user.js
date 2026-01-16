@@ -26,9 +26,11 @@ export function getCurrentUserId() {
 /**
  * Проверить, что приложение запущено в Telegram
  * Выбрасывает ошибку если Telegram недоступен
+ * === ИСПРАВЛЕНИЕ: Обновлена для совместимости с новым поведением requireTelegram() ===
  */
 export function ensureTelegram() {
-    if (!requireTelegram()) {
+    const telegramUser = requireTelegram();
+    if (!telegramUser || (telegramUser.isFallback === true)) {
         throw new Error("Приложение должно открываться через Telegram-бота");
     }
 }

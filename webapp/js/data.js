@@ -59,17 +59,114 @@ export async function loadData() {
         console.log('📂 Final botId:', botId, 'type:', typeof botId);
         const categoriesUrl = `${API_BASE}/api/categories/?user_id=${appContext.shop_owner_id}${botId !== null && botId !== undefined ? `&bot_id=${botId}` : ''}`;
         console.log('📂 Categories URL:', categoriesUrl);
-        // Загружаем категории с иерархией (flat=false для отображения)
-        const categories = await fetchCategories(appContext.shop_owner_id, botId, false);
-        console.log('✅ Step 1 complete: Categories loaded:', categories.length);
-        console.log('📂 Categories structure:', JSON.stringify(categories, null, 2));
+        
+        // === ИСПРАВЛЕНИЕ: Безопасная загрузка категорий с обработкой ошибок ===
+        let categories = [];
+        try {
+            // Загружаем категории с иерархией (flat=false для отображения)
+            categories = await fetchCategories(appContext.shop_owner_id, botId, false);
+            console.log('✅ Step 1 complete: Categories loaded:', categories.length);
+        } catch (e) {
+            console.error('❌ [DATA] Ошибка при загрузке категорий:', e);
+            console.error('❌ [DATA] Error details:', {
+                message: e.message,
+                stack: e.stack,
+                name: e.name
+            });
+            
+            // Если это таймаут или критическая ошибка - пробрасываем дальше
+            if (e.message && (e.message.includes('Таймаут') || e.message.includes('timeout'))) {
+                throw e; // Пробрасываем таймаут как критическую ошибку
+            }
+            
+            // Для других ошибок продолжаем с пустым массивом категорий
+            console.warn('⚠️ [DATA] Продолжаем загрузку без категорий');
+            categories = [];
+        }
+        // === ИСПРАВЛЕНИЕ: Безопасная JSON сериализация с обработкой ошибок ===
+        try {
+            console.log('📂 Categories structure:', JSON.stringify(categories, null, 2));
+        } catch (e) {
+            console.error('❌ [DATA] Ошибка JSON.stringify категорий:', e);
+            console.log('📂 Categories structure (без JSON.stringify):', categories);
+        }
         if (categories && categories.length > 0) {
             console.log('📂 First category:', categories[0]);
             if (categories[0].subcategories) {
                 console.log('📂 First category subcategories:', categories[0].subcategories);
             }
         }
-        renderCategories(categories);
+        
+        // === ИСПРАВЛЕНИЕ: Валидация структуры категорий перед рендерингом ===
+        function validateCategoriesStructure(categories) {
+            if (!Array.isArray(categories)) {
+                console.warn('⚠️ [DATA] categories не является массивом, преобразуем:', categories);
+                return [];
+            }
+            
+            // Проверяем каждую категорию и её подкатегории
+            const validCategories = [];
+            categories.forEach((cat, index) => {
+                try {
+                    if (!cat || typeof cat.id !== 'number') {
+                        console.warn(`⚠️ [DATA] Пропущена невалидная категория [${index}]:`, cat);
+                        return;
+                    }
+                    
+                    // === ИСПРАВЛЕНИЕ: Безопасная обработка названия категории с "/" ===
+                    // Убеждаемся, что название категории - это строка
+                    const safeName = (cat && cat.name) ? String(cat.name) : 'Без названия';
+                    
+                    // Нормализуем подкатегории (защита от undefined/null)
+                    const validSubcategories = [];
+                    if (Array.isArray(cat.subcategories)) {
+                        cat.subcategories.forEach((subCat, subIndex) => {
+                            try {
+                                if (subCat && typeof subCat.id === 'number') {
+                                    // === ИСПРАВЛЕНИЕ: Безопасная обработка названия подкатегории ===
+                                    const safeSubName = (subCat && subCat.name) ? String(subCat.name) : 'Без названия';
+                                    validSubcategories.push({
+                                        ...subCat,
+                                        name: safeSubName
+                                    });
+                                }
+                            } catch (subError) {
+                                console.warn(`⚠️ [DATA] Ошибка при обработке подкатегории [${index}][${subIndex}]:`, subError);
+                            }
+                        });
+                    }
+                    
+                    const validCategory = {
+                        ...cat,
+                        name: safeName, // === ИСПРАВЛЕНИЕ: Безопасное название категории ===
+                        subcategories: validSubcategories
+                    };
+                    
+                    validCategories.push(validCategory);
+                } catch (catError) {
+                    console.warn(`⚠️ [DATA] Ошибка при обработке категории [${index}]:`, catError);
+                    // Пропускаем эту категорию и продолжаем обработку
+                }
+            });
+            
+            return validCategories;
+        }
+
+        const validatedCategories = validateCategoriesStructure(categories);
+        console.log(`✅ [DATA] Валидировано категорий: ${validatedCategories.length} из ${categories.length}`);
+        
+        // === ИСПРАВЛЕНИЕ: Безопасный вызов renderCategories с обработкой ошибок ===
+        try {
+            renderCategories(validatedCategories);
+        } catch (e) {
+            console.error('❌ [DATA] Ошибка при рендеринге категорий:', e);
+            console.error('❌ [DATA] Error details:', {
+                message: e.message,
+                stack: e.stack,
+                name: e.name
+            });
+            // Продолжаем работу - рендеринг категорий не критичен для загрузки товаров
+        }
         
         // Загружаем товары для магазина (shop_owner_id)
         // ВАЖНО: Загружаем ВСЕ товары без фильтрации по категории для работы фильтров
@@ -79,16 +176,37 @@ export async function loadData() {
         console.log('📦 Using botId:', botId, 'for products');
         // Передаем viewer_id для фильтрации скрытых товаров (если это клиент, а не владелец)
         const viewerId = appContext.viewer_id || null;
-        const products = await fetchProducts(appContext.shop_owner_id, null, botId, viewerId); // Загружаем все товары
-        console.log('✅ Step 2 complete: Products loaded:', products.length);
+        // === ИСПРАВЛЕНИЕ: Безопасная загрузка товаров с обработкой ошибок ===
+        let products = [];
+        try {
+            products = await fetchProducts(appContext.shop_owner_id, null, botId, viewerId); // Загружаем все товары
+            console.log('✅ Step 2 complete: Products loaded:', products.length);
+        } catch (e) {
+            console.error('❌ [DATA] Ошибка при загрузке товаров:', e);
+            console.error('❌ [DATA] Error details:', {
+                message: e.message,
+                stack: e.stack,
+                name: e.name
+            });
+            // Продолжаем с пустым массивом - товары не критичны для отображения интерфейса
+            products = [];
+        }
+        
         // Сохраняем все товары для фильтрации
         if (allProductsSetter) {
             allProductsSetter(products);
         }
-        // Обновляем опции фильтра на основе доступных товаров
-        updateProductFilterOptions();
-        // Применяем фильтры (если они активны)
-        applyFilters();
+        
+        // === ИСПРАВЛЕНИЕ: Безопасное обновление фильтров ===
+        try {
+            // Обновляем опции фильтра на основе доступных товаров
+            updateProductFilterOptions();
+            // Применяем фильтры (если они активны)
+            await applyFilters();
+        } catch (e) {
+            console.error('❌ [DATA] Ошибка при применении фильтров:', e);
+            // Продолжаем работу
+        }
         
         // Отслеживаем общее посещение магазина (только для клиентов, не для владельца)
         if (appContext && appContext.role === 'client' && appContext.shop_owner_id) {
@@ -115,16 +233,27 @@ export async function loadData() {
         let errorMessage = 'Ошибка загрузки магазина';
         if (e.message) {
             errorMessage = e.message;
-        } else if (e.name === 'TypeError' && e.message.includes('fetch')) {
+        } else if (e.name === 'TypeError' && e.message && e.message.includes('fetch')) {
             errorMessage = 'Ошибка сети: не удалось подключиться к серверу. Проверьте подключение к интернету.';
-        } else if (e.message.includes('401') || e.message.includes('авторизац')) {
+        } else if (e.message && (e.message.includes('401') || e.message.includes('авторизац'))) {
             errorMessage = 'Ошибка авторизации. Убедитесь, что приложение открыто через Telegram-бота.';
-        } else if (e.message.includes('404') || e.message.includes('не найден')) {
+        } else if (e.message && (e.message.includes('404') || e.message.includes('не найден'))) {
             errorMessage = 'Магазин не найден.';
+        } else if (e.message && (e.message.includes('Таймаут') || e.message.includes('timeout'))) {
+            errorMessage = 'Превышено время ожидания ответа от сервера. Попробуйте перезагрузить страницу.';
         }
         
         if (productsGridElement) {
-            productsGridElement.innerHTML = `<p class="loading">${errorMessage}</p>`;
+            productsGridElement.innerHTML = `
+                <div style="padding: 20px; text-align: center;">
+                    <p class="loading" style="color: #ff6b6b; font-size: 18px; margin-bottom: 10px;">
+                        ❌ ${errorMessage}
+                    </p>
+                    <p style="color: var(--text-secondary); font-size: 14px; margin-top: 12px;">
+                        Попробуйте перезагрузить страницу или проверить подключение к интернету.
+                    </p>
+                </div>
+            `;
         }
     }
 }

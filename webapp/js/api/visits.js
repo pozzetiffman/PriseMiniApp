@@ -34,8 +34,6 @@ export async function trackShopVisit(shopOwnerId, productId = null) {
     }
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] trackShopVisit() loaded from api/visits.js');
 
 // ========== END REFACTORING STEP 10.1 ==========
 
@@ -59,8 +57,6 @@ export async function getVisitStatsAPI() {
     return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getVisitStatsAPI() loaded from api/visits.js');
 
 // ========== END REFACTORING STEP 10.2 ==========
 
@@ -84,8 +80,6 @@ export async function getVisitsListAPI(limit = 50, offset = 0) {
     return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getVisitsListAPI() loaded from api/visits.js');
 
 // ========== END REFACTORING STEP 10.3 ==========
 
@@ -109,8 +103,6 @@ export async function getProductViewStatsAPI(limit = 20) {
     return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getProductViewStatsAPI() loaded from api/visits.js');
 
 // ========== END REFACTORING STEP 10.4 ==========
 

@@ -340,7 +340,15 @@ def delete_category(
     user_id: int = Query(...),
     db: Session = Depends(database.get_db)
 ):
-    """Удаление категории. При удалении категории также удаляются все товары в этой категории."""
+    """
+    Удаление категории.
+    
+    Поведение:
+    - Товары (Product) удаляются каскадно вместе с категорией
+    - Исторические продажи (SoldProduct) сохраняются, но category_id устанавливается в NULL
+    - Подкатегории (subcategories) удаляются каскадно вместе с родительской категорией
+    - Синхронизация удаления происходит во все подключенные боты
+    """
     db_category = db.query(models.Category).filter(
         models.Category.id == category_id,
         models.Category.user_id == user_id
@@ -354,13 +362,39 @@ def delete_category(
         models.Product.category_id == category_id
     ).count()
     
-    # Синхронизируем удаление категории во все боты
+    # Проверяем, есть ли подкатегории
+    subcategories_count = db.query(models.Category).filter(
+        models.Category.parent_id == category_id
+    ).count()
+    
+    # Проверяем, есть ли исторические продажи
+    sold_products_count = db.query(models.SoldProduct).filter(
+        models.SoldProduct.category_id == category_id
+    ).count()
+    
+    # Явно устанавливаем category_id = NULL для исторических продаж
+    # (SQLite может не поддерживать ondelete="SET NULL" автоматически)
+    if sold_products_count > 0:
+        db.query(models.SoldProduct).filter(
+            models.SoldProduct.category_id == category_id
+        ).update({models.SoldProduct.category_id: None})
+        print(f"📦 Set category_id=NULL for {sold_products_count} historical sold_products")
+    
+    # Синхронизируем удаление категории во все боты (ПЕРЕД удалением)
     sync_category_to_all_bots(db_category, db, action="delete")
     
-    # Удаляем категорию (товары удалятся автоматически из-за cascade)
+    # Удаляем категорию
+    # Товары удалятся автоматически из-за cascade="all, delete-orphan" в relationship
+    # Подкатегории также удалятся каскадно
     db.delete(db_category)
     db.commit()
     
-    return {
-        "message": f"Category deleted. {products_count} products were also deleted." if products_count > 0 else "Category deleted."
-    }
+    message_parts = [f"Category '{db_category.name}' deleted."]
+    if products_count > 0:
+        message_parts.append(f"{products_count} products deleted.")
+    if subcategories_count > 0:
+        message_parts.append(f"{subcategories_count} subcategories deleted.")
+    if sold_products_count > 0:
+        message_parts.append(f"{sold_products_count} historical sales preserved (category_id set to NULL).")
+    
+    return {"message": " ".join(message_parts)}

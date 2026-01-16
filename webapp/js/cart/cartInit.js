@@ -16,25 +16,17 @@ let cartInitInterval = null;
  * Находит элементы DOM корзины, обновляет UI и запускает периодическое обновление
  */
 export function initCart() {
-    console.log('🛒 ========== initCart START ==========');
-    
     // Получаем элементы корзины напрямую из DOM
     const cartButton = document.getElementById('cart-button');
     const cartCount = document.getElementById('cart-count');
     
     if (!cartButton || !cartCount) {
-        console.log('❌ Cart elements not found, retrying...');
         setTimeout(initCart, 100);
         return;
     }
     
-    console.log('✅ Initializing cart');
-    console.log('✅ Cart button element:', cartButton);
-    console.log('✅ Cart count element:', cartCount);
-    
     // Обновляем корзину сразу
     updateCartUI().then(() => {
-        console.log('✅ Cart initialized successfully');
         // ========== REFACTORING STEP 5.1: Использование импортированной функции ==========
         loadCart(updateCartUI);
         // ========== END REFACTORING STEP 5.1 ==========
@@ -46,7 +38,6 @@ export function initCart() {
         
         // Обновляем корзину каждые 30 секунд
         cartInitInterval = setInterval(() => {
-            console.log('🛒 Периодическое обновление корзины...');
             updateCartUI();
             // ========== REFACTORING STEP 5.1: Использование импортированной функции ==========
             loadCart(updateCartUI);
@@ -56,8 +47,6 @@ export function initCart() {
         console.error('❌ Error initializing cart:', err);
         console.error('❌ Error stack:', err.stack);
     });
-    
-    console.log('🛒 ========== initCart END ==========');
 }
 // ========== END REFACTORING STEP 7.1 ==========
 

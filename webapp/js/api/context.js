@@ -12,8 +12,11 @@ export async function getContext(shopOwnerId = null) {
     console.log('📡 getContext called, shopOwnerId:', shopOwnerId);
     
     // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
-    // requireTelegram() бросает исключение если Telegram недоступен
-    requireTelegram();
+    // === ИСПРАВЛЕНИЕ: Проверка fallback состояния ===
+    const telegramUser = requireTelegram();
+    if (telegramUser && telegramUser.isFallback) {
+        throw new Error('Приложение должно открываться через Telegram-бота');
+    }
     
     // Получаем заголовки с initData
     const headers = getBaseHeaders();
@@ -26,10 +29,20 @@ export async function getContext(shopOwnerId = null) {
     console.log("📡 Fetching context from:", url);
     console.log("📡 Headers keys:", Object.keys(headers));
     
+    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+    const TIMEOUT_MS = 10000; // 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, TIMEOUT_MS);
+    
     try {
         const response = await fetch(url, {
-            headers: headers
+            headers: headers,
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         console.log("📡 Context response status:", response.status);
         
@@ -43,8 +56,16 @@ export async function getContext(shopOwnerId = null) {
         console.log("✅ Context data received:", data);
         return data;
     } catch (e) {
+        clearTimeout(timeoutId);
+        
         console.error("❌ getContext fetch error:", e);
         console.error("❌ Error stack:", e.stack);
+        
+        // Обработка ошибки таймаута
+        if (e.name === 'AbortError') {
+            console.error("❌ Context request timeout after", TIMEOUT_MS, "ms");
+            throw new Error("Таймаут загрузки контекста. Сервер не отвечает. Попробуйте позже.");
+        }
         
         // Обработка сетевых ошибок
         if (e.name === 'TypeError' && e.message.includes('fetch')) {
@@ -57,8 +78,6 @@ export async function getContext(shopOwnerId = null) {
     }
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getContext() loaded from api/context.js');
 
 // ========== END REFACTORING STEP 2.1 ==========
 
@@ -86,8 +105,6 @@ export async function getShopSettings(shopOwnerId = null) {
     return data;
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getShopSettings() loaded from api/context.js');
 
 // ========== END REFACTORING STEP 2.2 ==========
 
@@ -120,8 +137,6 @@ export async function updateShopSettings(settingsUpdate) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updateShopSettings() loaded from api/context.js');
 
 // ========== END REFACTORING STEP 2.3 ==========
 

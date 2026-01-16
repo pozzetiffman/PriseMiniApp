@@ -27,6 +27,57 @@ export function renderCategories(categories) {
     // Сохраняем структуру категорий
     categoriesHierarchy = Array.isArray(categories) ? categories : [];
     
+    // === ИСПРАВЛЕНИЕ: Валидация и самоисцеление категорий ===
+    // Проверяем валидность сохранённых выбранных категорий
+    function validateAndHealCategoryState(categories) {
+        // Создаём Set всех валидных ID категорий (основные + подкатегории)
+        const validCategoryIds = new Set();
+        
+        if (Array.isArray(categories)) {
+            categories.forEach(mainCat => {
+                if (mainCat && typeof mainCat.id === 'number') {
+                    validCategoryIds.add(mainCat.id);
+                    
+                    // Проверяем подкатегории (защита от undefined/null)
+                    if (mainCat.subcategories && Array.isArray(mainCat.subcategories)) {
+                        mainCat.subcategories.forEach(subCat => {
+                            if (subCat && typeof subCat.id === 'number') {
+                                validCategoryIds.add(subCat.id);
+                            }
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Очищаем selectedCategoryIds от невалидных ID
+        const validSelectedIds = new Set();
+        selectedCategoryIds.forEach(id => {
+            if (validCategoryIds.has(id)) {
+                validSelectedIds.add(id);
+            } else {
+                console.warn(`⚠️ [CATEGORIES] Удалён невалидный selectedCategoryId: ${id}`);
+            }
+        });
+        selectedCategoryIds.clear();
+        validSelectedIds.forEach(id => selectedCategoryIds.add(id));
+        
+        // Проверяем selectedMainCategoryId
+        if (selectedMainCategoryId !== null && !validCategoryIds.has(selectedMainCategoryId)) {
+            console.warn(`⚠️ [CATEGORIES] Сброшен невалидный selectedMainCategoryId: ${selectedMainCategoryId}`);
+            selectedMainCategoryId = null;
+        }
+        
+        // Проверяем currentCategoryId
+        if (currentCategoryId !== null && !validCategoryIds.has(currentCategoryId)) {
+            console.warn(`⚠️ [CATEGORIES] Сброшен невалидный currentCategoryId: ${currentCategoryId}`);
+            currentCategoryId = null;
+        }
+    }
+
+    // Вызываем валидацию перед обработкой категорий
+    validateAndHealCategoryState(categoriesHierarchy);
+    
     // Преобразуем иерархию в плоский список для фильтрации
     const flatCategories = [];
     if (Array.isArray(categories)) {
@@ -77,8 +128,14 @@ export function renderCategories(categories) {
     const mainCategoriesButton = document.createElement('button');
     mainCategoriesButton.className = 'category-dropdown-button';
     mainCategoriesButton.type = 'button'; // Предотвращаем submit формы, если есть
-    const selectedMainCategory = categoriesHierarchy.find(cat => cat.id === selectedMainCategoryId);
-    const buttonText = selectedMainCategory ? selectedMainCategory.name : 'Категории';
+    // === ИСПРАВЛЕНИЕ: Безопасный поиск категории с проверкой ===
+    const selectedMainCategory = selectedMainCategoryId !== null 
+        ? (categoriesHierarchy.find(cat => cat && cat.id === selectedMainCategoryId) || null)
+        : null;
+    // === ИСПРАВЛЕНИЕ: Безопасное получение названия категории ===
+    const buttonText = (selectedMainCategory && selectedMainCategory.name) 
+        ? String(selectedMainCategory.name) 
+        : 'Категории';
     mainCategoriesButton.innerHTML = `
         <span>${buttonText}</span>
         <span style="margin-left: auto;">▼</span>
@@ -110,19 +167,19 @@ export function renderCategories(categories) {
         categories.forEach(mainCat => {
             const option = document.createElement('div');
             option.className = 'category-dropdown-item' + (selectedMainCategoryId === mainCat.id ? ' active' : '');
-            option.innerText = mainCat.name;
+            // === ИСПРАВЛЕНИЕ: Безопасное отображение названия категории ===
+            option.innerText = (mainCat && mainCat.name) ? String(mainCat.name) : 'Без названия';
             option.onclick = () => {
                 selectedMainCategoryId = mainCat.id;
-                // Если у категории есть подкатегории, выбираем все подкатегории
-                if (mainCat.subcategories && mainCat.subcategories.length > 0) {
-                    selectedCategoryIds.clear();
+                // === ИСПРАВЛЕНИЕ: При выборе основной категории показываем товары из неё И из всех подкатегорий ===
+                selectedCategoryIds.clear();
+                // Добавляем саму основную категорию
+                selectedCategoryIds.add(mainCat.id);
+                // Если есть подкатегории, добавляем их тоже
+                if (mainCat && mainCat.subcategories && Array.isArray(mainCat.subcategories) && mainCat.subcategories.length > 0) {
                     mainCat.subcategories.forEach(subCat => {
                         selectedCategoryIds.add(subCat.id);
                     });
-                } else {
-                    // Если нет подкатегорий, выбираем саму категорию
-                    selectedCategoryIds.clear();
-                    selectedCategoryIds.add(mainCat.id);
                 }
                 currentCategoryId = null;
                 mainCategoriesList.style.display = 'none';
@@ -166,7 +223,8 @@ export function renderCategories(categories) {
     leftContainer.appendChild(mainCategoriesDropdown);
     
     // Второй выпадающий список - подкатегории (показывается только если выбрана основная категория с подкатегориями)
-    if (selectedMainCategory && selectedMainCategory.subcategories && selectedMainCategory.subcategories.length > 0) {
+    // === ИСПРАВЛЕНИЕ: Безопасная проверка selectedMainCategory и подкатегорий ===
+    if (selectedMainCategory && selectedMainCategory.subcategories && Array.isArray(selectedMainCategory.subcategories) && selectedMainCategory.subcategories.length > 0) {
         const subCategoriesDropdown = document.createElement('div');
         subCategoriesDropdown.className = 'category-dropdown';
         
@@ -190,7 +248,12 @@ export function renderCategories(categories) {
         allSubOption.innerText = 'Все подкатегории';
         allSubOption.onclick = () => {
             selectedCategoryIds.clear();
-            selectedMainCategory.subcategories.forEach(subCat => {
+            // === ИСПРАВЛЕНИЕ: Безопасный перебор подкатегорий ===
+            (selectedMainCategory.subcategories || []).forEach(subCat => {
+                if (!subCat || typeof subCat.id !== 'number') {
+                    console.warn(`⚠️ [CATEGORIES] Пропущена невалидная подкатегория:`, subCat);
+                    return;
+                }
                 selectedCategoryIds.add(subCat.id);
             });
             subCategoriesList.style.display = 'none';
@@ -200,12 +263,19 @@ export function renderCategories(categories) {
         subCategoriesList.appendChild(allSubOption);
         
         // Подкатегории
-        selectedMainCategory.subcategories.forEach(subCat => {
+        // === ИСПРАВЛЕНИЕ: Безопасный перебор подкатегорий ===
+        (selectedMainCategory.subcategories || []).forEach(subCat => {
+            if (!subCat || typeof subCat.id !== 'number') {
+                console.warn(`⚠️ [CATEGORIES] Пропущена невалидная подкатегория:`, subCat);
+                return;
+            }
             const option = document.createElement('div');
             const isSelected = selectedCategoryIds.has(subCat.id);
             option.className = 'category-dropdown-item' + (isSelected ? ' active' : '');
+            // === ИСПРАВЛЕНИЕ: Безопасное отображение названия подкатегории с экранированием ===
+            const subCatName = (subCat && subCat.name) ? String(subCat.name).replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Без названия';
             option.innerHTML = `
-                <span>${subCat.name}</span>
+                <span>${subCatName}</span>
                 <input type="checkbox" ${isSelected ? 'checked' : ''} style="margin-left: auto;">
             `;
             option.onclick = () => {
@@ -213,6 +283,11 @@ export function renderCategories(categories) {
                     selectedCategoryIds.delete(subCat.id);
                 } else {
                     selectedCategoryIds.add(subCat.id);
+                }
+                // === ИСПРАВЛЕНИЕ: При выборе подкатегории удаляем ID основной категории ===
+                // Чтобы показывались только товары из выбранных подкатегорий, а не из всей основной категории
+                if (selectedMainCategoryId !== null && selectedCategoryIds.has(selectedMainCategoryId)) {
+                    selectedCategoryIds.delete(selectedMainCategoryId);
                 }
                 renderCategories(categoriesHierarchy);
                 if (applyFiltersCallback) applyFiltersCallback();
@@ -632,7 +707,8 @@ export function updateCategoryFilter() {
         
         const text = document.createElement('span');
         text.className = 'filter-checkbox-text';
-        text.textContent = cat.name;
+        // === ИСПРАВЛЕНИЕ: Безопасное отображение названия категории ===
+        text.textContent = (cat && cat.name) ? String(cat.name) : 'Без названия';
         
         label.appendChild(checkbox);
         label.appendChild(text);

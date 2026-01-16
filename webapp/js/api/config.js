@@ -3,12 +3,19 @@
 // Дата начала: 2024-12-19
 // Статус: В процессе
 
+// Флаг отладки (для dev-режима)
+// В production всегда false, в dev можно включить через URL параметр ?debug=1
+export const DEBUG = (() => {
+    if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('debug') === '1' || urlParams.get('debug') === 'true';
+    }
+    return false;
+})();
+
 // НАСТРОЙКА АДРЕСА
 // Базовый URL API для всех запросов
 export const API_BASE = "https://unmaneuvered-chronogrammatically-otelia.ngrok-free.dev".trim();
-
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] API_BASE loaded from api/config.js:', API_BASE);
 
 // ========== END REFACTORING STEP 1.1 ==========
 
@@ -20,9 +27,6 @@ export function getBaseHeadersNoAuth() {
         "Content-Type": "application/json"
     };
 }
-
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getBaseHeadersNoAuth() loaded from api/config.js');
 
 // ========== END REFACTORING STEP 1.2 ==========
 
@@ -39,18 +43,18 @@ export function getBaseHeaders() {
     
     // Добавляем initData в заголовок для валидации на backend
     // Согласно аудиту: приложение работает ТОЛЬКО через Telegram, initData всегда должен быть доступен
+    // === ИСПРАВЛЕНИЕ: Graceful degradation вместо throw ===
     const initData = getInitData();
     if (!initData) {
-        console.error('❌ CRITICAL: No initData available - app should only work through Telegram!');
-        throw new Error("Telegram initData is required. Open the app through Telegram bot.");
+        console.warn('⚠️ [getBaseHeaders] No initData available - request will fail on backend');
+        // НЕ выбрасываем ошибку - backend вернет 401, что обработается в getContext()
+        // Возвращаем заголовки без initData для graceful degradation
+        return headers;
     }
     
     headers["X-Telegram-Init-Data"] = initData;
     return headers;
 }
-
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getBaseHeaders() loaded from api/config.js');
 
 // ========== END REFACTORING STEP 1.3 ==========
 
@@ -63,9 +67,6 @@ export const fetchOptions = {
         "Content-Type": "application/json"
     }
 };
-
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] fetchOptions loaded from api/config.js');
 
 // ========== END REFACTORING STEP 1.4 ==========
 

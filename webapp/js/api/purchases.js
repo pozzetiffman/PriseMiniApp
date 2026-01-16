@@ -38,8 +38,6 @@ export async function createPurchaseAPI(productId, formData) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] createPurchaseAPI() loaded from api/purchases.js');
 
 // ========== END REFACTORING STEP 9.1 ==========
 
@@ -49,33 +47,59 @@ export async function getMyPurchasesAPI() {
     const url = `${API_BASE}/api/purchases/my`;
     console.log(`Getting my purchases`);
     
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'X-Telegram-Init-Data': getInitData(),
-            'ngrok-skip-browser-warning': '69420'
-        }
-    });
+    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+    const TIMEOUT_MS = 10000; // 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, TIMEOUT_MS);
     
-    const responseText = await response.text();
-    console.log(`Get my purchases response: status=${response.status}`);
-    
-    if (!response.ok) {
-        let errorMessage = 'Не удалось загрузить покупки';
-        try {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.detail || errorMessage;
-        } catch (e) {
-            errorMessage = responseText;
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'X-Telegram-Init-Data': getInitData(),
+                'ngrok-skip-browser-warning': '69420'
+            },
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        const responseText = await response.text();
+        console.log(`Get my purchases response: status=${response.status}`);
+        
+        if (!response.ok) {
+            let errorMessage = 'Не удалось загрузить покупки';
+            try {
+                const errorData = JSON.parse(responseText);
+                errorMessage = errorData.detail || errorMessage;
+            } catch (e) {
+                errorMessage = responseText;
+            }
+            throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
+        
+        return JSON.parse(responseText);
+    } catch (e) {
+        clearTimeout(timeoutId);
+        
+        // Обработка ошибки таймаута
+        if (e.name === 'AbortError') {
+            console.error("❌ getMyPurchasesAPI timeout after", TIMEOUT_MS, "ms");
+            throw new Error("Таймаут загрузки покупок. Сервер не отвечает.");
+        }
+        
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching purchases:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу.");
+        }
+        
+        throw e;
     }
-    
-    return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getMyPurchasesAPI() loaded from api/purchases.js');
 
 // ========== END REFACTORING STEP 9.2 ==========
 
@@ -107,8 +131,6 @@ export async function cancelPurchaseAPI(purchaseId) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] cancelPurchaseAPI() loaded from api/purchases.js');
 
 // ========== END REFACTORING STEP 9.3 ==========
 
@@ -117,34 +139,60 @@ console.log('✅ [REFACTORING] cancelPurchaseAPI() loaded from api/purchases.js'
 export async function getPurchasesHistoryAPI() {
     const url = `${API_BASE}/api/purchases/history`;
     console.log(`Getting purchases history`);
+
+    // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+    const TIMEOUT_MS = 10000; // 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, TIMEOUT_MS);
     
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'X-Telegram-Init-Data': getInitData(),
-            'ngrok-skip-browser-warning': '69420'
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'X-Telegram-Init-Data': getInitData(),
+                'ngrok-skip-browser-warning': '69420'
+            },
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        const responseText = await response.text();
+        console.log(`Get purchases history response: status=${response.status}`);
+
+        if (!response.ok) {
+            let errorMessage = 'Не удалось загрузить историю продаж';
+            try {
+                const errorData = JSON.parse(responseText);
+                errorMessage = errorData.detail || errorMessage;
+            } catch (e) {
+                errorMessage = responseText;
+            }
+            throw new Error(errorMessage);
         }
-    });
-    
-    const responseText = await response.text();
-    console.log(`Get purchases history response: status=${response.status}`);
-    
-    if (!response.ok) {
-        let errorMessage = 'Не удалось загрузить историю продаж';
-        try {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.detail || errorMessage;
-        } catch (e) {
-            errorMessage = responseText;
+
+        return JSON.parse(responseText);
+    } catch (e) {
+        clearTimeout(timeoutId);
+        
+        // Обработка ошибки таймаута
+        if (e.name === 'AbortError') {
+            console.error("❌ getPurchasesHistoryAPI timeout after", TIMEOUT_MS, "ms");
+            throw new Error("Таймаут загрузки истории покупок. Сервер не отвечает.");
         }
-        throw new Error(errorMessage);
+        
+        // Обработка сетевых ошибок
+        if (e.name === 'TypeError' && e.message && e.message.includes('fetch')) {
+            console.error("❌ Network error fetching purchases history:", e);
+            throw new Error("Ошибка сети: не удалось подключиться к серверу.");
+        }
+        
+        throw e;
     }
-    
-    return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getPurchasesHistoryAPI() loaded from api/purchases.js');
 
 // ========== END REFACTORING STEP 9.4 ==========
 
@@ -179,8 +227,6 @@ export async function getAllPurchasesAPI(shopOwnerId) {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] getAllPurchasesAPI() loaded from api/purchases.js');
 
 // ========== END REFACTORING STEP 9.5 ==========
 
@@ -213,8 +259,6 @@ export async function updatePurchaseStatusAPI(purchaseId, shopOwnerId, statusDat
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] updatePurchaseStatusAPI() loaded from api/purchases.js');
 
 // ========== END REFACTORING STEP 9.6 ==========
 
@@ -246,8 +290,6 @@ export async function clearPurchasesHistoryAPI() {
     return JSON.parse(responseText);
 }
 
-// Логирование для проверки рефакторинга (будет удалено после проверки)
-console.log('✅ [REFACTORING] clearPurchasesHistoryAPI() loaded from api/purchases.js');
 
 // ========== END REFACTORING STEP 9.7 ==========
 

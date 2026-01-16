@@ -63,8 +63,6 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGRAM_BOT_TOKEN else ""
 WEBAPP_URL = os.getenv("WEBAPP_URL", "")
 
-print(f"DEBUG: Order router initialized - TELEGRAM_BOT_TOKEN={'SET' if TELEGRAM_BOT_TOKEN else 'NOT SET'}, WEBAPP_URL={WEBAPP_URL}")
-
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
 def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:

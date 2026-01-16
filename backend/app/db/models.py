@@ -14,6 +14,8 @@ class Category(Base):
     
     products = relationship("Product", back_populates="category", cascade="all, delete-orphan")
     parent = relationship("Category", remote_side=[id], backref="subcategories")  # Связь с родительской категорией
+    # sold_products relationship определен в модели SoldProduct через backref
+    # При удалении категории category_id в sold_products устанавливается в NULL (ondelete="SET NULL")
 
 class Product(Base):
     __tablename__ = "products"
@@ -105,10 +107,11 @@ class SoldProduct(Base):
     discount = Column(Float, default=0.0)  # Скидка на момент продажи
     image_url = Column(String, nullable=True)  # Первое изображение
     images_urls = Column(Text, nullable=True)  # JSON массив URL изображений
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     quantity = Column(Integer, default=1)  # Количество проданного товара
     sold_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время продажи
-    snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент продажи
+    # Примечание: snapshot_id удален - эта функциональность не используется для SoldProduct
+    # Используется только в Order, Sale, Purchase через таблицу user_product_snapshots
     
     product = relationship("Product", backref="sold_records")
     category = relationship("Category", backref="sold_products")
@@ -219,7 +222,7 @@ class UserProductSnapshot(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     snapshot_id = Column(String, unique=True, index=True)  # Уникальный идентификатор snapshot (UUID)
-    product_id = Column(Integer, ForeignKey("products.id"), index=True)  # ID оригинального товара
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)  # ID оригинального товара (nullable для сохранения исторических данных при удалении продукта)
     user_id = Column(BigInteger, index=True)  # ID пользователя, для которого создан snapshot
     operation_type = Column(String, index=True)  # Тип операции: 'order', 'sell', 'buy'
     snapshot_json = Column(Text, nullable=True)  # JSON с данными товара на момент создания snapshot
@@ -227,6 +230,8 @@ class UserProductSnapshot(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время создания snapshot
     
     product = relationship("Product", backref="snapshots")
+    # Примечание: при удалении Product, product_id устанавливается в NULL (ondelete="SET NULL")
+    # Это позволяет сохранить исторические snapshots даже после удаления товара
 
 
 

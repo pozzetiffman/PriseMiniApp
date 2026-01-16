@@ -74,17 +74,29 @@ export async function loadCart(updateCartUI = null) {
                 // Получаем товар напрямую по его ID (из любого магазина)
                 const productUrl = `${API_BASE}/api/products/${reservation.product_id}`;
                 console.log('🛒 loadCart: Fetching product by ID:', productUrl);
-                const productResponse = await fetch(productUrl, {
-                    headers: getBaseHeadersNoAuth()
-                });
                 
-                if (!productResponse.ok) {
-                    const errorText = await productResponse.text();
-                    console.error(`❌ loadCart: Failed to fetch product ${reservation.product_id}:`, productResponse.status, errorText);
-                    continue;
-                }
+                // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
+                const TIMEOUT_MS = 5000; // 5 секунд для каждого товара
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                }, TIMEOUT_MS);
                 
-                const product = await productResponse.json();
+                try {
+                    const productResponse = await fetch(productUrl, {
+                        headers: getBaseHeadersNoAuth(),
+                        signal: controller.signal
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (!productResponse.ok) {
+                        const errorText = await productResponse.text();
+                        console.error(`❌ loadCart: Failed to fetch product ${reservation.product_id}:`, productResponse.status, errorText);
+                        continue;
+                    }
+                    
+                    const product = await productResponse.json();
                 console.log('🛒 loadCart: Found product:', product.name, 'id:', product.id);
                 
                 // Использование импортированной функции для расчета времени до истечения резервации
@@ -133,8 +145,21 @@ export async function loadCart(updateCartUI = null) {
                 
                 // Вставляем контейнер изображения в начало
                 cartItem.insertBefore(imageContainer, cartItem.firstChild);
-                cartItems.appendChild(cartItem);
-                console.log('🛒 loadCart: Added cart item for product:', product.name);
+                    cartItems.appendChild(cartItem);
+                    console.log('🛒 loadCart: Added cart item for product:', product.name);
+                } catch (fetchError) {
+                    clearTimeout(timeoutId);
+                    
+                    // Обработка ошибки таймаута
+                    if (fetchError.name === 'AbortError') {
+                        console.error(`❌ loadCart: Timeout fetching product ${reservation.product_id}`);
+                        continue; // Пропускаем этот товар
+                    }
+                    
+                    console.error('❌ Error loading cart item:', fetchError);
+                    console.error('❌ Reservation:', reservation);
+                    console.error('❌ Error stack:', fetchError.stack);
+                }
             } catch (e) {
                 console.error('❌ Error loading cart item:', e);
                 console.error('❌ Reservation:', reservation);

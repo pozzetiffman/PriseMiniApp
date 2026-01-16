@@ -12,13 +12,38 @@ import { API_BASE } from '../api.js';
 // НОВЫЙ КОД (используется сейчас)
 import { showProductModal } from './products_modal.js'; // Импортируем из нового модуля
 // ========== END REFACTORING STEP 3.1 ==========
-import { checkFavorite, syncFavoritesCache, toggleFavorite } from '../favorites.js';
+// favorites.js - необязательный модуль, используется через динамический импорт
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
 import { isMobileDevice } from '../utils/products_utils.js';
 
 // Зависимости, которые будут переданы из products.js через initRenderProductsDependencies
 let productsGridElement = null;
-let appContextGetter = null; // Функция для получения актуального appContext
+let appContextGetter = null;
+
+// Безопасные функции для работы с favorites (необязательный модуль)
+async function safeCheckFavorite(productId) {
+    try {
+        const favoritesModule = await import('../favorites.js');
+        if (favoritesModule.checkFavorite) {
+            return await favoritesModule.checkFavorite(productId);
+        }
+    } catch (e) {
+        // Игнорируем ошибку, модуль необязательный
+    }
+    return false;
+}
+
+async function safeToggleFavorite(productId) {
+    try {
+        const favoritesModule = await import('../favorites.js');
+        if (favoritesModule.toggleFavorite) {
+            return await favoritesModule.toggleFavorite(productId);
+        }
+    } catch (e) {
+        // Игнорируем ошибку, модуль необязательный
+    }
+    return { is_favorite: false };
+} // Функция для получения актуального appContext
 
 // Инициализация зависимостей для renderProducts
 export function initRenderProductsDependencies(dependencies) {
@@ -34,10 +59,20 @@ export async function renderProducts(products) {
     }
     
     productsGridElement.innerHTML = '';
+    // Forced reflow для Telegram WebView (гарантирует обновление UI после очистки DOM)
+    void productsGridElement.offsetHeight;
     
     // СИНХРОНИЗАЦИЯ: Загружаем все избранные товары сразу для синхронизации сердечек
     // Важно: синхронизируем кэш ДО рендеринга товаров, чтобы сердечки отображались правильно
-    await syncFavoritesCache();
+    // favorites.js - необязательный модуль
+    try {
+        const favoritesModule = await import('../favorites.js');
+        if (favoritesModule.syncFavoritesCache) {
+            await favoritesModule.syncFavoritesCache();
+        }
+    } catch (e) {
+        // Игнорируем ошибку, модуль необязательный
+    }
     
     // Отладочный вывод - проверяем, что приходит с сервера
     console.log('[RENDER DEBUG] Products received:', products);
@@ -46,12 +81,8 @@ export async function renderProducts(products) {
     }
     
     if (!products || products.length === 0) {
-        const currentAppContext = appContextGetter ? appContextGetter() : null;
-        if (currentAppContext && currentAppContext.role === 'client') {
-            productsGridElement.innerHTML = '<p class="loading">В этой витрине пока нет товаров.</p>';
-        } else {
-            productsGridElement.innerHTML = '<p class="loading">Товаров пока нет. Используйте /manage в боте для добавления.</p>';
-        }
+        // Не устанавливаем loading - просто рендерим пустой контент
+        // Loading управляется только в data.js
         return;
     }
 
@@ -204,7 +235,7 @@ export async function renderProducts(products) {
             // Используем единый источник истины - API
             // Проверяем что prod.id существует перед вызовом API
             if (prod.id) {
-                checkFavorite(prod.id).then(favorite => {
+                safeCheckFavorite(prod.id).then(favorite => {
                     isFavorite = favorite;
                     updateFavoriteButtonState(favoriteButton, favorite);
                 }).catch(() => {
@@ -234,7 +265,7 @@ export async function renderProducts(products) {
                 // Запрос в API - асинхронно (в фоне)
                 // toggleFavorite автоматически обновляет кэш в favorites.js
                 try {
-                    const result = await toggleFavorite(prod.id);
+                    const result = await safeToggleFavorite(prod.id);
                     // Если ответ сервера отличается от optimistic состояния - синхронизируем
                     if (result.is_favorite !== newFavoriteState) {
                         isFavorite = result.is_favorite;
@@ -829,7 +860,7 @@ export async function renderProducts(products) {
             
             // Проверяем статус избранного для режима списка
             if (prod.id) {
-                checkFavorite(prod.id).then(favorite => {
+                safeCheckFavorite(prod.id).then(favorite => {
                     updateFavoriteButtonState(favoriteButtonList, favorite);
                 }).catch(() => {
                     updateFavoriteButtonState(favoriteButtonList, false);
