@@ -4,6 +4,7 @@
 // Импорты зависимостей
 import { getCurrentShopSettings } from './admin.js';
 import {
+    API_BASE,
     deleteProductAPI,
     markProductSoldAPI,
     updateProductAPI,
@@ -23,6 +24,7 @@ let loadDataCallback = null; // Функция для загрузки данн�
 let allProductsGetter = null; // Функция-геттер для получения allProducts
 let showSellModalCallback = null; // Функция для показа модального окна продажи (используется в markAsSold)
 let sellModalElement = null; // Элемент модального окна продажи
+let showProductModalCallback = null; // Функция для показа/обновления страницы товара
 
 // Инициализация зависимостей
 export function initProductEditDependencies(dependencies) {
@@ -34,6 +36,7 @@ export function initProductEditDependencies(dependencies) {
     allProductsGetter = dependencies.allProductsGetter;
     showSellModalCallback = dependencies.showSellModal;
     sellModalElement = dependencies.sellModal;
+    showProductModalCallback = dependencies.showProductModal;
 }
 
 // Показ модального окна редактирования товара
@@ -553,11 +556,51 @@ export async function saveProductEdit(productId) {
         if (currentProductSetter) {
             currentProductSetter(null);
         }
+        
+        // Обновляем данные (товары и категории)
         if (loadDataCallback) {
-            setTimeout(async () => {
-                await loadDataCallback();
-                console.log('✅ Data reloaded after product edit');
-            }, 500);
+            await loadDataCallback();
+            console.log('✅ Data reloaded after product edit');
+        }
+        
+        // Проверяем, открыта ли страница товара, и обновляем её если нужно
+        const productPage = document.getElementById('product-page');
+        const isProductPageOpen = productPage && (productPage.style.display === 'block' || productPage.style.display === 'flex');
+        
+        if (isProductPageOpen && showProductModalCallback && allProductsGetter) {
+            // Получаем обновленный список товаров
+            const allProducts = allProductsGetter();
+            if (allProducts && Array.isArray(allProducts)) {
+                // Ищем обновленный товар в списке
+                const updatedProduct = allProducts.find(p => p.id === productId);
+                if (updatedProduct) {
+                    // Получаем изображения товара
+                    let imagesList = [];
+                    if (updatedProduct.images_urls && Array.isArray(updatedProduct.images_urls) && updatedProduct.images_urls.length > 0) {
+                        imagesList = updatedProduct.images_urls;
+                    } else if (updatedProduct.image_url) {
+                        imagesList = [updatedProduct.image_url];
+                    }
+                    
+                    // Формируем полные URL изображений
+                    const fullImages = imagesList.map(imgUrl => {
+                        if (!imgUrl) return '';
+                        if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) {
+                            return imgUrl;
+                        }
+                        if (imgUrl.startsWith('/')) {
+                            return API_BASE + imgUrl;
+                        }
+                        return API_BASE + '/' + imgUrl;
+                    }).filter(url => url !== '');
+                    
+                    // Обновляем страницу товара с новыми данными
+                    console.log('🔄 Updating product page with new data for product:', updatedProduct.id);
+                    showProductModalCallback(updatedProduct, null, fullImages);
+                } else {
+                    console.warn('⚠️ Updated product not found in products list');
+                }
+            }
         }
     } catch (e) {
         console.error('Save product edit error:', e);

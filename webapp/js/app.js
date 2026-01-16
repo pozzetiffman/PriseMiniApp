@@ -15,7 +15,7 @@ import {
     selectedMainCategoryId
 } from './categories.js';
 // Импорт функций рендеринга товаров из отдельного модуля (рефакторинг)
-import { initProductsDependencies, renderProducts } from './products.js';
+import { initProductsDependencies, renderProducts, showProductModal } from './products.js';
 // Импорт функций редактирования товаров из отдельного модуля (рефакторинг)
 import { deleteProduct, initProductEditDependencies, markAsSold, showEditProductModal, showSellModal } from './product-edit.js';
 // Импорт функций резерваций из отдельного модуля (рефакторинг)
@@ -301,7 +301,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadData: loadData, // Функция для загрузки данных
         allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
         showSellModal: showSellModal, // Функция для показа модального окна продажи (используется в markAsSold)
-        sellModal: sellModal // Элемент модального окна продажи
+        sellModal: sellModal, // Элемент модального окна продажи
+        showProductModal: showProductModal // Функция для показа/обновления страницы товара
     });
     
     initProductsDependencies({
