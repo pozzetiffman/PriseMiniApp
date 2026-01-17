@@ -1510,14 +1510,14 @@ async function loadSoldProducts() {
             const unitPriceDiv = document.createElement('div');
             unitPriceDiv.style.cssText = 'font-size: 14px; color: var(--tg-theme-hint-color);';
             if (sold.discount > 0) {
-                unitPriceDiv.innerHTML = `Цена за 1 шт: <span style="text-decoration: line-through; margin-right: 6px;">${sold.price} ₽</span> <span style="color: var(--tg-theme-link-color); font-weight: 600;">${unitPrice} ₽</span>`;
+                unitPriceDiv.innerHTML = `Цена за 1 шт: <span style="text-decoration: line-through; margin-right: 6px;">${sold.price} ₽</span> <span style="color: #00A82E; font-weight: 600;">${unitPrice} ₽</span>`;
             } else {
-                unitPriceDiv.innerHTML = `Цена за 1 шт: <span style="color: var(--tg-theme-link-color); font-weight: 600;">${unitPrice} ₽</span>`;
+                unitPriceDiv.innerHTML = `Цена за 1 шт: <span style="color: #00A82E; font-weight: 600;">${unitPrice} ₽</span>`;
             }
             
             // Общая цена
             const totalPriceDiv = document.createElement('div');
-            totalPriceDiv.style.cssText = 'font-size: 18px; font-weight: 700; color: var(--tg-theme-link-color); margin-top: 4px;';
+            totalPriceDiv.style.cssText = 'font-size: 18px; font-weight: 700; color: #00A82E; margin-top: 4px;';
             if (sold.discount > 0) {
                 const oldTotalPrice = sold.price * quantity;
                 totalPriceDiv.innerHTML = `Общая цена: <span style="text-decoration: line-through; margin-right: 6px; font-size: 14px; color: var(--tg-theme-hint-color);">${oldTotalPrice} ₽</span> <span>${totalPrice} ₽</span>`;

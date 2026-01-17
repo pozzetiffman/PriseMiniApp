@@ -608,7 +608,7 @@ header h1 {
 .cart-item-price {
     margin: 4px 0 !important;
     font-size: 16px !important;
-    color: var(--tg-theme-link-color) !important;
+    color: #00A82E !important;
     font-weight: 700 !important;
 }
 
@@ -1243,7 +1243,7 @@ header h1 {
 #products-grid.products-list-view .product-list-price .product-price {
     font-size: 18px;
     font-weight: 700;
-    color: var(--tg-theme-link-color);
+    color: #00A82E;
     white-space: nowrap;
 }
 
@@ -1560,7 +1560,7 @@ header h1 {
 
 .product-price {
     font-size: 18px;
-    color: var(--tg-theme-link-color) !important;
+    color: #00A82E !important;
     font-weight: 700;
     letter-spacing: -0.3px;
 }
@@ -1957,7 +1957,7 @@ header h1 {
 .product-page-price-container .product-price {
     font-size: 28px;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #00A82E;
 }
 
 .product-page-price-container .old-price {
@@ -2455,7 +2455,7 @@ header h1 {
 
 .modal-price {
     font-size: 26px;
-    color: var(--tg-theme-link-color) !important;
+    color: #00A82E !important;
     font-weight: 700;
 }
 
@@ -2888,7 +2888,7 @@ main {
     .stat-value,
     .order-total,
     .order-product-summary .product-price {
-        color: #7dd3fc !important;
+        color: #00A82E !important;
     }
     
     .category-badge.active {
@@ -4278,7 +4278,7 @@ main {
 .order-product-summary .product-price {
     font-size: 20px;
     font-weight: 700;
-    color: var(--tg-theme-button-color, #5ac8fa);
+    color: #00A82E;
     margin: 8px 0;
 }
 
@@ -4296,7 +4296,7 @@ main {
     border: 1px solid var(--border-glass);
     font-size: 18px;
     font-weight: 700;
-    color: var(--tg-theme-button-color, #5ac8fa);
+    color: #00A82E;
     text-align: center;
 }
 
