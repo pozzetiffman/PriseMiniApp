@@ -12,6 +12,13 @@ let productsGridElement = null;
 let renderProductsCallback = null;
 let applyFiltersCallback = null;
 
+// Адаптивные диапазоны цен (вычисляются на основе товаров)
+let priceRanges = {
+    low: { max: 1000 },
+    medium: { min: 1000, max: 5000 },
+    high: { min: 5000 }
+};
+
 // Инициализация зависимостей
 export function initFiltersDependencies(dependencies) {
     allProductsGetter = dependencies.allProductsGetter;
@@ -67,10 +74,167 @@ export function initFilters() {
     }
 }
 
+// Вычисление адаптивных диапазонов цен на основе товаров
+function calculatePriceRanges(products) {
+    if (!products || products.length === 0) {
+        // Возвращаем значения по умолчанию
+        return {
+            low: { max: 1000 },
+            medium: { min: 1000, max: 5000 },
+            high: { min: 5000 }
+        };
+    }
+    
+    // Собираем все цены товаров (с учетом скидок)
+    const prices = products
+        .map(prod => {
+            // Пропускаем товары без цены или с ценой "по запросу"
+            if (prod.price === null || prod.price === undefined || prod.price === 0) {
+                return null;
+            }
+            // Учитываем скидку
+            const finalPrice = prod.discount > 0 
+                ? Math.round(prod.price * (1 - prod.discount / 100)) 
+                : prod.price;
+            return finalPrice;
+        })
+        .filter(price => price !== null && price > 0);
+    
+    if (prices.length === 0) {
+        // Если нет товаров с ценами, возвращаем значения по умолчанию
+        return {
+            low: { max: 1000 },
+            medium: { min: 1000, max: 5000 },
+            high: { min: 5000 }
+        };
+    }
+    
+    // Находим минимальную и максимальную цены
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    
+    // Если все цены одинаковые или очень близкие, используем простые диапазоны
+    if (maxPrice - minPrice < 100) {
+        const avgPrice = (minPrice + maxPrice) / 2;
+        return {
+            low: { max: avgPrice },
+            medium: { min: avgPrice, max: avgPrice },
+            high: { min: avgPrice }
+        };
+    }
+    
+    // Вычисляем диапазоны: делим на 3 равные части (33%, 33%, 34%)
+    const range = maxPrice - minPrice;
+    const lowMax = Math.round(minPrice + range * 0.33);
+    const mediumMin = lowMax;
+    const mediumMax = Math.round(minPrice + range * 0.67);
+    const highMin = mediumMax;
+    
+    // Округляем до красивых чисел (кратных 10, 50, 100, 500, 1000 в зависимости от масштаба)
+    function roundToNiceNumber(num, isMax = false) {
+        if (num < 10) return Math.ceil(num / 10) * 10;
+        if (num < 50) return Math.ceil(num / 10) * 10;
+        if (num < 100) return Math.ceil(num / 50) * 50;
+        if (num < 500) return Math.ceil(num / 100) * 100;
+        if (num < 1000) return Math.ceil(num / 500) * 500;
+        if (num < 5000) return Math.ceil(num / 1000) * 1000;
+        if (num < 10000) return Math.ceil(num / 5000) * 5000;
+        return Math.ceil(num / 10000) * 10000;
+    }
+    
+    function roundToNiceNumberMin(num) {
+        if (num < 10) return Math.floor(num / 10) * 10;
+        if (num < 50) return Math.floor(num / 10) * 10;
+        if (num < 100) return Math.floor(num / 50) * 50;
+        if (num < 500) return Math.floor(num / 100) * 100;
+        if (num < 1000) return Math.floor(num / 500) * 500;
+        if (num < 5000) return Math.floor(num / 1000) * 1000;
+        if (num < 10000) return Math.floor(num / 5000) * 5000;
+        return Math.floor(num / 10000) * 10000;
+    }
+    
+    return {
+        low: { max: roundToNiceNumber(lowMax, true) },
+        medium: { 
+            min: roundToNiceNumberMin(mediumMin), 
+            max: roundToNiceNumber(mediumMax, true) 
+        },
+        high: { min: roundToNiceNumberMin(highMin) }
+    };
+}
+
+// Обновление диапазонов цен и UI фильтра
+export function updatePriceRanges() {
+    const allProducts = allProductsGetter ? allProductsGetter() : [];
+    const oldRanges = { ...priceRanges };
+    priceRanges = calculatePriceRanges(allProducts);
+    
+    // Сохраняем диапазоны в глобальном объекте для использования в других модулях
+    if (window.priceRanges === undefined) {
+        window.priceRanges = priceRanges;
+    } else {
+        Object.assign(window.priceRanges, priceRanges);
+    }
+    
+    // Обновляем UI фильтра, если он уже создан и диапазоны изменились
+    const rangesChanged = JSON.stringify(oldRanges) !== JSON.stringify(priceRanges);
+    if (rangesChanged) {
+        updatePriceFilterUI();
+    }
+}
+
+// Обновление UI фильтра цен
+export function updatePriceFilterUI() {
+    const lowOption = document.querySelector('input[name="price-filter"][value="low"]');
+    const mediumOption = document.querySelector('input[name="price-filter"][value="medium"]');
+    const highOption = document.querySelector('input[name="price-filter"][value="high"]');
+    
+    if (lowOption) {
+        const label = lowOption.closest('label');
+        if (label) {
+            const textSpan = label.querySelector('.filter-radio-text');
+            if (textSpan) {
+                textSpan.textContent = `До ${priceRanges.low.max.toLocaleString('ru-RU')} ₽`;
+            }
+        }
+    }
+    
+    if (mediumOption) {
+        const label = mediumOption.closest('label');
+        if (label) {
+            const textSpan = label.querySelector('.filter-radio-text');
+            if (textSpan) {
+                textSpan.textContent = `${priceRanges.medium.min.toLocaleString('ru-RU')} - ${priceRanges.medium.max.toLocaleString('ru-RU')} ₽`;
+            }
+        }
+    }
+    
+    if (highOption) {
+        const label = highOption.closest('label');
+        if (label) {
+            const textSpan = label.querySelector('.filter-radio-text');
+            if (textSpan) {
+                textSpan.textContent = `От ${priceRanges.high.min.toLocaleString('ru-RU')} ₽`;
+            }
+        }
+    }
+}
+
+// Делаем функцию доступной глобально для использования в categories.js
+window.updatePriceFilterUI = updatePriceFilterUI;
+
+// Получение текущих диапазонов цен
+export function getPriceRanges() {
+    return priceRanges;
+}
+
 // Обновление опций фильтра
 export function updateProductFilterOptions() {
     const allProducts = allProductsGetter ? allProductsGetter() : [];
     const productFilters = productFiltersGetter ? productFiltersGetter() : {};
+    
+    // Обновляем диапазоны цен при обновлении опций
+    updatePriceRanges();
     
     if (allProducts.length === 0) {
         // Если товаров нет, скрываем все опции фильтра
@@ -210,17 +374,28 @@ export async function applyFilters() {
         });
     }
     
-    // Фильтр по цене
+    // Фильтр по цене (используем адаптивные диапазоны)
     if (productFilters.price !== 'all') {
+        // Получаем актуальные диапазоны цен
+        const ranges = getPriceRanges();
+        
         filteredProducts = filteredProducts.filter(prod => {
-            const finalPrice = prod.discount > 0 ? Math.round(prod.price * (1 - prod.discount / 100)) : prod.price;
+            // Пропускаем товары без цены
+            if (prod.price === null || prod.price === undefined || prod.price === 0) {
+                return false;
+            }
+            
+            const finalPrice = prod.discount > 0 
+                ? Math.round(prod.price * (1 - prod.discount / 100)) 
+                : prod.price;
+            
             switch (productFilters.price) {
                 case 'low':
-                    return finalPrice < 1000;
+                    return finalPrice <= ranges.low.max;
                 case 'medium':
-                    return finalPrice >= 1000 && finalPrice <= 5000;
+                    return finalPrice >= ranges.medium.min && finalPrice <= ranges.medium.max;
                 case 'high':
-                    return finalPrice > 5000;
+                    return finalPrice >= ranges.high.min;
                 default:
                     return true;
             }

@@ -305,6 +305,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         showProductModal: showProductModal // Функция для показа/обновления страницы товара
     });
     
+    // Делаем showProductModal доступным глобально для favorites.js
+    window.showProductModal = showProductModal;
+    
+    // Экспортируем allProducts для использования в других модулях (например, favorites.js)
+    window.getAllProducts = () => allProducts;
+    
+    // Экспортируем API_BASE для использования в других модулях
+    import('./api.js').then(apiModule => {
+        if (apiModule.API_BASE) {
+            window.API_BASE = apiModule.API_BASE;
+        }
+    });
+    
     initProductsDependencies({
         productsGrid: productsGrid,
         appContext: () => appContext, // Передаем функцию-геттер для получения актуального appContext
@@ -546,6 +559,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Избранное доступно только для клиентов, не для админа
         if (appContext.role === 'client') {
             await tryInitFavorites(appContext);
+            // Показываем кнопку избранного для клиентов
+            const favoritesButton = document.getElementById('favorites-button');
+            if (favoritesButton) {
+                favoritesButton.style.display = 'flex';
+            }
         } else {
             // Скрываем кнопку избранного для админа
             const favoritesButton = document.getElementById('favorites-button');

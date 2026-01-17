@@ -883,6 +883,7 @@ header h1 {
     flex-shrink: 0; /* Зафиксированная ширина, не сжимается */
     z-index: 10003; /* Выше чем categories-nav, чтобы фильтр всегда был виден */
     isolation: isolate; /* Создаем новый контекст наложения */
+    overflow: visible !important; /* Разрешаем dropdown выходить за границы */
 }
 
 /* Кнопка фильтра со стрелками */
@@ -938,15 +939,18 @@ header h1 {
     max-width: 280px;
     max-height: 400px;
     overflow-y: auto;
-    overflow-x: visible; /* Не обрезаем по горизонтали */
+    overflow-x: hidden; /* Скрываем горизонтальный скролл */
     animation: slideDown 0.3s ease-out;
     -webkit-overflow-scrolling: touch;
-    pointer-events: auto; /* Разрешаем клики */
+    pointer-events: auto !important; /* Разрешаем клики */
     will-change: transform; /* Оптимизация для анимации */
     margin: 0 !important; /* Убираем margin */
     /* Скрываем scrollbar */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE и Edge */
+    /* Убеждаемся, что dropdown не обрезается */
+    contain: layout style paint; /* Оптимизация рендеринга */
+    transform: translateZ(0); /* Создаем новый слой для GPU ускорения */
 }
 
 .category-filter-dropdown::-webkit-scrollbar {

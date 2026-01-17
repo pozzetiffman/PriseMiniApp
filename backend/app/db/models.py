@@ -234,6 +234,19 @@ class UserProductSnapshot(Base):
     # Примечание: при удалении Product, product_id устанавливается в NULL (ondelete="SET NULL")
     # Это позволяет сохранить исторические snapshots даже после удаления товара
 
+class Favorite(Base):
+    __tablename__ = "favorites"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), index=True)  # ID товара
+    user_id = Column(BigInteger, index=True)  # ID пользователя, который добавил в избранное
+    shop_owner_id = Column(BigInteger, index=True)  # ID владельца магазина (для фильтрации)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время добавления в избранное
+    
+    product = relationship("Product", backref="favorites")
+    
+    # Уникальный индекс на пару (product_id, user_id) будет создан через миграцию
+
 
 
 

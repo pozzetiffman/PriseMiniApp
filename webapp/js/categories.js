@@ -342,6 +342,13 @@ export function renderCategories(categories) {
     const filterDropdown = document.createElement('div');
     filterDropdown.className = 'category-filter-dropdown';
     filterDropdown.style.display = 'none';
+    // Получаем адаптивные диапазоны цен (используем значения по умолчанию, если еще не вычислены)
+    const priceRanges = window.priceRanges || {
+        low: { max: 1000 },
+        medium: { min: 1000, max: 5000 },
+        high: { min: 5000 }
+    };
+    
     filterDropdown.innerHTML = `
         <div class="filter-dropdown-content">
             <div class="filter-section">
@@ -355,19 +362,19 @@ export function renderCategories(categories) {
                 <div class="filter-option">
                     <label class="filter-radio-label">
                         <input type="radio" name="price-filter" class="filter-radio" value="low">
-                        <span class="filter-radio-text">До 1000 ₽</span>
+                        <span class="filter-radio-text">До ${priceRanges.low.max.toLocaleString('ru-RU')} ₽</span>
                     </label>
                 </div>
                 <div class="filter-option">
                     <label class="filter-radio-label">
                         <input type="radio" name="price-filter" class="filter-radio" value="medium">
-                        <span class="filter-radio-text">1000 - 5000 ₽</span>
+                        <span class="filter-radio-text">${priceRanges.medium.min.toLocaleString('ru-RU')} - ${priceRanges.medium.max.toLocaleString('ru-RU')} ₽</span>
                     </label>
                 </div>
                 <div class="filter-option">
                     <label class="filter-radio-label">
                         <input type="radio" name="price-filter" class="filter-radio" value="high">
-                        <span class="filter-radio-text">От 5000 ₽</span>
+                        <span class="filter-radio-text">От ${priceRanges.high.min.toLocaleString('ru-RU')} ₽</span>
                     </label>
                 </div>
             </div>
@@ -450,9 +457,21 @@ export function renderCategories(categories) {
         // Обновляем опции фильтра при открытии
         if (!isOpen && updateProductFilterOptionsCallback) {
             updateProductFilterOptionsCallback();
+            // Обновляем UI диапазонов цен после обновления опций
+            // Небольшая задержка, чтобы дать время обновиться диапазонам
+            setTimeout(() => {
+                if (window.updatePriceFilterUI) {
+                    window.updatePriceFilterUI();
+                }
+            }, 100);
         }
         
         if (!isOpen) {
+            // Перемещаем dropdown в body для избежания обрезания родительскими элементами
+            if (filterDropdown.parentNode !== document.body) {
+                document.body.appendChild(filterDropdown);
+            }
+            
             // Открываем фильтр и рассчитываем позицию для fixed позиционирования
             filterDropdown.style.display = 'block';
             
@@ -460,14 +479,35 @@ export function renderCategories(categories) {
             const buttonRect = filterButton.getBoundingClientRect();
             const dropdownHeight = 400; // max-height фильтра
             const viewportHeight = window.innerHeight;
+            const viewportWidth = window.innerWidth;
             
             // Рассчитываем позицию: справа от кнопки, снизу от кнопки
             let top = buttonRect.bottom + 4; // margin-top: 4px
-            let right = window.innerWidth - buttonRect.right;
+            let right = viewportWidth - buttonRect.right;
             
-            // Если фильтр не помещается снизу, показываем сверху
+            // Проверяем, помещается ли dropdown снизу
             if (top + dropdownHeight > viewportHeight && buttonRect.top > dropdownHeight) {
+                // Показываем сверху, если не помещается снизу
                 top = buttonRect.top - dropdownHeight - 4;
+            }
+            
+            // Проверяем, не выходит ли dropdown за правую границу
+            const dropdownWidth = filterDropdown.offsetWidth || 280; // max-width из CSS
+            if (right + dropdownWidth > viewportWidth) {
+                // Если выходит за правую границу, выравниваем по правому краю с отступом
+                right = 8; // Отступ от правого края
+            }
+            
+            // Проверяем, не выходит ли dropdown за левую границу
+            const leftPosition = viewportWidth - right - dropdownWidth;
+            if (leftPosition < 0) {
+                // Если выходит за левую границу, выравниваем по левому краю с отступом
+                right = viewportWidth - dropdownWidth - 8;
+            }
+            
+            // Убеждаемся, что top не отрицательный
+            if (top < 0) {
+                top = 8; // Отступ от верхнего края
             }
             
             // Устанавливаем позицию
@@ -475,8 +515,14 @@ export function renderCategories(categories) {
             filterDropdown.style.right = `${right}px`;
             filterDropdown.style.left = 'auto';
             filterDropdown.style.bottom = 'auto';
+            filterDropdown.style.position = 'fixed';
+            filterDropdown.style.zIndex = '99999';
         } else {
             filterDropdown.style.display = 'none';
+            // Возвращаем dropdown обратно в контейнер при закрытии
+            if (filterDropdown.parentNode === document.body && filterContainer) {
+                filterContainer.appendChild(filterDropdown);
+            }
         }
         
         filterButton.classList.toggle('active', !isOpen);
@@ -493,19 +539,44 @@ export function renderCategories(categories) {
     // Функция для обновления позиции фильтра при скролле или изменении размера
     const updateFilterPosition = () => {
         if (filterDropdown.style.display === 'block') {
+            // Перемещаем dropdown в body, если он еще не там
+            if (filterDropdown.parentNode !== document.body) {
+                document.body.appendChild(filterDropdown);
+            }
+            
             const buttonRect = filterButton.getBoundingClientRect();
             const dropdownHeight = 400;
             const viewportHeight = window.innerHeight;
+            const viewportWidth = window.innerWidth;
             
             let top = buttonRect.bottom + 4;
-            let right = window.innerWidth - buttonRect.right;
+            let right = viewportWidth - buttonRect.right;
             
+            // Проверяем, помещается ли dropdown снизу
             if (top + dropdownHeight > viewportHeight && buttonRect.top > dropdownHeight) {
                 top = buttonRect.top - dropdownHeight - 4;
             }
             
+            // Проверяем границы по горизонтали
+            const dropdownWidth = filterDropdown.offsetWidth || 280;
+            if (right + dropdownWidth > viewportWidth) {
+                right = 8;
+            }
+            
+            const leftPosition = viewportWidth - right - dropdownWidth;
+            if (leftPosition < 0) {
+                right = viewportWidth - dropdownWidth - 8;
+            }
+            
+            // Убеждаемся, что top не отрицательный
+            if (top < 0) {
+                top = 8;
+            }
+            
             filterDropdown.style.top = `${top}px`;
             filterDropdown.style.right = `${right}px`;
+            filterDropdown.style.position = 'fixed';
+            filterDropdown.style.zIndex = '99999';
         }
     };
     
@@ -520,6 +591,12 @@ export function renderCategories(categories) {
         if (updateProductFilterOptionsCallback) {
             updateProductFilterOptionsCallback();
         }
+        // Обновляем UI диапазонов цен после создания фильтра
+        setTimeout(() => {
+            if (window.updatePriceFilterUI) {
+                window.updatePriceFilterUI();
+            }
+        }, 50);
     }, 0);
     
     // Добавляем фильтр в правую часть контейнера
@@ -559,16 +636,41 @@ export function renderCategories(categories) {
             // Также закрываем фильтр при клике вне его
             const allFilterContainers = document.querySelectorAll('.category-filter-container');
             allFilterContainers.forEach(container => {
-                if (!container.contains(e.target)) {
-                    const filterDropdown = container.querySelector('.category-filter-dropdown');
-                    const filterButton = container.querySelector('.category-filter-button');
-                    if (filterDropdown) filterDropdown.style.display = 'none';
-                    if (filterButton) filterButton.classList.remove('active');
+                const filterDropdown = document.querySelector('.category-filter-dropdown');
+                const filterButton = container.querySelector('.category-filter-button');
+                
+                // Проверяем, был ли клик вне фильтра (включая dropdown, который может быть в body)
+                const clickedInFilter = container.contains(e.target) || 
+                                       (filterDropdown && filterDropdown.contains(e.target));
+                
+                if (!clickedInFilter) {
+                    if (filterDropdown) {
+                        closeFilterDropdown(filterDropdown);
+                    }
                 }
             });
         };
         document.addEventListener('click', window.categoryDropdownClickHandler);
         console.log('✅ [RENDER] Category dropdown click handler registered');
+    }
+}
+
+// Функция для закрытия dropdown и возврата его в контейнер
+function closeFilterDropdown(filterDropdown) {
+    if (!filterDropdown) return;
+    
+    filterDropdown.style.display = 'none';
+    
+    // Находим контейнер фильтра
+    const filterContainer = document.querySelector('.category-filter-container');
+    if (filterContainer && filterDropdown.parentNode === document.body) {
+        filterContainer.appendChild(filterDropdown);
+    }
+    
+    // Убираем активный класс с кнопки
+    const filterButton = document.querySelector('.category-filter-button');
+    if (filterButton) {
+        filterButton.classList.remove('active');
     }
 }
 
@@ -586,6 +688,7 @@ export function initCategoryFilterHandlers(filterDropdown) {
         radio.addEventListener('change', (e) => {
             productFilters.price = e.target.value;
             if (applyFiltersCallback) applyFiltersCallback();
+            // Не закрываем dropdown при выборе опции, чтобы пользователь мог выбрать несколько фильтров
         });
     });
     
@@ -595,6 +698,7 @@ export function initCategoryFilterHandlers(filterDropdown) {
         radio.addEventListener('change', (e) => {
             productFilters.sortBy = e.target.value;
             if (applyFiltersCallback) applyFiltersCallback();
+            // Не закрываем dropdown при выборе опции, чтобы пользователь мог выбрать несколько фильтров
         });
     });
     
@@ -662,6 +766,7 @@ export function initCategoryFilterHandlers(filterDropdown) {
             });
             
             if (applyFiltersCallback) applyFiltersCallback();
+            // Не закрываем dropdown после сброса, чтобы пользователь мог продолжить работу
         });
     }
 }

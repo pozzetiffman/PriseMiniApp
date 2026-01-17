@@ -441,18 +441,28 @@ export function showProductModal(prod, finalPrice, fullImages) {
     // Получаем элементы страницы товара
     const productPage = document.getElementById('product-page');
     const mainContent = document.getElementById('main-content');
+    const favoritesPage = document.getElementById('favorites-page');
+    const cartPage = document.getElementById('cart-page');
     
     if (!productPage) {
         console.error('❌ [PRODUCT PAGE] Product page element not found!');
         return;
     }
     
-    if (!mainContent) {
-        console.error('❌ [PRODUCT PAGE] Main content element not found!');
-        return;
-    }
-    
     console.log(`[PRODUCT PAGE] Opening product page: productId=${prod.id}, productName="${prod.name}"`);
+    
+    // Определяем, с какой страницы мы пришли
+    // Проверяем, какая страница сейчас видна
+    if (favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex')) {
+        navigationHistory = 'favorites';
+        console.log('[PRODUCT PAGE] Coming from favorites page');
+    } else if (cartPage && (cartPage.style.display === 'block' || cartPage.style.display === 'flex')) {
+        navigationHistory = 'cart';
+        console.log('[PRODUCT PAGE] Coming from cart page');
+    } else {
+        navigationHistory = 'main';
+        console.log('[PRODUCT PAGE] Coming from main page');
+    }
     
     // Сбрасываем ID загрузки при открытии нового товара
     modalState.currentImageLoadId = 0;
@@ -466,8 +476,10 @@ export function showProductModal(prod, finalPrice, fullImages) {
     // Активируем блокировку горизонтального скролла
     enableHorizontalScrollBlock();
     
-    // Скрываем главный контент и показываем страницу товара
-    mainContent.style.display = 'none';
+    // Скрываем все страницы и показываем страницу товара
+    if (mainContent) mainContent.style.display = 'none';
+    if (favoritesPage) favoritesPage.style.display = 'none';
+    if (cartPage) cartPage.style.display = 'none';
     productPage.style.display = 'block';
     
     // Получаем актуальный appContext
@@ -940,14 +952,19 @@ export function showProductModal(prod, finalPrice, fullImages) {
 }
 // ========== END REFACTORING STEP 3.1 ==========
 
+// История навигации - отслеживаем, откуда пришли на страницу товара
+let navigationHistory = null; // 'main' или 'favorites'
+
 // Функция для закрытия страницы товара
 export function closeProductPage() {
-    console.log('[PRODUCT PAGE] Closing product page');
+    console.log('[PRODUCT PAGE] Closing product page, returning to:', navigationHistory);
     const productPage = document.getElementById('product-page');
     const mainContent = document.getElementById('main-content');
+    const favoritesPage = document.getElementById('favorites-page');
+    const cartPage = document.getElementById('cart-page');
     const productPageImage = document.getElementById('product-page-image');
     
-    if (productPage && mainContent) {
+    if (productPage) {
         // Очищаем blob URL если был
         if (productPageImage) {
             const oldBlobUrl = productPageImage.dataset.blobUrl;
@@ -967,9 +984,27 @@ export function closeProductPage() {
         // Деактивируем блокировку горизонтального скролла
         disableHorizontalScrollBlock();
         
-        // Скрываем страницу товара и показываем главный контент
+        // Скрываем страницу товара
         productPage.style.display = 'none';
-        mainContent.style.display = 'block';
+        
+        // Возвращаемся на предыдущую страницу в зависимости от истории навигации
+        // Скрываем все страницы сначала
+        if (mainContent) mainContent.style.display = 'none';
+        if (favoritesPage) favoritesPage.style.display = 'none';
+        if (cartPage) cartPage.style.display = 'none';
+        
+        // Показываем нужную страницу
+        if (navigationHistory === 'favorites' && favoritesPage) {
+            favoritesPage.style.display = 'block';
+        } else if (navigationHistory === 'cart' && cartPage) {
+            cartPage.style.display = 'block';
+        } else if (mainContent) {
+            // По умолчанию возвращаемся на главную
+            mainContent.style.display = 'block';
+        }
+        
+        // Сбрасываем историю навигации
+        navigationHistory = null;
         
         // Сбрасываем состояние
         if (modalState) {

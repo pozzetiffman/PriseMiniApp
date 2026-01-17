@@ -74,13 +74,19 @@ export function setupCartButton() {
         setupCartButtonAttempts = 0; // Сбрасываем счетчик при успехе
         cartButton.onclick = async () => {
             try {
-                // Получаем страницу корзины и главный контент
+                // Получаем страницу корзины и другие страницы
                 const cartPage = document.getElementById('cart-page');
                 const mainContent = document.getElementById('main-content');
+                const productPage = document.getElementById('product-page');
+                const favoritesPage = document.getElementById('favorites-page');
                 
-                if (cartPage && mainContent) {
-                    // Скрываем главный контент и показываем страницу корзины
-                    mainContent.style.display = 'none';
+                if (cartPage) {
+                    // Скрываем все другие страницы
+                    if (mainContent) mainContent.style.display = 'none';
+                    if (productPage) productPage.style.display = 'none';
+                    if (favoritesPage) favoritesPage.style.display = 'none';
+                    
+                    // Показываем страницу корзины
                     cartPage.style.display = 'block';
                     
                     // Обновляем видимость вкладок и выбираем активную вкладку (после показа страницы)
@@ -212,11 +218,19 @@ export function closeCartPage() {
     console.log('[CART PAGE] Closing cart page');
     const cartPage = document.getElementById('cart-page');
     const mainContent = document.getElementById('main-content');
+    const productPage = document.getElementById('product-page');
+    const favoritesPage = document.getElementById('favorites-page');
     
-    if (cartPage && mainContent) {
-        // Скрываем страницу корзины и показываем главный контент
+    if (cartPage) {
+        // Скрываем все страницы сначала
+        if (productPage) productPage.style.display = 'none';
+        if (favoritesPage) favoritesPage.style.display = 'none';
         cartPage.style.display = 'none';
-        mainContent.style.display = 'block';
+        
+        // Показываем главный контент
+        if (mainContent) {
+            mainContent.style.display = 'block';
+        }
     }
 }
 // ========== END REFACTORING STEP 7.3 ==========
