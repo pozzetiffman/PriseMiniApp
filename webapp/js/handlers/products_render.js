@@ -190,13 +190,21 @@ export async function renderProducts(products) {
             discountBadge.textContent = `-${prod.discount}%`;
         }
         
-        // Создаем badge горящего предложения
+        // Создаем badge горящего предложения с анимацией
         let hotOfferBadge = null;
         if (prod.is_hot_offer) {
             hotOfferBadge = document.createElement('div');
             hotOfferBadge.className = 'hot-offer-badge';
-            hotOfferBadge.innerHTML = '🔥';
             hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+            // Создаем структуру с анимированным огнем и искрами
+            hotOfferBadge.innerHTML = `
+                <span class="fire-wrap" aria-hidden="true">
+                    <span class="fire-back">🔥</span>
+                    <span class="fire-front">🔥</span>
+                    <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                    <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+                </span>
+            `;
         }
         
         // Создаем кнопку избранного (сердечко) - SVG иконка на фото товара
@@ -251,8 +259,32 @@ export async function renderProducts(products) {
                 e.stopPropagation(); // Предотвращаем открытие модального окна товара
                 e.preventDefault(); // Предотвращаем стандартное поведение
                 
+                // Защита от повторных кликов во время обработки
+                // НО если кнопка заблокирована слишком долго (> 5 секунд), разблокируем её
+                if (favoriteButton.dataset.processing === 'true') {
+                    const processingStartTime = parseInt(favoriteButton.dataset.processingStartTime || '0');
+                    const now = Date.now();
+                    if (processingStartTime && (now - processingStartTime) > 5000) {
+                        console.warn(`[FAVORITES] Button for product ${prod.id} was blocked for too long (${now - processingStartTime}ms), unblocking...`);
+                        delete favoriteButton.dataset.processing;
+                        delete favoriteButton.dataset.processingStartTime;
+                    } else {
+                        console.log(`[FAVORITES] Click ignored for product ${prod.id}: already processing`);
+                        return;
+                    }
+                }
+                
+                // КРИТИЧНО: Используем актуальное состояние из DOM, а не локальную переменную
+                // Это гарантирует правильную работу после возврата со страницы избранного
+                // Читаем состояние СИНХРОННО после проверки блокировки
+                const currentFavoriteState = favoriteButton.classList.contains('favorite-active');
+                
+                console.log(`[FAVORITES] Click on favorite button for product ${prod.id}, current state: ${currentFavoriteState}`);
+                
                 // Optimistic UI - меняем состояние МГНОВЕННО
-                const newFavoriteState = !isFavorite;
+                const newFavoriteState = !currentFavoriteState;
+                favoriteButton.dataset.processing = 'true'; // Блокируем повторные клики
+                favoriteButton.dataset.processingStartTime = Date.now().toString(); // Запоминаем время блокировки
                 isFavorite = newFavoriteState;
                 updateFavoriteButtonState(favoriteButton, newFavoriteState);
                 
@@ -265,14 +297,16 @@ export async function renderProducts(products) {
                 // Запрос в API - асинхронно (в фоне)
                 // toggleFavorite автоматически обновляет кэш в favorites.js
                 try {
+                    console.log(`[FAVORITES] Toggling favorite for product ${prod.id}, current state: ${currentFavoriteState}, new state: ${newFavoriteState}`);
                     const result = await safeToggleFavorite(prod.id);
-                    // Если ответ сервера отличается от optimistic состояния - синхронизируем
-                    if (result.is_favorite !== newFavoriteState) {
-                        isFavorite = result.is_favorite;
-                        updateFavoriteButtonState(favoriteButton, result.is_favorite);
-                        if (favoriteButtonList) {
-                            updateFavoriteButtonState(favoriteButtonList, result.is_favorite);
-                        }
+                    console.log(`[FAVORITES] Toggle result for product ${prod.id}:`, result);
+                    
+                    // КРИТИЧНО: Всегда синхронизируем с ответом сервера
+                    // Это гарантирует правильное состояние даже если был рассинхронизация
+                    isFavorite = result.is_favorite;
+                    updateFavoriteButtonState(favoriteButton, result.is_favorite);
+                    if (favoriteButtonList) {
+                        updateFavoriteButtonState(favoriteButtonList, result.is_favorite);
                     }
                     
                     // КРИТИЧНО: updateFavoritesCount уже вызывается в toggleFavorite
@@ -289,19 +323,25 @@ export async function renderProducts(products) {
                     console.error('❌ Error details:', {
                         message: error.message,
                         stack: error.stack,
-                        productId: prod.id
+                        productId: prod.id,
+                        currentFavoriteState: currentFavoriteState,
+                        newFavoriteState: newFavoriteState
                     });
                     // Откатываем optimistic изменение при ошибке
-                    isFavorite = !newFavoriteState;
-                    updateFavoriteButtonState(favoriteButton, !newFavoriteState);
+                    // Используем исходное состояние (до клика)
+                    isFavorite = currentFavoriteState;
+                    updateFavoriteButtonState(favoriteButton, currentFavoriteState);
                     if (favoriteButtonList) {
-                        updateFavoriteButtonState(favoriteButtonList, !newFavoriteState);
+                        updateFavoriteButtonState(favoriteButtonList, currentFavoriteState);
                     }
                     
                     // Показываем более информативное сообщение об ошибке
                     const errorMessage = error.message || 'Ошибка при изменении избранного';
                     console.error('❌ Showing error to user:', errorMessage);
                     alert(errorMessage);
+                } finally {
+                    // Снимаем блокировку
+                    delete favoriteButton.dataset.processing;
                 }
             });
         }
@@ -788,7 +828,15 @@ export async function renderProducts(products) {
         if (prod.is_hot_offer) {
             const hotOfferBadgeList = document.createElement('div');
             hotOfferBadgeList.className = 'hot-offer-badge-list';
-            hotOfferBadgeList.textContent = '🔥';
+            // Используем анимированный огонь и в режиме списка
+            hotOfferBadgeList.innerHTML = `
+                <span class="fire-wrap fire-wrap-list" aria-hidden="true">
+                    <span class="fire-back">🔥</span>
+                    <span class="fire-front">🔥</span>
+                    <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                    <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+                </span>
+            `;
             topBadgesContainer.appendChild(hotOfferBadgeList);
         }
         
@@ -875,11 +923,19 @@ export async function renderProducts(products) {
                 e.stopPropagation(); // Предотвращаем открытие модального окна товара
                 e.preventDefault(); // Предотвращаем стандартное поведение
                 
-                // Получаем текущее состояние
+                // Защита от повторных кликов во время обработки
+                if (favoriteButtonList.dataset.processing === 'true') {
+                    console.log(`[FAVORITES] Click ignored (list mode) for product ${prod.id}: already processing`);
+                    return;
+                }
+                
+                // КРИТИЧНО: Используем актуальное состояние из DOM
+                // Это гарантирует правильную работу после возврата со страницы избранного
                 const currentState = favoriteButtonList.classList.contains('favorite-active');
                 
                 // Optimistic UI - меняем состояние МГНОВЕННО
                 const newFavoriteState = !currentState;
+                favoriteButtonList.dataset.processing = 'true'; // Блокируем повторные клики
                 updateFavoriteButtonState(favoriteButtonList, newFavoriteState);
                 
                 // Также обновляем состояние основной кнопки на изображении (если она есть)
@@ -889,15 +945,17 @@ export async function renderProducts(products) {
                 }
                 
                 // Запрос в API - асинхронно (в фоне)
-                // toggleFavorite автоматически обновляет кэш в favorites.js
+                // safeToggleFavorite автоматически обновляет кэш в favorites.js
                 try {
-                    const result = await toggleFavorite(prod.id);
-                    // Если ответ сервера отличается от optimistic состояния - синхронизируем
-                    if (result.is_favorite !== newFavoriteState) {
-                        updateFavoriteButtonState(favoriteButtonList, result.is_favorite);
-                        if (favoriteButtonOnImage) {
-                            updateFavoriteButtonState(favoriteButtonOnImage, result.is_favorite);
-                        }
+                    console.log(`[FAVORITES] Toggling favorite (list mode) for product ${prod.id}, current state: ${currentState}, new state: ${newFavoriteState}`);
+                    const result = await safeToggleFavorite(prod.id);
+                    console.log(`[FAVORITES] Toggle result (list mode) for product ${prod.id}:`, result);
+                    
+                    // КРИТИЧНО: Всегда синхронизируем с ответом сервера
+                    // Это гарантирует правильное состояние даже если был рассинхронизация
+                    updateFavoriteButtonState(favoriteButtonList, result.is_favorite);
+                    if (favoriteButtonOnImage) {
+                        updateFavoriteButtonState(favoriteButtonOnImage, result.is_favorite);
                     }
                     
                     // КРИТИЧНО: updateFavoritesCount уже вызывается в toggleFavorite
@@ -910,15 +968,26 @@ export async function renderProducts(products) {
                         // Не критично, toggleFavorite уже обновил состояние
                     }
                 } catch (error) {
-                    console.error('❌ Error toggling favorite:', error);
+                    console.error('❌ Error toggling favorite (list mode):', error);
+                    console.error('❌ Error details:', {
+                        message: error.message,
+                        stack: error.stack,
+                        productId: prod.id,
+                        currentState: currentState,
+                        newFavoriteState: newFavoriteState
+                    });
                     // Откатываем optimistic изменение при ошибке
-                    updateFavoriteButtonState(favoriteButtonList, !newFavoriteState);
+                    // Используем исходное состояние (до клика)
+                    updateFavoriteButtonState(favoriteButtonList, currentState);
                     if (favoriteButtonOnImage) {
-                        updateFavoriteButtonState(favoriteButtonOnImage, !newFavoriteState);
+                        updateFavoriteButtonState(favoriteButtonOnImage, currentState);
                     }
                     
                     const errorMessage = error.message || 'Ошибка при изменении избранного';
                     alert(errorMessage);
+                } finally {
+                    // Снимаем блокировку
+                    delete favoriteButtonList.dataset.processing;
                 }
             });
         }
@@ -933,10 +1002,23 @@ export async function renderProducts(products) {
             card.appendChild(favoriteButtonList);
         }
         
-        card.onclick = () => {
+        // КРИТИЧНО: Используем addEventListener вместо onclick для надежности
+        // Это гарантирует, что обработчик не потеряется при клонировании или обновлении DOM
+        // Удаляем старый обработчик, если он был установлен через onclick
+        card.onclick = null;
+        
+        // Устанавливаем обработчик через addEventListener
+        card.addEventListener('click', function cardClickHandler(e) {
+            // Проверяем, не кликнули ли на кнопку избранного или другие интерактивные элементы
+            if (e.target.closest('.favorite-button-card') || 
+                e.target.closest('button') || 
+                e.target.closest('a')) {
+                return; // Не открываем модальное окно, если кликнули на кнопку
+            }
+            
             // Используем экспортированную функцию напрямую
             showProductModal(prod, null, fullImages);
-        };
+        });
         
         // card уже добавлен в DOM выше (перед установкой img.src)
     });
