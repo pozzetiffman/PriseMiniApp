@@ -801,8 +801,8 @@ header h1 {
 .category-dropdown {
     position: relative;
     flex: 0 0 auto; /* Не растягивается, занимает только необходимое место */
-    min-width: 120px; /* Уменьшенная минимальная ширина */
-    max-width: 160px; /* Уменьшенная максимальная ширина */
+    min-width: 120px; /* Минимальная ширина */
+    max-width: min(300px, 90vw); /* Адаптивная максимальная ширина - не больше 300px или 90% ширины экрана */
 }
 
 .category-dropdown-button {
@@ -822,9 +822,9 @@ header h1 {
     justify-content: space-between;
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px var(--shadow-light);
-    white-space: nowrap; /* Не переносим текст */
+    white-space: nowrap; /* Не переносим текст в кнопке */
     overflow: hidden;
-    text-overflow: ellipsis; /* Многоточие для длинного текста */
+    text-overflow: ellipsis; /* Многоточие для длинного текста в кнопке */
     min-height: 32px; /* Уменьшенная высота */
 }
 
@@ -837,7 +837,6 @@ header h1 {
     position: absolute;
     top: 100%;
     left: 0;
-    right: 0;
     margin-top: 4px;
     background: rgba(60, 60, 62, 0.75) !important; /* Более прозрачный фон */
     backdrop-filter: var(--blur-medium);
@@ -851,7 +850,9 @@ header h1 {
     animation: slideDown 0.3s ease-out;
     display: none; /* По умолчанию скрыт */
     -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
-    min-width: 120px; /* Уменьшенная минимальная ширина */
+    min-width: 100%; /* Минимальная ширина равна ширине кнопки */
+    width: max-content; /* Расширяется по содержимому */
+    max-width: min(300px, 90vw); /* Максимальная ширина - не больше 300px или 90% ширины экрана */
     /* Скрываем scrollbar */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE и Edge */
@@ -871,9 +872,33 @@ header h1 {
     justify-content: space-between;
     transition: all 0.2s ease;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    white-space: nowrap; /* Не переносим текст */
-    overflow: hidden;
-    text-overflow: ellipsis; /* Многоточие для длинного текста */
+    white-space: normal; /* Разрешаем перенос текста */
+    word-wrap: break-word; /* Переносим длинные слова */
+    overflow-wrap: break-word; /* Альтернативное свойство для переноса */
+    min-width: 0; /* Позволяет flex-элементу сжиматься */
+    gap: 8px; /* Отступ между текстом и чекбоксом */
+}
+
+/* Стили для текста внутри элемента категории */
+.category-dropdown-item > span {
+    flex: 1; /* Занимает доступное пространство */
+    min-width: 0; /* Позволяет сжиматься */
+    white-space: normal; /* Разрешаем перенос текста */
+    word-wrap: break-word; /* Переносим длинные слова */
+    overflow-wrap: break-word; /* Альтернативное свойство для переноса */
+    line-height: 1.4; /* Улучшаем читаемость при переносе */
+}
+
+/* Стили для чекбокса в элементах категории */
+.category-dropdown-item > input[type="checkbox"] {
+    flex-shrink: 0; /* Чекбокс не сжимается */
+    margin-left: 8px; /* Отступ слева от текста */
+    width: 14px; /* Уменьшенная ширина чекбокса */
+    height: 14px; /* Уменьшенная высота чекбокса */
+    min-width: 14px; /* Минимальная ширина */
+    min-height: 14px; /* Минимальная высота */
+    cursor: pointer;
+    accent-color: var(--tg-theme-button-color, #3390ec); /* Цвет чекбокса */
 }
 
 /* Контейнер для кнопки фильтра */

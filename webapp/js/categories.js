@@ -246,7 +246,8 @@ export function renderCategories(categories) {
         const allSubOption = document.createElement('div');
         allSubOption.className = 'category-dropdown-item';
         allSubOption.innerText = 'Все подкатегории';
-        allSubOption.onclick = () => {
+        allSubOption.onclick = (e) => {
+            e.stopPropagation(); // Предотвращаем закрытие списка
             selectedCategoryIds.clear();
             // === ИСПРАВЛЕНИЕ: Безопасный перебор подкатегорий ===
             (selectedMainCategory.subcategories || []).forEach(subCat => {
@@ -256,8 +257,18 @@ export function renderCategories(categories) {
                 }
                 selectedCategoryIds.add(subCat.id);
             });
-            subCategoriesList.style.display = 'none';
-            renderCategories(categoriesHierarchy);
+            // Обновляем состояние всех чекбоксов без перерисовки всего списка
+            const allCheckboxes = subCategoriesList.querySelectorAll('input[type="checkbox"]');
+            allCheckboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+            const allItems = subCategoriesList.querySelectorAll('.category-dropdown-item');
+            allItems.forEach(item => {
+                if (item !== allSubOption) {
+                    item.classList.add('active');
+                }
+            });
+            // Не закрываем список и не перерисовываем - просто обновляем состояние
             if (applyFiltersCallback) applyFiltersCallback();
         };
         subCategoriesList.appendChild(allSubOption);
@@ -278,20 +289,47 @@ export function renderCategories(categories) {
                 <span>${subCatName}</span>
                 <input type="checkbox" ${isSelected ? 'checked' : ''} style="margin-left: auto;">
             `;
-            option.onclick = () => {
-                if (isSelected) {
-                    selectedCategoryIds.delete(subCat.id);
-                } else {
+            
+            const checkbox = option.querySelector('input[type="checkbox"]');
+            
+            // Обработчик клика на элемент (включая чекбокс)
+            const handleSelection = (e) => {
+                e.stopPropagation(); // Предотвращаем закрытие списка
+                const newIsSelected = !selectedCategoryIds.has(subCat.id);
+                
+                if (newIsSelected) {
                     selectedCategoryIds.add(subCat.id);
+                } else {
+                    selectedCategoryIds.delete(subCat.id);
                 }
+                
                 // === ИСПРАВЛЕНИЕ: При выборе подкатегории удаляем ID основной категории ===
                 // Чтобы показывались только товары из выбранных подкатегорий, а не из всей основной категории
                 if (selectedMainCategoryId !== null && selectedCategoryIds.has(selectedMainCategoryId)) {
                     selectedCategoryIds.delete(selectedMainCategoryId);
                 }
-                renderCategories(categoriesHierarchy);
+                
+                // Обновляем состояние чекбокса и класс active без перерисовки всего списка
+                if (checkbox) {
+                    checkbox.checked = newIsSelected;
+                }
+                if (newIsSelected) {
+                    option.classList.add('active');
+                } else {
+                    option.classList.remove('active');
+                }
+                
+                // Применяем фильтры, но не закрываем список
                 if (applyFiltersCallback) applyFiltersCallback();
             };
+            
+            // Обработчик клика на элемент
+            option.onclick = handleSelection;
+            
+            // Обработчик клика на чекбокс (чтобы клик по чекбоксу тоже работал)
+            if (checkbox) {
+                checkbox.onclick = handleSelection;
+            }
             subCategoriesList.appendChild(option);
         });
         
