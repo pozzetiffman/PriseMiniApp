@@ -140,7 +140,30 @@ function showProductPageImage(index) {
     // Если товар без фото, показываем placeholder и выходим
     if (modalState.currentImages.length === 0) {
         productPageImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-        productPageImage.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+        const placeholderDiv = document.createElement('div');
+        placeholderDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
+        placeholderDiv.innerHTML = '📷';
+        productPageImage.appendChild(placeholderDiv);
+        
+        // Добавляем значок горящего предложения, если товар горящий
+        if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+            const hotOfferBadge = document.createElement('div');
+            hotOfferBadge.className = 'hot-offer-badge';
+            hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+            hotOfferBadge.style.position = 'absolute';
+            hotOfferBadge.style.top = '12px';
+            hotOfferBadge.style.right = '12px';
+            hotOfferBadge.style.left = 'auto';
+            hotOfferBadge.innerHTML = `
+                <span class="fire-wrap" aria-hidden="true">
+                    <span class="fire-back">🔥</span>
+                    <span class="fire-front">🔥</span>
+                    <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                    <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+                </span>
+            `;
+            placeholderDiv.appendChild(hotOfferBadge);
+        }
         return;
     }
     
@@ -203,6 +226,26 @@ function showProductPageImage(index) {
                 imageContainer.appendChild(img);
                 productPageImage.style.backgroundColor = 'transparent';
                 
+                // Добавляем значок горящего предложения, если товар горящий
+                if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+                    const hotOfferBadge = document.createElement('div');
+                    hotOfferBadge.className = 'hot-offer-badge';
+                    hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+                    hotOfferBadge.style.position = 'absolute';
+                    hotOfferBadge.style.top = '12px';
+                    hotOfferBadge.style.right = '12px';
+                    hotOfferBadge.style.left = 'auto';
+                    hotOfferBadge.innerHTML = `
+                        <span class="fire-wrap" aria-hidden="true">
+                            <span class="fire-back">🔥</span>
+                            <span class="fire-front">🔥</span>
+                            <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                            <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+                        </span>
+                    `;
+                    imageContainer.appendChild(hotOfferBadge);
+                }
+                
                 // Добавляем навигацию по фото, если их больше одного
                 if (modalState.currentImages.length > 1) {
                     updateProductPageImageNavigation();
@@ -216,7 +259,31 @@ function showProductPageImage(index) {
                 console.error(`[PRODUCT PAGE IMG] Image load error (mobile): loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, url="${fullImg.substring(0, 100)}..."`);
                 URL.revokeObjectURL(blobUrl);
                 delete productPageImage.dataset.blobUrl;
-                imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+                const errorPlaceholder = document.createElement('div');
+                errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
+                errorPlaceholder.textContent = '📷';
+                imageContainer.innerHTML = '';
+                imageContainer.appendChild(errorPlaceholder);
+                
+                // Добавляем значок горящего предложения, если товар горящий
+                if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+                    const hotOfferBadge = document.createElement('div');
+                    hotOfferBadge.className = 'hot-offer-badge';
+                    hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+                    hotOfferBadge.style.position = 'absolute';
+                    hotOfferBadge.style.top = '12px';
+                    hotOfferBadge.style.right = '12px';
+                    hotOfferBadge.style.left = 'auto';
+                    hotOfferBadge.innerHTML = `
+                        <span class="fire-wrap" aria-hidden="true">
+                            <span class="fire-back">🔥</span>
+                            <span class="fire-front">🔥</span>
+                            <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                            <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+                        </span>
+                    `;
+                    errorPlaceholder.appendChild(hotOfferBadge);
+                }
             };
             
             img.src = blobUrl;
@@ -226,7 +293,20 @@ function showProductPageImage(index) {
                 return;
             }
             console.error(`[PRODUCT PAGE IMG] Fetch error (mobile): loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, error=${error.message}, url="${fullImg.substring(0, 100)}..."`);
-            imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+            const errorPlaceholder = document.createElement('div');
+            errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
+            errorPlaceholder.textContent = '📷';
+            imageContainer.innerHTML = '';
+            imageContainer.appendChild(errorPlaceholder);
+            
+            // Добавляем значок горящего предложения, если товар горящий
+            if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+                const hotOfferBadge = document.createElement('div');
+                hotOfferBadge.className = 'product-page-hot-offer-badge';
+                hotOfferBadge.innerHTML = '🔥';
+                hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+                errorPlaceholder.appendChild(hotOfferBadge);
+            }
         });
     } else {
         // На десктопе используем прямые URL
@@ -242,6 +322,15 @@ function showProductPageImage(index) {
             imageContainer.innerHTML = '';
             imageContainer.appendChild(img);
             productPageImage.style.backgroundColor = 'transparent';
+            
+            // Добавляем значок горящего предложения, если товар горящий
+            if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+                const hotOfferBadge = document.createElement('div');
+                hotOfferBadge.className = 'product-page-hot-offer-badge';
+                hotOfferBadge.innerHTML = '🔥';
+                hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+                imageContainer.appendChild(hotOfferBadge);
+            }
             
             // Добавляем навигацию по фото, если их больше одного
             if (modalState.currentImages.length > 1) {
@@ -281,7 +370,31 @@ function showProductPageImage(index) {
                     return;
                 }
                 console.error(`[PRODUCT PAGE IMG] Fetch fallback also failed: loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, error=${error.message}`);
-                imageContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px;">📷</div>';
+                const errorPlaceholder = document.createElement('div');
+                errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
+                errorPlaceholder.textContent = '📷';
+                imageContainer.innerHTML = '';
+                imageContainer.appendChild(errorPlaceholder);
+                
+                // Добавляем значок горящего предложения, если товар горящий
+                if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+                    const hotOfferBadge = document.createElement('div');
+                    hotOfferBadge.className = 'hot-offer-badge';
+                    hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+                    hotOfferBadge.style.position = 'absolute';
+                    hotOfferBadge.style.top = '12px';
+                    hotOfferBadge.style.right = '12px';
+                    hotOfferBadge.style.left = 'auto';
+                    hotOfferBadge.innerHTML = `
+                        <span class="fire-wrap" aria-hidden="true">
+                            <span class="fire-back">🔥</span>
+                            <span class="fire-front">🔥</span>
+                            <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                            <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+                        </span>
+                    `;
+                    errorPlaceholder.appendChild(hotOfferBadge);
+                }
             });
         };
         
@@ -431,6 +544,47 @@ function updateProductPageImageNavigation() {
     };
 }
 
+// Функция для обновления значка горящего предложения на странице товара
+function updateHotOfferBadgeOnProductPage(isHotOffer) {
+    const productPageImage = document.getElementById('product-page-image');
+    if (!productPageImage) {
+        return;
+    }
+    
+    // Находим существующий значок огонька
+    const existingBadge = productPageImage.querySelector('.hot-offer-badge');
+    
+    if (isHotOffer && !existingBadge) {
+        // Добавляем значок огонька
+        const imageContainer = productPageImage.querySelector('.product-page-image-container');
+        const placeholderDiv = productPageImage.querySelector('div[style*="display: flex"]');
+        
+        // Определяем, куда добавить значок (в контейнер изображения или в placeholder)
+        const targetContainer = imageContainer || placeholderDiv || productPageImage;
+        
+        const hotOfferBadge = document.createElement('div');
+        hotOfferBadge.className = 'hot-offer-badge';
+        hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+        hotOfferBadge.style.position = 'absolute';
+        hotOfferBadge.style.top = '12px';
+        hotOfferBadge.style.right = '12px';
+        hotOfferBadge.style.left = 'auto';
+        hotOfferBadge.style.zIndex = '12';
+        hotOfferBadge.innerHTML = `
+            <span class="fire-wrap" aria-hidden="true">
+                <span class="fire-back">🔥</span>
+                <span class="fire-front">🔥</span>
+                <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+            </span>
+        `;
+        targetContainer.appendChild(hotOfferBadge);
+    } else if (!isHotOffer && existingBadge) {
+        // Удаляем значок огонька
+        existingBadge.remove();
+    }
+}
+
 // Показ страницы товара (вместо модального окна)
 export function showProductModal(prod, finalPrice, fullImages) {
     if (!modalState) {
@@ -517,6 +671,10 @@ export function showProductModal(prod, finalPrice, fullImages) {
             try {
                 await toggleHotOffer(prod.id, appContext.shop_owner_id, isHotOffer);
                 prod.is_hot_offer = isHotOffer;
+                
+                // Обновляем значок огонька на странице товара
+                updateHotOfferBadgeOnProductPage(isHotOffer);
+                
                 // Обновляем визуальное отображение на карточках
                 if (loadDataCallback) {
                     setTimeout(() => {
