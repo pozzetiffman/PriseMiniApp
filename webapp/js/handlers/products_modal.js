@@ -123,6 +123,46 @@ function showProductPageImage(index) {
         return;
     }
     
+    // Проверяем, является ли товар скрытым для админа
+    const appContext = appContextGetter ? appContextGetter() : null;
+    const isHiddenForAdmin = modalState.currentProduct && modalState.currentProduct.is_hidden && appContext && appContext.role === 'owner' && modalState.currentProduct.user_id === appContext.shop_owner_id;
+    
+    // Функция для создания badge скрытого товара
+    function createHiddenBadge() {
+        if (!isHiddenForAdmin) return null;
+        const hiddenBadge = document.createElement('div');
+        hiddenBadge.className = 'hidden-badge';
+        hiddenBadge.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 9C13.6569 9 15 10.3431 15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+        `;
+        hiddenBadge.setAttribute('aria-label', 'Скрыт от клиентов');
+        hiddenBadge.style.cssText = `
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: #ffffff;
+            padding: 8px;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 15;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        `;
+        hiddenBadge.querySelector('svg').style.cssText = 'width: 100%; height: 100%;';
+        return hiddenBadge;
+    }
+    
     // Увеличиваем ID загрузки, чтобы отменить старые запросы
     modalState.currentImageLoadId++;
     const loadId = modalState.currentImageLoadId;
@@ -134,38 +174,68 @@ function showProductPageImage(index) {
         delete productPageImage.dataset.blobUrl;
     }
     
+    // Сохраняем кнопку избранного перед очисткой (ищем в productPageImage и во всех его дочерних элементах)
+    let favoriteButton = productPageImage.querySelector('.favorite-button-product-page');
+    // Если не нашли в productPageImage, ищем в document (кнопка может быть в другом месте)
+    if (!favoriteButton) {
+        favoriteButton = document.querySelector('.favorite-button-product-page');
+    }
+    
+    console.log('[PRODUCT PAGE IMG] Favorite button found before clear:', !!favoriteButton);
+    
     // Очищаем содержимое полностью
     productPageImage.innerHTML = '';
     
-    // Если товар без фото, показываем placeholder и выходим
-    if (modalState.currentImages.length === 0) {
-        productPageImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-        const placeholderDiv = document.createElement('div');
-        placeholderDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
-        placeholderDiv.innerHTML = '📷';
-        productPageImage.appendChild(placeholderDiv);
-        
-        // Добавляем значок горящего предложения, если товар горящий
-        if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-            const hotOfferBadge = document.createElement('div');
-            hotOfferBadge.className = 'hot-offer-badge';
-            hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-            hotOfferBadge.style.position = 'absolute';
-            hotOfferBadge.style.top = '12px';
-            hotOfferBadge.style.right = '12px';
-            hotOfferBadge.style.left = 'auto';
-            hotOfferBadge.innerHTML = `
-                <span class="fire-wrap" aria-hidden="true">
-                    <span class="fire-back">🔥</span>
-                    <span class="fire-front">🔥</span>
-                    <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
-                    <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
-                </span>
-            `;
-            placeholderDiv.appendChild(hotOfferBadge);
-        }
-        return;
+    // Восстанавливаем кнопку избранного после очистки (если она была)
+    if (favoriteButton) {
+        productPageImage.appendChild(favoriteButton);
+        console.log('[PRODUCT PAGE IMG] Favorite button restored after clear');
+    } else {
+        console.warn('[PRODUCT PAGE IMG] Favorite button not found, cannot restore');
     }
+    
+        // Если товар без фото, показываем placeholder и выходим
+        if (modalState.currentImages.length === 0) {
+            productPageImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+            const placeholderDiv = document.createElement('div');
+            placeholderDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
+            placeholderDiv.innerHTML = '📷';
+            productPageImage.appendChild(placeholderDiv);
+            
+            // Добавляем badge скрытого товара (слева вверху, только для админа)
+            const hiddenBadge = createHiddenBadge();
+            if (hiddenBadge) {
+                placeholderDiv.appendChild(hiddenBadge);
+            }
+            
+            // Добавляем значок горящего предложения, если товар горящий
+            if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+                const hotOfferBadge = document.createElement('div');
+                hotOfferBadge.className = 'hot-offer-badge';
+                hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+                hotOfferBadge.style.position = 'absolute';
+                hotOfferBadge.style.top = '12px';
+                hotOfferBadge.style.right = '12px';
+                hotOfferBadge.style.left = 'auto';
+                hotOfferBadge.innerHTML = `
+                    <span class="fire-wrap" aria-hidden="true">
+                        <span class="fire-back">🔥</span>
+                        <span class="fire-front">🔥</span>
+                        <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                        <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+                    </span>
+                `;
+                placeholderDiv.appendChild(hotOfferBadge);
+            }
+            
+            // Добавляем кнопку избранного на placeholder (правый нижний угол) - только для клиентов
+            // favoriteButton уже сохранена выше, используем её
+            if (favoriteButton && placeholderDiv) {
+                placeholderDiv.appendChild(favoriteButton);
+            }
+            
+            return;
+        }
     
     if (index < 0 || index >= modalState.currentImages.length) {
         console.warn(`[PRODUCT PAGE IMG] Invalid index: ${index}, currentImages.length=${modalState.currentImages.length}, productId=${modalState.currentProduct?.id || 'unknown'}`);
@@ -184,6 +254,17 @@ function showProductPageImage(index) {
     imageContainer.innerHTML = '<div style="color: var(--tg-theme-hint-color); font-size: 48px;">⏳</div>';
     productPageImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
     productPageImage.appendChild(imageContainer);
+    
+    // Добавляем кнопку избранного в контейнер изображения сразу после создания (если она есть)
+    if (favoriteButton) {
+        // Удаляем кнопку из productPageImage, если она там есть
+        if (favoriteButton.parentNode === productPageImage) {
+            productPageImage.removeChild(favoriteButton);
+        }
+        // Добавляем кнопку в imageContainer
+        imageContainer.appendChild(favoriteButton);
+        console.log('[PRODUCT PAGE IMG] Favorite button added to imageContainer');
+    }
     
     // Определяем, мобильное устройство или десктоп
     const isMobile = isMobileDevice();
@@ -222,9 +303,18 @@ function showProductPageImage(index) {
                     return;
                 }
                 
+                // Сохраняем кнопку избранного перед очисткой контейнера
+                const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
+                
                 imageContainer.innerHTML = '';
                 imageContainer.appendChild(img);
                 productPageImage.style.backgroundColor = 'transparent';
+                
+                // Добавляем badge скрытого товара (слева вверху, только для админа)
+                const hiddenBadge = createHiddenBadge();
+                if (hiddenBadge) {
+                    imageContainer.appendChild(hiddenBadge);
+                }
                 
                 // Добавляем значок горящего предложения, если товар горящий
                 if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
@@ -246,6 +336,14 @@ function showProductPageImage(index) {
                     imageContainer.appendChild(hotOfferBadge);
                 }
                 
+                // Восстанавливаем кнопку избранного после очистки контейнера
+                if (savedFavoriteButton) {
+                    imageContainer.appendChild(savedFavoriteButton);
+                } else if (favoriteButton) {
+                    // Если кнопка не была в контейнере, добавляем её
+                    imageContainer.appendChild(favoriteButton);
+                }
+                
                 // Добавляем навигацию по фото, если их больше одного
                 if (modalState.currentImages.length > 1) {
                     updateProductPageImageNavigation();
@@ -259,11 +357,21 @@ function showProductPageImage(index) {
                 console.error(`[PRODUCT PAGE IMG] Image load error (mobile): loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, url="${fullImg.substring(0, 100)}..."`);
                 URL.revokeObjectURL(blobUrl);
                 delete productPageImage.dataset.blobUrl;
+                
+                // Сохраняем кнопку избранного перед очисткой контейнера
+                const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
+                
                 const errorPlaceholder = document.createElement('div');
                 errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
                 errorPlaceholder.textContent = '📷';
                 imageContainer.innerHTML = '';
                 imageContainer.appendChild(errorPlaceholder);
+                
+                // Добавляем badge скрытого товара (слева вверху, только для админа)
+                const hiddenBadge = createHiddenBadge();
+                if (hiddenBadge) {
+                    errorPlaceholder.appendChild(hiddenBadge);
+                }
                 
                 // Добавляем значок горящего предложения, если товар горящий
                 if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
@@ -284,6 +392,13 @@ function showProductPageImage(index) {
                     `;
                     errorPlaceholder.appendChild(hotOfferBadge);
                 }
+                
+                // Восстанавливаем кнопку избранного после очистки контейнера
+                if (savedFavoriteButton) {
+                    errorPlaceholder.appendChild(savedFavoriteButton);
+                } else if (favoriteButton) {
+                    errorPlaceholder.appendChild(favoriteButton);
+                }
             };
             
             img.src = blobUrl;
@@ -293,11 +408,21 @@ function showProductPageImage(index) {
                 return;
             }
             console.error(`[PRODUCT PAGE IMG] Fetch error (mobile): loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, error=${error.message}, url="${fullImg.substring(0, 100)}..."`);
+            
+            // Сохраняем кнопку избранного перед очисткой контейнера
+            const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
+            
             const errorPlaceholder = document.createElement('div');
             errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
             errorPlaceholder.textContent = '📷';
             imageContainer.innerHTML = '';
             imageContainer.appendChild(errorPlaceholder);
+            
+            // Добавляем badge скрытого товара (слева вверху, только для админа)
+            const hiddenBadge = createHiddenBadge();
+            if (hiddenBadge) {
+                errorPlaceholder.appendChild(hiddenBadge);
+            }
             
             // Добавляем значок горящего предложения, если товар горящий
             if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
@@ -306,6 +431,13 @@ function showProductPageImage(index) {
                 hotOfferBadge.innerHTML = '🔥';
                 hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
                 errorPlaceholder.appendChild(hotOfferBadge);
+            }
+            
+            // Восстанавливаем кнопку избранного после очистки контейнера
+            if (savedFavoriteButton) {
+                errorPlaceholder.appendChild(savedFavoriteButton);
+            } else if (favoriteButton) {
+                errorPlaceholder.appendChild(favoriteButton);
             }
         });
     } else {
@@ -319,9 +451,18 @@ function showProductPageImage(index) {
                 return;
             }
             
+            // Сохраняем кнопку избранного перед очисткой контейнера
+            const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
+            
             imageContainer.innerHTML = '';
             imageContainer.appendChild(img);
             productPageImage.style.backgroundColor = 'transparent';
+            
+            // Добавляем badge скрытого товара (слева вверху, только для админа)
+            const hiddenBadge = createHiddenBadge();
+            if (hiddenBadge) {
+                imageContainer.appendChild(hiddenBadge);
+            }
             
             // Добавляем значок горящего предложения, если товар горящий
             if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
@@ -330,6 +471,14 @@ function showProductPageImage(index) {
                 hotOfferBadge.innerHTML = '🔥';
                 hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
                 imageContainer.appendChild(hotOfferBadge);
+            }
+            
+            // Восстанавливаем кнопку избранного после очистки контейнера
+            if (savedFavoriteButton) {
+                imageContainer.appendChild(savedFavoriteButton);
+            } else if (favoriteButton) {
+                // Если кнопка не была в контейнере, добавляем её
+                imageContainer.appendChild(favoriteButton);
             }
             
             // Добавляем навигацию по фото, если их больше одного
@@ -370,11 +519,21 @@ function showProductPageImage(index) {
                     return;
                 }
                 console.error(`[PRODUCT PAGE IMG] Fetch fallback also failed: loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, error=${error.message}`);
+                
+                // Сохраняем кнопку избранного перед очисткой контейнера
+                const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
+                
                 const errorPlaceholder = document.createElement('div');
                 errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
                 errorPlaceholder.textContent = '📷';
                 imageContainer.innerHTML = '';
                 imageContainer.appendChild(errorPlaceholder);
+                
+                // Добавляем badge скрытого товара (слева вверху, только для админа)
+                const hiddenBadge = createHiddenBadge();
+                if (hiddenBadge) {
+                    errorPlaceholder.appendChild(hiddenBadge);
+                }
                 
                 // Добавляем значок горящего предложения, если товар горящий
                 if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
@@ -394,6 +553,13 @@ function showProductPageImage(index) {
                         </span>
                     `;
                     errorPlaceholder.appendChild(hotOfferBadge);
+                }
+                
+                // Восстанавливаем кнопку избранного после очистки контейнера
+                if (savedFavoriteButton) {
+                    errorPlaceholder.appendChild(savedFavoriteButton);
+                } else if (favoriteButton) {
+                    errorPlaceholder.appendChild(favoriteButton);
                 }
             });
         };
@@ -585,6 +751,65 @@ function updateHotOfferBadgeOnProductPage(isHotOffer) {
     }
 }
 
+// Функция для обновления badge скрытого товара на странице товара
+function updateHiddenBadgeOnProductPage(isHidden, prod) {
+    const productPageImage = document.getElementById('product-page-image');
+    if (!productPageImage) {
+        return;
+    }
+    
+    // Проверяем, является ли товар скрытым для админа
+    const appContext = appContextGetter ? appContextGetter() : null;
+    const isHiddenForAdmin = isHidden && appContext && appContext.role === 'owner' && prod && prod.user_id === appContext.shop_owner_id;
+    
+    // Находим существующий badge скрытого товара
+    const existingBadge = productPageImage.querySelector('.hidden-badge');
+    
+    if (isHiddenForAdmin && !existingBadge) {
+        // Добавляем badge скрытого товара
+        const imageContainer = productPageImage.querySelector('.product-page-image-container');
+        const placeholderDiv = productPageImage.querySelector('div[style*="display: flex"]');
+        
+        // Определяем, куда добавить badge (в контейнер изображения или в placeholder)
+        const targetContainer = imageContainer || placeholderDiv || productPageImage;
+        
+        const hiddenBadge = document.createElement('div');
+        hiddenBadge.className = 'hidden-badge';
+        hiddenBadge.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 9C13.6569 9 15 10.3431 15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+        `;
+        hiddenBadge.setAttribute('aria-label', 'Скрыт от клиентов');
+        hiddenBadge.style.cssText = `
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: #ffffff;
+            padding: 8px;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 15;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        `;
+        hiddenBadge.querySelector('svg').style.cssText = 'width: 100%; height: 100%;';
+        targetContainer.appendChild(hiddenBadge);
+    } else if (!isHiddenForAdmin && existingBadge) {
+        // Удаляем badge скрытого товара
+        existingBadge.remove();
+    }
+}
+
 // Показ страницы товара (вместо модального окна)
 export function showProductModal(prod, finalPrice, fullImages) {
     if (!modalState) {
@@ -721,6 +946,10 @@ export function showProductModal(prod, finalPrice, fullImages) {
                 prod.is_hidden = isHidden;
                 // Обновляем иконку
                 hiddenLabel.innerHTML = `<span style="font-size: 20px;">${isHidden ? '👁️‍🗨️' : '👁️'}</span><span style="font-weight: 600;">${isHidden ? 'Скрыт от клиентов' : 'Виден клиентам'}</span>`;
+                
+                // Обновляем badge скрытого товара на странице товара
+                updateHiddenBadgeOnProductPage(isHidden, prod);
+                
                 // Обновляем визуальное отображение на карточках
                 if (loadDataCallback) {
                     setTimeout(() => {
@@ -1103,6 +1332,153 @@ export function showProductModal(prod, finalPrice, fullImages) {
             };
             productPageReservationButton.appendChild(orderBtn);
         }
+    }
+    
+    // Добавляем кнопку избранного на страницу товара (только для клиентов)
+    const productPageImage = document.getElementById('product-page-image');
+    console.log('[PRODUCT PAGE] Adding favorite button:', {
+        productPageImage: !!productPageImage,
+        appContext: !!appContext,
+        role: appContext?.role,
+        isClient: appContext?.role === 'client'
+    });
+    
+    if (productPageImage && appContext && appContext.role === 'client') {
+        // Удаляем старую кнопку избранного, если она есть
+        const oldFavoriteButton = productPageImage.querySelector('.favorite-button-product-page');
+        if (oldFavoriteButton) {
+            oldFavoriteButton.remove();
+        }
+        
+        // Создаем кнопку избранного
+        const favoriteButton = document.createElement('button');
+        favoriteButton.className = 'favorite-button-card favorite-button-product-page';
+        favoriteButton.setAttribute('aria-label', 'Добавить в избранное');
+        favoriteButton.dataset.productId = prod.id;
+        console.log('[PRODUCT PAGE] Favorite button created for product:', prod.id);
+        
+        // SVG иконка сердца - симметричная форма
+        favoriteButton.innerHTML = `
+            <svg viewBox="0 0 24 24" class="favorite-heart" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+        `;
+        
+        // Функция обновления состояния кнопки избранного
+        function updateFavoriteButtonState(button, favorite) {
+            if (favorite) {
+                button.classList.add('favorite-active');
+            } else {
+                button.classList.remove('favorite-active');
+            }
+        }
+        
+        // Проверяем статус избранного асинхронно
+        (async () => {
+            try {
+                // Правильный путь: из handlers/ в js/ - это ../favorites.js
+                const favoritesModule = await import('../favorites.js');
+                if (favoritesModule.checkFavorite && prod.id) {
+                    const isFavorite = await favoritesModule.checkFavorite(prod.id);
+                    updateFavoriteButtonState(favoriteButton, isFavorite);
+                }
+            } catch (e) {
+                console.warn('[PRODUCT PAGE] Error loading favorites module:', e);
+                // Игнорируем ошибку, модуль необязательный
+                updateFavoriteButtonState(favoriteButton, false);
+            }
+        })();
+        
+        // Обработчик клика на кнопку избранного (optimistic UI)
+        favoriteButton.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // Защита от повторных кликов во время обработки
+            if (favoriteButton.dataset.processing === 'true') {
+                const processingStartTime = parseInt(favoriteButton.dataset.processingStartTime || '0');
+                const now = Date.now();
+                if (processingStartTime && (now - processingStartTime) > 5000) {
+                    delete favoriteButton.dataset.processing;
+                    delete favoriteButton.dataset.processingStartTime;
+                } else {
+                    return;
+                }
+            }
+            
+            // Используем актуальное состояние из DOM
+            const currentFavoriteState = favoriteButton.classList.contains('favorite-active');
+            
+            // Optimistic UI - меняем состояние МГНОВЕННО
+            const newFavoriteState = !currentFavoriteState;
+            favoriteButton.dataset.processing = 'true';
+            favoriteButton.dataset.processingStartTime = Date.now().toString();
+            
+            // Функция для обновления всех кнопок избранного для этого товара (optimistic)
+            function updateAllFavoriteButtonsForProductOptimistic(productId, isFavorite) {
+                // Обновляем кнопку на странице товара
+                updateFavoriteButtonState(favoriteButton, isFavorite);
+                
+                // Находим и обновляем все кнопки избранного на карточках товаров
+                const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
+                allFavoriteButtons.forEach(btn => {
+                    // Пропускаем кнопку на странице товара, чтобы не обновлять её дважды
+                    if (btn !== favoriteButton) {
+                        updateFavoriteButtonState(btn, isFavorite);
+                    }
+                });
+            }
+            
+            // Обновляем ВСЕ кнопки избранного для этого товара (optimistic)
+            updateAllFavoriteButtonsForProductOptimistic(prod.id, newFavoriteState);
+            
+            // Функция для обновления всех кнопок избранного для этого товара
+            function updateAllFavoriteButtonsForProduct(productId, isFavorite) {
+                // Обновляем кнопку на странице товара
+                updateFavoriteButtonState(favoriteButton, isFavorite);
+                
+                // Находим и обновляем все кнопки избранного на карточках товаров
+                const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
+                allFavoriteButtons.forEach(btn => {
+                    // Пропускаем кнопку на странице товара, чтобы не обновлять её дважды
+                    if (btn !== favoriteButton) {
+                        updateFavoriteButtonState(btn, isFavorite);
+                    }
+                });
+                
+                console.log(`[FAVORITES] Updated ${allFavoriteButtons.length} favorite buttons for product ${productId}, state: ${isFavorite}`);
+            }
+            
+            // Запрос в API - асинхронно (в фоне)
+            try {
+                // Правильный путь: из handlers/ в js/ - это ../favorites.js
+                const favoritesModule = await import('../favorites.js');
+                if (favoritesModule.toggleFavorite) {
+                    const result = await favoritesModule.toggleFavorite(prod.id);
+                    
+                    // Синхронизируем с ответом сервера - обновляем ВСЕ кнопки для этого товара
+                    updateAllFavoriteButtonsForProduct(prod.id, result.is_favorite);
+                    
+                    // Обновляем счетчик
+                    if (favoritesModule.updateFavoritesCount) {
+                        await favoritesModule.updateFavoritesCount();
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error toggling favorite on product page:', error);
+                // Откатываем optimistic изменение при ошибке - обновляем ВСЕ кнопки
+                updateAllFavoriteButtonsForProduct(prod.id, currentFavoriteState);
+                alert(error.message || 'Ошибка при изменении избранного');
+            } finally {
+                // Снимаем блокировку
+                delete favoriteButton.dataset.processing;
+                delete favoriteButton.dataset.processingStartTime;
+            }
+        });
+        
+        // Добавляем кнопку в контейнер изображения (будет добавлена в showProductPageImage)
+        // Временно добавляем в productPageImage, потом она будет перемещена в контейнер изображения
+        productPageImage.appendChild(favoriteButton);
     }
     
     // Показываем изображение на странице товара
