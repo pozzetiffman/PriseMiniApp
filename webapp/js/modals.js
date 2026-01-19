@@ -202,9 +202,9 @@ export function setupModals() {
             if (cartModal && (cartModal.style.display === 'flex' || cartModal.style.display === 'block')) {
                 cartModal.style.display = 'none';
             }
-            const adminModal = document.getElementById('admin-modal');
-            if (adminModal && (adminModal.style.display === 'flex' || adminModal.style.display === 'block')) {
-                adminModal.style.display = 'none';
+            const adminPage = document.getElementById('admin-page');
+            if (adminPage && (adminPage.style.display === 'flex' || adminPage.style.display === 'block')) {
+                adminPage.style.display = 'none';
             }
             if (editProductModal && (editProductModal.style.display === 'flex' || editProductModal.style.display === 'block')) {
                 editProductModal.style.display = 'none';

@@ -31,38 +31,21 @@ export function initAdmin(dependencies) {
     
     console.log('🔧 Initializing admin panel...');
     
-    // Создаем модальное окно админки, если его еще нет
-    if (!document.getElementById('admin-modal')) {
-        createAdminModal();
+    // Проверяем, что страница админки существует в HTML
+    const adminPage = document.getElementById('admin-page');
+    if (!adminPage) {
+        console.warn('⚠️ Admin page not found in HTML');
     }
     
-    const adminModal = document.getElementById('admin-modal');
+    // Получаем переключатели из settings-modal (они там находятся, не в admin-page)
     const reservationsToggle = document.getElementById('reservations-toggle');
     const quantityEnabledToggle = document.getElementById('quantity-enabled-toggle');
     const allProductsMadeToOrderToggle = document.getElementById('all-products-made-to-order-toggle');
     
     // Сохраняем ссылки на элементы в глобальные переменные через сеттеры
-    if (setAdminModal) setAdminModal(adminModal);
     if (setReservationsToggle) setReservationsToggle(reservationsToggle);
     if (setQuantityEnabledToggle) setQuantityEnabledToggle(quantityEnabledToggle);
     if (setAllProductsMadeToOrderToggle) setAllProductsMadeToOrderToggle(allProductsMadeToOrderToggle);
-    
-    // Настройка закрытия модального окна
-    if (adminModal) {
-        const adminClose = adminModal.querySelector('.admin-close');
-        if (adminClose) {
-            adminClose.onclick = () => {
-                adminModal.style.display = 'none';
-            };
-        }
-        
-        // Закрытие при клике вне модального окна
-        adminModal.onclick = (e) => {
-            if (e.target === adminModal) {
-                adminModal.style.display = 'none';
-            }
-        };
-    }
     
     // Обработчик переключателя количества товаров
     if (quantityEnabledToggle) {
@@ -88,7 +71,7 @@ export function initAdmin(dependencies) {
         };
     }
     
-    // Настройка вкладок - будет настроена через зависимости в openAdmin
+    // Настройка вкладок будет выполнена в openAdmin
     
     console.log('✅ Admin panel initialized');
 }
@@ -459,21 +442,20 @@ export async function openAdmin(dependencies) {
     
     console.log('🔧 Opening admin panel...');
     
-    let adminModal = getAdminModal ? getAdminModal() : null;
+    // Получаем страницу админки
+    const adminPage = document.getElementById('admin-page');
+    const mainContent = document.getElementById('main-content');
+    const productPage = document.getElementById('product-page');
+    const cartPage = document.getElementById('cart-page');
+    const favoritesPage = document.getElementById('favorites-page');
     
-    if (!adminModal) {
-        initAdmin();
-        adminModal = getAdminModal ? getAdminModal() : null;
-    } else {
-        // Переинициализируем ссылки на тумблеры на случай, если модальное окно уже существует
-        const reservationsToggle = document.getElementById('reservations-toggle');
-        const quantityEnabledToggle = document.getElementById('quantity-enabled-toggle');
-        const allProductsMadeToOrderToggle = document.getElementById('all-products-made-to-order-toggle');
-        
-        if (setReservationsToggle) setReservationsToggle(reservationsToggle);
-        if (setQuantityEnabledToggle) setQuantityEnabledToggle(quantityEnabledToggle);
-        if (setAllProductsMadeToOrderToggle) setAllProductsMadeToOrderToggle(allProductsMadeToOrderToggle);
+    if (!adminPage) {
+        console.error('❌ Admin page not found');
+        return;
     }
+    
+    // Инициализируем админку если еще не была инициализирована
+    initAdmin();
     
     try {
         // Загружаем текущие настройки
@@ -482,7 +464,7 @@ export async function openAdmin(dependencies) {
         
         if (setShopSettings) setShopSettings(shopSettings);
         
-        // Получаем ссылки на тумблеры
+        // Получаем ссылки на тумблеры (они находятся в settings-modal, а не в admin-page)
         const quantityEnabledToggle = getQuantityEnabledToggle ? getQuantityEnabledToggle() : null;
         const reservationsToggle = getReservationsToggle ? getReservationsToggle() : null;
         const allProductsMadeToOrderToggle = getAllProductsMadeToOrderToggle ? getAllProductsMadeToOrderToggle() : null;
@@ -510,78 +492,115 @@ export async function openAdmin(dependencies) {
             }
         }
         
-        // Показываем модальное окно
-        if (adminModal) {
-            // Настройка закрытия модального окна
-            const adminClose = adminModal.querySelector('.admin-close');
-            if (adminClose) {
-                adminClose.onclick = () => {
-                    adminModal.style.display = 'none';
-                };
-            }
-            
-            // Закрытие при клике вне модального окна
-            adminModal.onclick = (e) => {
-                if (e.target === adminModal) {
-                    adminModal.style.display = 'none';
-                }
+        // Скрываем другие страницы
+        if (mainContent) mainContent.style.display = 'none';
+        if (productPage) productPage.style.display = 'none';
+        if (cartPage) cartPage.style.display = 'none';
+        if (favoritesPage) favoritesPage.style.display = 'none';
+        
+        // Показываем страницу админки
+        adminPage.style.display = 'block';
+        
+        // Настраиваем кнопку "Назад"
+        const adminPageBack = document.getElementById('admin-page-back');
+        if (adminPageBack) {
+            adminPageBack.onclick = () => {
+                closeAdminPage();
             };
+        }
+        
+        // Настройка вкладок
+        const tabs = adminPage.querySelectorAll('.admin-tab');
+        const adminTabsContainer = adminPage.querySelector('.admin-tabs');
+        
+        // Добавляем поддержку прокрутки колесом мыши
+        if (adminTabsContainer) {
+            adminTabsContainer.addEventListener('wheel', (e) => {
+                // Прокручиваем горизонтально при вертикальном прокручивании колесом с Shift
+                // Или при горизонтальном прокручивании колесом
+                if (e.deltaY !== 0 || e.deltaX !== 0) {
+                    e.preventDefault();
+                    adminTabsContainer.scrollLeft += (e.deltaY || e.deltaX);
+                }
+            }, { passive: false });
+        }
+        
+        tabs.forEach(tab => {
+            tab.onclick = () => {
+                switchAdminTab(tab.dataset.tab, {
+                    loadOrders,
+                    loadReservations,
+                    loadSoldProducts,
+                    loadStats,
+                    loadPurchases
+                });
+            };
+        });
+        
+        // Сначала переключаемся на вкладку по умолчанию, чтобы админка открылась сразу
+        switchAdminTab('stats', {
+            loadOrders,
+            loadReservations,
+            loadSoldProducts,
+            loadStats,
+            loadPurchases
+        });
+        
+        // Затем обновляем видимость вкладок асинхронно (не блокируя открытие админки)
+        // Оборачиваем в try-catch, чтобы ошибки не блокировали работу
+        updateAdminTabsVisibility().then(() => {
+            // После обновления видимости переключаемся на первую видимую вкладку
+            const tabs = adminPage.querySelectorAll('.admin-tab');
+            const activeTab = Array.from(tabs).find(tab => tab.classList.contains('active'));
             
-            // Настройка вкладок
-            const tabs = adminModal.querySelectorAll('.admin-tab');
-            tabs.forEach(tab => {
-                tab.onclick = () => {
-                    switchAdminTab(tab.dataset.tab, {
+            // Если текущая активная вкладка скрыта, переключаемся на первую видимую
+            if (activeTab && (activeTab.style.display === 'none' || activeTab.classList.contains('hidden'))) {
+                const firstVisibleTab = Array.from(tabs).find(tab => 
+                    tab.style.display !== 'none' && !tab.classList.contains('hidden')
+                );
+                if (firstVisibleTab) {
+                    switchAdminTab(firstVisibleTab.dataset.tab, {
                         loadOrders,
                         loadReservations,
                         loadSoldProducts,
                         loadStats,
                         loadPurchases
                     });
-                };
-            });
-            
-            adminModal.style.display = 'flex';
-            
-            // Сначала переключаемся на вкладку по умолчанию, чтобы админка открылась сразу
-            switchAdminTab('orders', {
-                loadOrders,
-                loadReservations,
-                loadSoldProducts,
-                loadStats,
-                loadPurchases
-            });
-            
-            // Затем обновляем видимость вкладок асинхронно (не блокируя открытие админки)
-            // Оборачиваем в try-catch, чтобы ошибки не блокировали работу
-            updateAdminTabsVisibility().then(() => {
-                // После обновления видимости переключаемся на первую видимую вкладку
-                const tabs = adminModal.querySelectorAll('.admin-tab');
-                const activeTab = Array.from(tabs).find(tab => tab.classList.contains('active'));
-                
-                // Если текущая активная вкладка скрыта, переключаемся на первую видимую
-                if (activeTab && (activeTab.style.display === 'none' || activeTab.classList.contains('hidden'))) {
-                    const firstVisibleTab = Array.from(tabs).find(tab => 
-                        tab.style.display !== 'none' && !tab.classList.contains('hidden')
-                    );
-                    if (firstVisibleTab) {
-                        switchAdminTab(firstVisibleTab.dataset.tab, {
-                            loadOrders,
-                            loadReservations,
-                            loadSoldProducts,
-                            loadStats,
-                            loadPurchases
-                        });
-                    }
                 }
-            }).catch(error => {
-                console.error('❌ Error updating admin tabs visibility:', error);
-                // Продолжаем работу даже если обновление видимости не удалось
-            });
-        }
+            }
+        }).catch(error => {
+            console.error('❌ Error updating admin tabs visibility:', error);
+            // Продолжаем работу даже если обновление видимости не удалось
+        });
     } catch (error) {
         console.error('❌ Error loading shop settings:', error);
         alert('Не удалось загрузить настройки магазина: ' + error.message);
+    }
+}
+
+/**
+ * Закрытие страницы админки
+ * Скрывает страницу админки и показывает главный контент
+ */
+export function closeAdminPage() {
+    console.log('[ADMIN PAGE] Closing admin page');
+    const adminPage = document.getElementById('admin-page');
+    const mainContent = document.getElementById('main-content');
+    const productPage = document.getElementById('product-page');
+    const cartPage = document.getElementById('cart-page');
+    const favoritesPage = document.getElementById('favorites-page');
+    
+    if (adminPage) {
+        // Скрываем все страницы сначала
+        if (productPage) productPage.style.display = 'none';
+        if (cartPage) cartPage.style.display = 'none';
+        if (favoritesPage) favoritesPage.style.display = 'none';
+        adminPage.style.display = 'none';
+        
+        // Показываем главный контент
+        if (mainContent) {
+            mainContent.style.display = 'block';
+        }
     }
 }
 // ========== END REFACTORING STEP 2.3 ==========
@@ -640,6 +659,92 @@ export function switchAdminTab(tabName, dependencies) {
         }
     });
     
+    // Прокручиваем контейнер вкладок, чтобы выбранная вкладка была полностью видна
+    if (targetTab) {
+        const adminTabsContainer = targetTab.closest('.admin-tabs');
+        if (adminTabsContainer) {
+            // Используем requestAnimationFrame для более точного расчета после обновления DOM
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const currentScrollLeft = adminTabsContainer.scrollLeft;
+                    const containerWidth = adminTabsContainer.clientWidth;
+                    const containerScrollWidth = adminTabsContainer.scrollWidth;
+                    const tabOffsetLeft = targetTab.offsetLeft;
+                    const tabWidth = targetTab.offsetWidth;
+                    
+                    // Вычисляем позиции вкладки относительно прокручиваемого контента
+                    const tabLeft = tabOffsetLeft;
+                    const tabRight = tabOffsetLeft + tabWidth;
+                    
+                    // Видимая область контейнера
+                    const visibleLeft = currentScrollLeft;
+                    const visibleRight = currentScrollLeft + containerWidth;
+                    
+                    // Максимальная прокрутка
+                    const maxScrollLeft = Math.max(0, containerScrollWidth - containerWidth);
+                    
+                    // Проверяем, является ли это последней (крайней правой) вкладкой
+                    const allTabs = Array.from(adminTabsContainer.querySelectorAll('.admin-tab'));
+                    const isLastTab = allTabs[allTabs.length - 1] === targetTab;
+                    
+                    // Проверяем, полностью ли видна вкладка
+                    const tolerance = 2;
+                    const isFullyVisible = tabLeft >= visibleLeft - tolerance && 
+                                          tabRight <= visibleRight + tolerance;
+                    
+                    // Для крайней правой вкладки: если она уже видна (даже частично), не прокручиваем
+                    if (isLastTab) {
+                        // Если правая часть вкладки уже видна или почти видна, не прокручиваем
+                        if (tabRight <= visibleRight + tolerance && tabLeft >= visibleLeft - tolerance) {
+                            return; // Вкладка видна, не прокручиваем
+                        }
+                        // Только если вкладка полностью скрыта справа, прокручиваем
+                        if (tabRight > visibleRight + tolerance) {
+                            // Прокручиваем так, чтобы правая часть вкладки была видна справа
+                            const targetScrollLeft = Math.max(0, Math.min(maxScrollLeft, tabRight - containerWidth));
+                            
+                            // Прокручиваем только если нужно (больше чем на 3px)
+                            if (Math.abs(targetScrollLeft - currentScrollLeft) > 3) {
+                                adminTabsContainer.scrollTo({
+                                    left: targetScrollLeft,
+                                    behavior: 'smooth'
+                                });
+                            }
+                        }
+                        return; // Для крайней правой вкладки выходим
+                    }
+                    
+                    // Для остальных вкладок: если вкладка не полностью видна, прокручиваем
+                    if (!isFullyVisible) {
+                        let targetScrollLeft;
+                        
+                        // Если вкладка скрыта справа - прокручиваем так, чтобы она была слева
+                        if (tabRight > visibleRight) {
+                            targetScrollLeft = tabLeft;
+                        } 
+                        // Если вкладка скрыта слева - прокручиваем так, чтобы она была слева
+                        else if (tabLeft < visibleLeft) {
+                            targetScrollLeft = tabLeft;
+                        }
+                        
+                        // Ограничиваем прокрутку границами
+                        if (targetScrollLeft !== undefined) {
+                            targetScrollLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
+                            
+                            // Прокручиваем только если нужно (больше чем на 3px)
+                            if (Math.abs(targetScrollLeft - currentScrollLeft) > 3) {
+                                adminTabsContainer.scrollTo({
+                                    left: targetScrollLeft,
+                                    behavior: 'smooth'
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+        }
+    }
+    
     // Если переключились на вкладку "Заказы", загружаем данные
     if (tabName === 'orders') {
         loadOrders();
@@ -657,6 +762,7 @@ export function switchAdminTab(tabName, dependencies) {
     
     // Если переключились на вкладку "Статистика", загружаем данные
     if (tabName === 'stats') {
+        // Загружаем статистику (по умолчанию "Все время")
         loadStats();
     }
     

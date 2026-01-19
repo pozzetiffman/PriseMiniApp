@@ -39,8 +39,13 @@ export async function trackShopVisit(shopOwnerId, productId = null) {
 
 // ========== REFACTORING STEP 10.2: getVisitStatsAPI() ==========
 // Получить статистику посещений
-export async function getVisitStatsAPI() {
-    const url = `${API_BASE}/api/shop-visits/stats`;
+export async function getVisitStatsAPI(dateFrom = null, dateTo = null) {
+    let url = `${API_BASE}/api/shop-visits/stats`;
+    const params = [];
+    if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
+    if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
+    if (params.length > 0) url += `?${params.join('&')}`;
+    
     console.log(`Fetching visit stats from: ${url}`);
     
     const response = await fetch(url, {
@@ -62,8 +67,13 @@ export async function getVisitStatsAPI() {
 
 // ========== REFACTORING STEP 10.3: getVisitsListAPI() ==========
 // Получить список посещений
-export async function getVisitsListAPI(limit = 50, offset = 0) {
-    const url = `${API_BASE}/api/shop-visits/list?limit=${limit}&offset=${offset}`;
+export async function getVisitsListAPI(limit = 50, offset = 0, dateFrom = null, dateTo = null) {
+    let url = `${API_BASE}/api/shop-visits/list?limit=${limit}&offset=${offset}`;
+    const params = [];
+    if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
+    if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
+    if (params.length > 0) url += `&${params.join('&')}`;
+    
     console.log(`Fetching visits list from: ${url}`);
     
     const response = await fetch(url, {
@@ -85,8 +95,13 @@ export async function getVisitsListAPI(limit = 50, offset = 0) {
 
 // ========== REFACTORING STEP 10.4: getProductViewStatsAPI() ==========
 // Получить статистику просмотров товаров
-export async function getProductViewStatsAPI(limit = 20) {
-    const url = `${API_BASE}/api/shop-visits/product-stats?limit=${limit}`;
+export async function getProductViewStatsAPI(limit = 20, dateFrom = null, dateTo = null) {
+    let url = `${API_BASE}/api/shop-visits/product-stats?limit=${limit}`;
+    const params = [];
+    if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
+    if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
+    if (params.length > 0) url += `&${params.join('&')}`;
+    
     console.log(`Fetching product view stats from: ${url}`);
     
     const response = await fetch(url, {

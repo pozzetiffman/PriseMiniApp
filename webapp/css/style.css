@@ -47,6 +47,7 @@ html {
 body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 50%, #1c1c1e 100%);
+    /* Убираем background-attachment: fixed на десктопе - может вызывать проблемы с перекрытием */
     background-attachment: fixed;
     color: var(--text-primary) !important;
     margin: 0;
@@ -58,6 +59,8 @@ body {
     min-height: 100vh;
     position: relative;
     overflow-x: hidden;
+    /* На десктопе убираем overflow-y, чтобы не было двойной прокрутки */
+    overflow-y: auto;
     /* Разрешаем вертикальный bounce, запрещаем горизонтальный */
     overscroll-behavior-y: auto;
     overscroll-behavior-x: none;
@@ -70,6 +73,18 @@ body {
     /* Скрываем scrollbar везде */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE и Edge */
+}
+
+/* На десктопе убираем background-attachment: fixed и body::before для body, когда открыта админка */
+@media (min-width: 768px) {
+    body:has(.admin-page[style*="display: block"]) {
+        background-attachment: scroll !important;
+        overflow-y: hidden !important; /* Убираем прокрутку body, когда открыта админка */
+    }
+    
+    body:has(.admin-page[style*="display: block"])::before {
+        display: none !important; /* Скрываем body::before, чтобы не перекрывал контент */
+    }
 }
 
 body::-webkit-scrollbar {
@@ -128,6 +143,8 @@ header {
     gap: 12px;
     border-radius: 24px 24px 0 0;
 }
+
+/* Header всегда виден, даже в админке */
 
 /* Кнопка избранного в нижнем меню */
 .favorites-button {
@@ -2314,6 +2331,191 @@ header h1 {
     animation: cartPageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ========== СТРАНИЦА АДМИНКИ (отдельная страница вместо модального окна) ========== */
+.admin-page {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1001 !important; /* Выше чем header (z-index: 300) */
+    /* Фон под общий стиль проекта - градиент как в body */
+    background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 50%, #1c1c1e 100%);
+    /* Убран background-attachment: fixed - может вызывать проблемы с перекрытием */
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Запрещаем горизонтальный скролл */
+    max-width: 100vw;
+    width: 100%;
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + 80px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: auto;
+    overscroll-behavior-x: none;
+    overscroll-behavior-block: auto;
+    overscroll-behavior-inline: none;
+    touch-action: pan-y;
+    -webkit-scroll-behavior: smooth;
+}
+
+/* Дубликат удален - правило уже есть выше */
+
+/* Удален псевдоэлемент ::before который перекрывал контент */
+
+.admin-page::-webkit-scrollbar {
+    display: none;
+}
+
+/* z-index уже установлен выше в .admin-page */
+
+.admin-page[style*="display: block"],
+.admin-page[style*="display:flex"] {
+    display: block !important;
+}
+
+.admin-page-header {
+    position: relative;
+    z-index: 100;
+    background: transparent;
+    padding: 12px 12px 8px 12px;
+    margin: 0;
+    border: none;
+    border-bottom: none;
+}
+
+.admin-page-back {
+    /* Кнопка как часть контента - двигается вместе со страницей */
+    position: relative;
+    z-index: 101;
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 12px;
+    margin-top: 0;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.admin-page-back:hover {
+    background: var(--bg-glass);
+    transform: translateX(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.admin-page-back:active {
+    transform: translateX(0);
+    background: var(--bg-glass-light);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.admin-page-content {
+    padding: 0 12px;
+    padding-top: 0;
+    padding-bottom: calc(80px + var(--tg-safe-area-inset-bottom, 0px));
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+    /* Запрещаем горизонтальный скролл */
+    overflow-x: hidden;
+    min-width: 0;
+    scroll-behavior: smooth;
+    -webkit-scroll-behavior: smooth;
+}
+
+/* На десктопе увеличиваем padding-bottom для контента */
+@media (min-width: 768px) {
+    .admin-page-content {
+        padding-bottom: calc(100px + var(--tg-safe-area-inset-bottom, 0px));
+    }
+}
+
+/* Стили для элементов внутри admin-page */
+.admin-page .admin-tabs {
+    margin: 12px 0;
+    padding: 0;
+}
+
+.admin-page .admin-modal-body {
+    padding: 0;
+}
+
+.admin-page .admin-tab-content {
+    padding: 0;
+}
+
+.admin-page .orders-list,
+.admin-page .reservations-list,
+.admin-page .sold-products-list,
+.admin-page .purchases-list,
+.admin-page .stats-content {
+    padding: 0;
+}
+
+/* Информационное сообщение о вкладках на странице админки */
+.admin-page #admin-tabs-info {
+    position: relative;
+    padding: 10px 40px 10px 16px;
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, #999);
+    text-align: center;
+    background: rgba(90, 200, 250, 0.1);
+    border-radius: 8px;
+    margin: 0 0 12px 0;
+    border: 1px solid rgba(90, 200, 250, 0.2);
+    line-height: 1.4;
+}
+
+.admin-page .admin-tabs-info-close {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--tg-theme-hint-color, #999);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.admin-page .admin-tabs-info-close:hover {
+    opacity: 1;
+}
+
+/* Анимация появления страницы админки */
+@keyframes adminPageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.admin-page[style*="display: block"] {
+    animation: adminPageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .modal-close {
     position: absolute;
     right: 15px;
@@ -3089,7 +3291,8 @@ main {
         padding: 12px 12px calc(58px + var(--tg-safe-area-inset-bottom, 0px)) 12px;
     }
     
-    .admin-tabs {
+    /* Стили для вкладок админки в модальном окне (для обратной совместимости) */
+    .admin-modal .admin-tabs {
         display: grid;
         grid-template-columns: repeat(5, 1fr);
         border-bottom: 1px solid var(--border-glass);
@@ -3100,7 +3303,7 @@ main {
         padding: 3px;
     }
     
-    .admin-tab {
+    .admin-modal .admin-tab {
         padding: 8px 2px;
         background: transparent;
         border: none;
@@ -3112,14 +3315,14 @@ main {
         min-height: 50px;
     }
     
-    .admin-tab.active {
+    .admin-modal .admin-tab.active {
         color: #7dd3fc !important;
         border-bottom-color: #7dd3fc !important;
         background: rgba(125, 211, 252, 0.15) !important;
         box-shadow: 0 2px 8px rgba(125, 211, 252, 0.2) !important;
     }
     
-    .admin-tab span:first-child {
+    .admin-modal .admin-tab span:first-child {
         font-size: 16px !important;
     }
     
@@ -3134,10 +3337,14 @@ main {
         padding: 12px;
     }
     
+    /* Убираем max-height и overflow для списков - прокрутка только у .admin-page */
     .stats-content,
     .orders-list,
-    .sold-products-list {
-        max-height: calc(96vh - 180px) !important;
+    .reservations-list,
+    .sold-products-list,
+    .purchases-list {
+        max-height: none !important;
+        overflow: visible !important;
     }
     
     #products-grid {
@@ -3748,62 +3955,142 @@ main {
 }
 
 .admin-modal-body {
-    padding: 20px;
-    overflow-y: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
     flex: 1;
     min-height: 0;
-    /* Скрываем scrollbar */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE и Edge */
-}
-
-.admin-modal-body::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
+    border: none;
+    border-top: none;
+    border-bottom: none;
 }
 
 /* Вкладки админки */
 .admin-tabs {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    border-bottom: 1px solid var(--border-glass);
-    background: var(--bg-glass-light);
-    flex-shrink: 0;
-    margin-bottom: 15px;
-    border-radius: 12px 12px 0 0;
-    gap: 2px;
-    padding: 4px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    /* Убираем фон и границы */
+    background: transparent;
+    border: none;
+    border-bottom: none;
+    /* Показываем тонкий scrollbar на десктопе для прокрутки мышкой */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    /* Убираем перекрытия */
+    position: relative;
+    z-index: 1;
+}
+
+/* Тонкий scrollbar для прокрутки мышкой на десктопе */
+.admin-tabs::-webkit-scrollbar {
+    height: 6px;
+}
+
+.admin-tabs::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.admin-tabs::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.admin-tabs::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Скрываем scrollbar на мобильных устройствах */
+@media (max-width: 768px) {
+    .admin-tabs {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    
+    .admin-tabs::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+/* Стили для вкладок админки на странице */
+.admin-page .admin-tabs {
+    margin: 12px 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-bottom: none;
+}
+
+.admin-page .admin-modal-body {
+    padding: 0;
 }
 
 .admin-tab {
-    padding: 10px 4px;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
+    padding: 6px 12px;
+    margin: 0;
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-bottom: 1px solid var(--border-glass);
     border-radius: 12px;
-    color: var(--text-hint);
+    color: var(--text-secondary);
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
     gap: 4px;
     text-align: center;
-    min-height: 56px;
+    min-height: 32px;
+    max-height: 32px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    flex-shrink: 0;
+    min-width: fit-content;
+    /* Убираем перекрытия */
+    position: relative;
+    z-index: 1;
+}
+
+.admin-tab span:first-child {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.admin-tab span:last-child {
+    white-space: nowrap;
 }
 
 .admin-tab:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-glass);
+    transform: none;
+    box-shadow: 0 4px 12px var(--shadow-medium);
+    z-index: 3;
 }
 
 .admin-tab.active {
-    color: var(--tg-theme-link-color, #5ac8fa);
-    border-bottom-color: var(--tg-theme-link-color, #5ac8fa);
-    background: rgba(90, 200, 250, 0.15);
-    box-shadow: 0 2px 8px rgba(90, 200, 250, 0.2);
+    color: var(--tg-theme-button-color, #5ac8fa);
+    background: rgba(90, 200, 250, 0.25) !important;
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-color: rgba(90, 200, 250, 0.5);
+    border-bottom-color: rgba(90, 200, 250, 0.5);
+    box-shadow: 0 2px 8px rgba(90, 200, 250, 0.15), 
+                0 0 0 1px rgba(90, 200, 250, 0.2) inset;
+    transform: none;
+    z-index: 2;
 }
 
 .admin-tab-content {
@@ -3818,15 +4105,10 @@ main {
 /* Статистика */
 .stats-content {
     padding: 0;
-    max-height: calc(90vh - 200px);
-    overflow-y: auto;
-    /* Скрываем scrollbar */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE и Edge */
-}
-
-.stats-content::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
+    overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
+    /* Предотвращаем перетаскивание на уровне контейнера */
+    -webkit-user-drag: none !important;
+    user-drag: none !important;
 }
 
 .stats-section {
@@ -3845,6 +4127,13 @@ main {
     margin-bottom: 12px;
 }
 
+/* Адаптивная сетка для статистики на больших экранах */
+@media (min-width: 600px) {
+    .stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
 .stat-card {
     background: var(--bg-glass, rgba(28, 28, 30, 0.8));
     backdrop-filter: blur(20px);
@@ -3853,11 +4142,24 @@ main {
     border: 1px solid rgba(255, 255, 255, 0.1);
     text-align: center;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    /* Предотвращаем перетаскивание */
+    -webkit-user-drag: none !important;
+    user-drag: none !important;
+    -webkit-user-select: none;
+    user-select: none;
+    /* Для будущей функциональности клика */
+    cursor: pointer;
+    touch-action: manipulation;
 }
 
 .stat-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.stat-card:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .stat-value {
@@ -3866,6 +4168,153 @@ main {
     color: var(--tg-theme-link-color, #5ac8fa);
     margin-bottom: 6px;
     line-height: 1.2;
+}
+
+/* Tooltip с информацией о статистике */
+.stat-info-tooltip {
+    position: fixed;
+    max-width: 320px;
+    min-width: 280px;
+    background: var(--bg-glass-light, rgba(44, 44, 46, 0.95));
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border-radius: 16px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    z-index: 10000;
+    pointer-events: auto;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+
+.stat-info-content {
+    padding: 16px;
+}
+
+.stat-info-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--tg-theme-text-color, #ffffff);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stat-info-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--tg-theme-hint-color, #8e8e93);
+}
+
+.stat-info-text strong {
+    color: var(--tg-theme-text-color, #ffffff);
+    font-weight: 600;
+}
+
+.stat-info-text br {
+    line-height: 1.8;
+}
+
+/* Фильтр по периоду для статистики */
+.stats-filter-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stats-period-filter {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.stats-period-select {
+    padding: 8px 12px;
+    background: var(--bg-glass, rgba(58, 58, 60, 0.75));
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--tg-theme-text-color);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 140px;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235ac8fa' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+}
+
+.stats-period-select:hover {
+    background-color: rgba(90, 200, 250, 0.1);
+    border-color: rgba(90, 200, 250, 0.3);
+}
+
+.stats-period-select:focus {
+    background-color: rgba(90, 200, 250, 0.15);
+    border-color: var(--tg-theme-link-color, #5ac8fa);
+    box-shadow: 0 0 0 2px rgba(90, 200, 250, 0.2);
+}
+
+.stats-custom-dates {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.stats-date-input {
+    padding: 8px 12px;
+    background: var(--bg-glass, rgba(58, 58, 60, 0.75));
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--tg-theme-text-color);
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    outline: none;
+    min-width: 140px;
+}
+
+.stats-date-input:hover {
+    background-color: rgba(90, 200, 250, 0.1);
+    border-color: rgba(90, 200, 250, 0.3);
+}
+
+.stats-date-input:focus {
+    background-color: rgba(90, 200, 250, 0.15);
+    border-color: var(--tg-theme-link-color, #5ac8fa);
+    box-shadow: 0 0 0 2px rgba(90, 200, 250, 0.2);
+}
+
+/* Стилизация для date input в разных браузерах */
+.stats-date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    filter: invert(0.5) sepia(1) saturate(5) hue-rotate(175deg);
+}
+
+.stats-date-input::-webkit-datetime-edit-text {
+    color: var(--tg-theme-text-color);
+}
+
+.stats-date-input::-webkit-datetime-edit-month-field,
+.stats-date-input::-webkit-datetime-edit-day-field,
+.stats-date-input::-webkit-datetime-edit-year-field {
+    color: var(--tg-theme-text-color);
 }
 
 .stat-label {
@@ -3879,12 +4328,12 @@ main {
 }
 
 .top-product-item {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.top-product-item:hover {
-    transform: translateX(4px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    /* Убраны все анимации и интерактивность */
+    -webkit-user-drag: none !important;
+    user-drag: none !important;
+    -webkit-user-select: none;
+    user-select: none;
+    pointer-events: none;
 }
 
 .recent-visits-list {
@@ -3892,26 +4341,18 @@ main {
 }
 
 .visit-item {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.visit-item:hover {
-    transform: translateX(4px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    /* Убраны все анимации и интерактивность */
+    -webkit-user-drag: none !important;
+    user-drag: none !important;
+    -webkit-user-select: none;
+    user-select: none;
+    pointer-events: none;
 }
 
 /* Список проданных товаров */
 .sold-products-list {
     padding: 0;
-    max-height: calc(90vh - 200px);
-    overflow-y: auto;
-    /* Скрываем scrollbar */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE и Edge */
-}
-
-.sold-products-list::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
+    overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
 }
 
 .sold-product-item {
@@ -3934,16 +4375,7 @@ main {
 .orders-list,
 .reservations-list {
     padding: 0;
-    max-height: calc(90vh - 200px);
-    overflow-y: auto;
-    /* Скрываем scrollbar */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE и Edge */
-}
-
-.orders-list::-webkit-scrollbar,
-.reservations-list::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
+    overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
 }
 
 .order-item {

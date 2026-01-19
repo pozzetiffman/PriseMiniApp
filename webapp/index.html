@@ -129,6 +129,65 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Страница админки (отдельная страница вместо модального окна) -->
+        <div id="admin-page" class="admin-page" style="display: none;">
+            <div class="admin-page-header">
+                <button id="admin-page-back" class="admin-page-back">← Назад</button>
+            </div>
+            <div class="admin-page-content">
+                <div id="admin-tabs-info" style="display: none;"></div>
+                <div class="admin-tabs">
+                    <button class="admin-tab active" data-tab="stats">
+                        <span style="font-size: 18px;">📊</span>
+                        <span>Статистика</span>
+                    </button>
+                    <button class="admin-tab" data-tab="orders">
+                        <span style="font-size: 18px;">🛒</span>
+                        <span>Заказы</span>
+                    </button>
+                    <button class="admin-tab" data-tab="reservations">
+                        <span style="font-size: 18px;">🔒</span>
+                        <span>Резервации</span>
+                    </button>
+                    <button class="admin-tab" data-tab="sold">
+                        <span style="font-size: 18px;">✅</span>
+                        <span>Проданные</span>
+                    </button>
+                    <button class="admin-tab" data-tab="purchases">
+                        <span style="font-size: 18px;">💰</span>
+                        <span>Покупки</span>
+                    </button>
+                </div>
+                <div class="admin-modal-body">
+                    <div id="admin-tab-stats" class="admin-tab-content active">
+                        <div id="stats-content" class="stats-content">
+                            <p class="loading">Загрузка статистики...</p>
+                        </div>
+                    </div>
+                    <div id="admin-tab-orders" class="admin-tab-content">
+                        <div id="orders-list" class="orders-list">
+                            <p class="loading">Загрузка заказов...</p>
+                        </div>
+                    </div>
+                    <div id="admin-tab-reservations" class="admin-tab-content">
+                        <div id="reservations-list" class="reservations-list">
+                            <p class="loading">Загрузка резерваций...</p>
+                        </div>
+                    </div>
+                    <div id="admin-tab-sold" class="admin-tab-content">
+                        <div id="sold-products-list" class="sold-products-list">
+                            <p class="loading">Загрузка истории продаж...</p>
+                        </div>
+                    </div>
+                    <div id="admin-tab-purchases" class="admin-tab-content">
+                        <div id="purchases-list" class="purchases-list">
+                            <p class="loading">Загрузка заявок на покупку...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <!-- Модальное окно для детального просмотра товара -->
