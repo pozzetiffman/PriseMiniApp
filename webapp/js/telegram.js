@@ -72,6 +72,56 @@ export async function initTelegram() {
         tg.setBackgroundColor('#1c1c1e');
     }
     
+    // Функция для фиксации цветов текста (предотвращает изменение при смене ориентации)
+    function fixTextColors() {
+        const root = document.documentElement;
+        const body = document.body;
+        
+        // Фиксируем цвета текста в CSS переменных на html и body
+        // Используем setProperty без important, но применяем на оба элемента
+        root.style.setProperty('--tg-theme-text-color', '#ffffff');
+        root.style.setProperty('--tg-theme-hint-color', '#8e8e93');
+        root.style.setProperty('--tg-theme-button-text-color', '#ffffff');
+        root.style.setProperty('--text-primary', '#ffffff');
+        root.style.setProperty('--text-secondary', '#ebebf5');
+        root.style.setProperty('--text-hint', '#8e8e93');
+        
+        body.style.setProperty('--tg-theme-text-color', '#ffffff');
+        body.style.setProperty('--tg-theme-hint-color', '#8e8e93');
+        body.style.setProperty('--tg-theme-button-text-color', '#ffffff');
+        body.style.setProperty('--text-primary', '#ffffff');
+        body.style.setProperty('--text-secondary', '#ebebf5');
+        body.style.setProperty('--text-hint', '#8e8e93');
+        
+        // Также принудительно устанавливаем цвет текста на body
+        body.style.color = '#ffffff';
+    }
+    
+    // Фиксируем цвета сразу после инициализации
+    fixTextColors();
+    
+    // Фиксируем цвета при изменении ориентации
+    const handleOrientationColorFix = () => {
+        setTimeout(fixTextColors, 50);
+        setTimeout(fixTextColors, 200);
+        setTimeout(fixTextColors, 500);
+    };
+    
+    window.addEventListener('orientationchange', handleOrientationColorFix);
+    
+    // Также фиксируем при изменении через Screen Orientation API
+    if (screen.orientation) {
+        screen.orientation.addEventListener('change', handleOrientationColorFix);
+    }
+    
+    // Периодическая проверка и фиксация цветов (каждые 3 секунды)
+    const colorFixInterval = setInterval(fixTextColors, 3000);
+    
+    // Очищаем интервал при выгрузке страницы
+    window.addEventListener('beforeunload', () => {
+        clearInterval(colorFixInterval);
+    });
+    
     // КРИТИЧНО: Отключаем закрытие приложения свайпом вниз
     // Приложение должно закрываться ТОЛЬКО через сервисную кнопку
     if (tg.disableVerticalSwipes && typeof tg.disableVerticalSwipes === 'function') {

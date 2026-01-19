@@ -144,7 +144,7 @@ export async function loadStats(dateFrom = null, dateTo = null) {
             <div class="stats-section">
                 <div class="stats-filter-container" style="margin-bottom: 16px;">
                     <div class="stats-period-filter">
-                        <label for="stats-period-select" style="font-size: 13px; color: var(--tg-theme-hint-color); margin-right: 8px;">Период:</label>
+                        <label for="stats-period-select" style="font-size: 13px; color: #8e8e93 !important; margin-right: 8px;">Период:</label>
                         <select id="stats-period-select" class="stats-period-select">
                             <option value="today" ${currentDateFilter.period === 'today' ? 'selected' : ''}>Сегодня</option>
                             <option value="week" ${currentDateFilter.period === 'week' ? 'selected' : ''}>Неделя</option>
@@ -155,16 +155,16 @@ export async function loadStats(dateFrom = null, dateTo = null) {
                     </div>
                     <div class="stats-custom-dates" id="stats-custom-dates" style="display: ${currentDateFilter.period === 'custom' ? 'flex' : 'none'}; gap: 8px; align-items: center; margin-top: 12px;">
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <label for="stats-date-from" style="font-size: 13px; color: var(--tg-theme-hint-color);">От:</label>
+                            <label for="stats-date-from" style="font-size: 13px; color: #8e8e93 !important;">От:</label>
                             <input type="date" id="stats-date-from" class="stats-date-input" value="${currentDateFilter.dateFrom || ''}">
                         </div>
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <label for="stats-date-to" style="font-size: 13px; color: var(--tg-theme-hint-color);">До:</label>
+                            <label for="stats-date-to" style="font-size: 13px; color: #8e8e93 !important;">До:</label>
                             <input type="date" id="stats-date-to" class="stats-date-input" value="${currentDateFilter.dateTo || ''}">
                         </div>
                     </div>
                 </div>
-                <h3 style="margin: 0 0 16px 0; font-size: 18px; color: var(--tg-theme-text-color);">📊 Общая статистика</h3>
+                <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #ffffff !important;">📊 Общая статистика</h3>
                 <div class="stats-grid">
                     <div class="stat-card" draggable="false" data-stat-type="total_visits">
                         <div class="stat-value">${stats.total_visits}</div>
@@ -210,7 +210,7 @@ export async function loadStats(dateFrom = null, dateTo = null) {
         if (topProducts && topProducts.length > 0) {
             html += `
                 <div class="stats-section" style="margin-top: 24px;">
-                    <h3 style="margin: 0 0 16px 0; font-size: 18px; color: var(--tg-theme-text-color);">🔥 Топ товаров по просмотрам</h3>
+                    <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #ffffff !important;">🔥 Топ товаров по просмотрам</h3>
                     <div class="top-products-list">
             `;
             
@@ -241,7 +241,7 @@ export async function loadStats(dateFrom = null, dateTo = null) {
                                 color: white;
                             ">${index + 1}</div>
                             <div style="flex: 1;">
-                                <div style="font-size: 15px; font-weight: 600; color: var(--tg-theme-text-color); margin-bottom: 4px;">
+                                <div style="font-size: 15px; font-weight: 600; color: #ffffff !important; margin-bottom: 4px;">
                                     ${product.product_name}
                                 </div>
                             </div>
@@ -270,7 +270,7 @@ export async function loadStats(dateFrom = null, dateTo = null) {
         if (visits && visits.length > 0) {
             html += `
                 <div class="stats-section" style="margin-top: 24px;">
-                    <h3 style="margin: 0 0 16px 0; font-size: 18px; color: var(--tg-theme-text-color);">👥 Последние посещения</h3>
+                    <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #ffffff !important;">👥 Последние посещения</h3>
                     <div class="recent-visits-list">
             `;
             
@@ -297,16 +297,16 @@ export async function loadStats(dateFrom = null, dateTo = null) {
                         align-items: center;
                     ">
                         <div style="flex: 1;">
-                            <div style="font-size: 14px; color: var(--tg-theme-text-color); margin-bottom: 4px;">
+                            <div style="font-size: 14px; color: #ffffff !important; margin-bottom: 4px;">
                                 ${visit.product_name ? `📦 ${visit.product_name}` : '🏪 Просмотр магазина'}
                             </div>
-                            <div style="font-size: 12px; color: var(--tg-theme-hint-color);">
+                            <div style="font-size: 12px; color: #8e8e93 !important;">
                                 ${dateStr}
                             </div>
                         </div>
                         <div style="
                             font-size: 12px;
-                            color: var(--tg-theme-hint-color);
+                            color: #8e8e93 !important;
                             font-family: monospace;
                         ">
                             ID: ${visit.visitor_id}
@@ -327,6 +327,37 @@ export async function loadStats(dateFrom = null, dateTo = null) {
         }
         
         statsContent.innerHTML = html;
+        
+        // Функция для фиксации цветов текста в статистике (предотвращает изменение при смене ориентации)
+        const fixStatsColors = () => {
+            const statsElements = statsContent.querySelectorAll('[style*="color"]');
+            statsElements.forEach(el => {
+                const style = el.getAttribute('style') || '';
+                // Если элемент использует фиксированные цвета с !important, пропускаем
+                if (style.includes('!important')) return;
+                
+                // Заменяем переменные Telegram на фиксированные цвета
+                if (style.includes('var(--tg-theme-text-color)')) {
+                    el.style.color = '#ffffff !important';
+                } else if (style.includes('var(--tg-theme-hint-color)')) {
+                    el.style.color = '#8e8e93 !important';
+                }
+            });
+        };
+        
+        // Фиксируем цвета сразу после рендеринга
+        fixStatsColors();
+        
+        // Фиксируем цвета при изменении ориентации
+        const handleOrientationColorFix = () => {
+            setTimeout(fixStatsColors, 100);
+            setTimeout(fixStatsColors, 300);
+        };
+        
+        window.addEventListener('orientationchange', handleOrientationColorFix);
+        if (screen.orientation) {
+            screen.orientation.addEventListener('change', handleOrientationColorFix);
+        }
         
         // Инициализируем обработчики для выпадающего списка периода
         const periodSelect = statsContent.querySelector('#stats-period-select');

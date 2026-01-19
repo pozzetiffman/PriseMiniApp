@@ -28,6 +28,19 @@
     --blur-large: blur(30px);
 }
 
+/* Фиксация цветов текста - предотвращает изменение при смене ориентации */
+/* Используем более специфичные селекторы для переопределения Telegram переменных */
+html,
+html[style*="--tg-theme-text-color"],
+body {
+    --tg-theme-text-color: #ffffff;
+    --tg-theme-hint-color: #8e8e93;
+    --tg-theme-button-text-color: #ffffff;
+    --text-primary: #ffffff;
+    --text-secondary: #ebebf5;
+    --text-hint: #8e8e93;
+}
+
 html {
     width: 100%;
     height: 100%;
@@ -508,8 +521,8 @@ header h1 {
 }
 
 .cart-tab.active {
-    color: var(--tg-theme-link-color, #5ac8fa);
-    border-bottom-color: var(--tg-theme-link-color, #5ac8fa);
+    color: #5ac8fa !important; /* Фиксированный цвет - не меняется при смене ориентации */
+    border-bottom-color: #5ac8fa !important;
     background: rgba(90, 200, 250, 0.1);
 }
 
@@ -546,9 +559,9 @@ header h1 {
 }
 
 .cart-subtab.active {
-    color: var(--tg-theme-link-color, #5ac8fa);
+    color: #5ac8fa !important; /* Фиксированный цвет - не меняется при смене ориентации */
     background: rgba(90, 200, 250, 0.15);
-    border-color: var(--tg-theme-link-color, #5ac8fa);
+    border-color: #5ac8fa !important;
 }
 
 .cart-items {
@@ -723,8 +736,8 @@ header h1 {
     background: rgba(90, 200, 250, 0.25) !important;
     backdrop-filter: var(--blur-small);
     -webkit-backdrop-filter: var(--blur-small);
-    color: var(--tg-theme-button-color) !important;
-    border-color: rgba(90, 200, 250, 0.5);
+    color: #5ac8fa !important; /* Фиксированный цвет - не меняется при смене ориентации */
+    border-color: rgba(90, 200, 250, 0.5) !important;
     box-shadow: 0 2px 8px rgba(90, 200, 250, 0.15), 
                 0 0 0 1px rgba(90, 200, 250, 0.2) inset;
     transform: scale(1.01);
@@ -3070,14 +3083,14 @@ main {
 
 /* Дополнительные стили для лучшей видимости на мобильных */
 @media (max-width: 480px) {
-    /* Более светлый синий цвет для мобильных устройств */
-    :root {
+    /* УБРАНО: Изменение CSS переменных - цвета теперь фиксированы для предотвращения изменения при смене ориентации */
+    /* :root {
         --tg-theme-link-color: #7dd3fc;
         --tg-theme-button-color: #7dd3fc;
-    }
+    } */
     
-    /* Переопределение всех синих цветов на более светлые */
-    .cart-tab.active,
+    /* УБРАНО: Переопределение цветов при смене ориентации - цвета теперь фиксированы */
+    /* .cart-tab.active,
     .cart-subtab.active,
     .admin-tab.active {
         color: #7dd3fc !important;
@@ -3091,7 +3104,7 @@ main {
     .order-total,
     .order-product-summary .product-price {
         color: #00A82E !important;
-    }
+    } */
     
     .category-badge.active {
         color: #7dd3fc !important;
@@ -4081,12 +4094,12 @@ main {
 }
 
 .admin-tab.active {
-    color: var(--tg-theme-button-color, #5ac8fa);
+    color: #5ac8fa !important; /* Фиксированный цвет - не меняется при смене ориентации */
     background: rgba(90, 200, 250, 0.25) !important;
     backdrop-filter: var(--blur-small);
     -webkit-backdrop-filter: var(--blur-small);
-    border-color: rgba(90, 200, 250, 0.5);
-    border-bottom-color: rgba(90, 200, 250, 0.5);
+    border-color: rgba(90, 200, 250, 0.5) !important;
+    border-bottom-color: rgba(90, 200, 250, 0.5) !important;
     box-shadow: 0 2px 8px rgba(90, 200, 250, 0.15), 
                 0 0 0 1px rgba(90, 200, 250, 0.2) inset;
     transform: none;
@@ -4165,7 +4178,7 @@ main {
 .stat-value {
     font-size: 24px;
     font-weight: 700;
-    color: var(--tg-theme-link-color, #5ac8fa);
+    color: #5ac8fa !important; /* Фиксированный цвет - не меняется при смене ориентации */
     margin-bottom: 6px;
     line-height: 1.2;
 }
