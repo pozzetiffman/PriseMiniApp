@@ -429,6 +429,7 @@ export async function openAdmin(dependencies) {
         loadSoldProducts,
         loadStats,
         loadPurchases,
+        loadClients,
         getAdminModal,
         setAdminModal,
         getReservationsToggle,
@@ -532,7 +533,8 @@ export async function openAdmin(dependencies) {
                     loadReservations,
                     loadSoldProducts,
                     loadStats,
-                    loadPurchases
+                    loadPurchases,
+                    loadClients
                 });
             };
         });
@@ -543,7 +545,8 @@ export async function openAdmin(dependencies) {
             loadReservations,
             loadSoldProducts,
             loadStats,
-            loadPurchases
+            loadPurchases,
+            loadClients
         });
         
         // Затем обновляем видимость вкладок асинхронно (не блокируя открытие админки)
@@ -559,13 +562,14 @@ export async function openAdmin(dependencies) {
                     tab.style.display !== 'none' && !tab.classList.contains('hidden')
                 );
                 if (firstVisibleTab) {
-                    switchAdminTab(firstVisibleTab.dataset.tab, {
-                        loadOrders,
-                        loadReservations,
-                        loadSoldProducts,
-                        loadStats,
-                        loadPurchases
-                    });
+                switchAdminTab(firstVisibleTab.dataset.tab, {
+                    loadOrders,
+                    loadReservations,
+                    loadSoldProducts,
+                    loadStats,
+                    loadPurchases,
+                    loadClients
+                });
                 }
             }
         }).catch(error => {
@@ -622,7 +626,8 @@ export function switchAdminTab(tabName, dependencies) {
         loadReservations,
         loadSoldProducts,
         loadStats,
-        loadPurchases
+        loadPurchases,
+        loadClients
     } = dependencies;
     
     const tabs = document.querySelectorAll('.admin-tab');
@@ -769,6 +774,13 @@ export function switchAdminTab(tabName, dependencies) {
     // Если переключились на вкладку "Покупки", загружаем данные
     if (tabName === 'purchases') {
         loadPurchases();
+    }
+    
+    // Если переключились на вкладку "Клиенты", загружаем данные
+    if (tabName === 'clients') {
+        if (loadClients) {
+            loadClients();
+        }
     }
 }
 // ========== END REFACTORING STEP 2.4 ==========

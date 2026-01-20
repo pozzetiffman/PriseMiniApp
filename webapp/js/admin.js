@@ -48,6 +48,9 @@ import { loadPurchases as loadPurchasesHandler } from './handlers/admin_purchase
 // ========== REFACTORING STEP 10.1: loadReservations ==========
 import { loadReservations as loadReservationsHandler } from './handlers/admin_reservations.js';
 // ========== END REFACTORING STEP 10.1 ==========
+// ========== REFACTORING STEP 11.1: loadClients ==========
+import { loadClients as loadClientsHandler } from './handlers/admin_clients.js';
+// ========== END REFACTORING STEP 11.1 ==========
 
 let adminModal = null;
 let reservationsToggle = null;
@@ -108,6 +111,15 @@ async function loadReservations() {
 }
 // ========== END REFACTORING STEP 10.1 ==========
 
+// ========== REFACTORING STEP 11.1: loadClients ==========
+// НОВЫЙ КОД (используется сейчас)
+// Функция импортирована из './handlers/admin_clients.js'
+async function loadClients() {
+    console.log('🔄 [REFACTORING STEP 11.1] loadClients called via wrapper');
+    return await loadClientsHandler();
+}
+// ========== END REFACTORING STEP 11.1 ==========
+
 // ========== REFACTORING STEP 2.4: switchAdminTab ==========
 // НОВЫЙ КОД (используется сейчас)
 // Функция импортирована из './handlers/admin_init.js' и обернута для передачи зависимостей
@@ -117,7 +129,8 @@ function switchAdminTab(tabName) {
         loadReservations,
         loadSoldProducts,
         loadStats,
-        loadPurchases
+        loadPurchases,
+        loadClients
     });
 }
 // ========== END REFACTORING STEP 2.4 ==========
@@ -373,6 +386,7 @@ export async function openAdmin() {
         loadSoldProducts,
         loadStats,
         loadPurchases,
+        loadClients,
         getAdminModal: () => adminModal,
         setAdminModal: (val) => { adminModal = val; },
         getReservationsToggle: () => reservationsToggle,

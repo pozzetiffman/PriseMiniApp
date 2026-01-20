@@ -146,6 +146,19 @@ function addLogToBuffer(level, args) {
         return String(arg);
     }).join(' ');
     
+    // Фильтруем известные ошибки, которые не критичны
+    // Telegram WebApp API выбрасывает ошибку для tg:// протокола, но переход работает
+    if (level === 'error') {
+        // Фильтруем ошибку про tg:// протокол
+        if (message.includes('Url protocol is not supported') && message.includes('tg://user?id=')) {
+            return; // Не логируем - переход работает
+        }
+        // Фильтруем ложную ошибку "Error opening Telegram chat" - это особенность браузера и tg:// протокола
+        if (message.includes('Error opening Telegram chat')) {
+            return; // Не логируем - это ложная ошибка, переход работает правильно
+        }
+    }
+    
     // Ограничиваем длину сообщения
     if (message.length > DEBUG_CONFIG.maxMessageLength) {
         message = message.substring(0, DEBUG_CONFIG.maxMessageLength) + '...[truncated]';

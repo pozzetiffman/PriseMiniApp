@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from .db import database, models
 from .db.schema_check import log_schema_status
-from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots, purchases, debug, favorites
+from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots, purchases, debug, favorites, clients
 
 # Проверяем целостность схемы БД перед созданием таблиц
 log_schema_status()
@@ -93,6 +93,7 @@ app.include_router(orders.router)
 app.include_router(bots.router)
 app.include_router(purchases.router)
 app.include_router(favorites.router)
+app.include_router(clients.router)
 app.include_router(debug.router)
 
 @app.get("/")
