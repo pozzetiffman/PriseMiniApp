@@ -646,6 +646,144 @@
                         <div id="profile-language" class="profile-value">—</div>
                     </div>
                 </div>
+                <div style="
+                    height: 1px;
+                    background: rgba(255, 255, 255, 0.2);
+                    margin: 24px 0;
+                    width: 100%;
+                "></div>
+                <div class="profile-section" style="margin-top: 24px;">
+                    <h3 class="profile-section-title" style="margin: 0 0 12px 0;">📋 Контактная информация</h3>
+                    <div class="profile-info">
+                        <div class="profile-field">
+                            <label>Фамилия:</label>
+                            <input type="text" id="profile-contact-last-name" class="profile-value-editable" placeholder="Фамилия" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                border-radius: 6px;
+                                background: rgba(255, 255, 255, 0.05);
+                                color: #ffffff;
+                                font-size: 14px;
+                                box-sizing: border-box;
+                            ">
+                        </div>
+                        <div class="profile-field">
+                            <label>Имя:</label>
+                            <input type="text" id="profile-contact-first-name" class="profile-value-editable" placeholder="Имя" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                border-radius: 6px;
+                                background: rgba(255, 255, 255, 0.05);
+                                color: #ffffff;
+                                font-size: 14px;
+                                box-sizing: border-box;
+                            ">
+                        </div>
+                        <div class="profile-field">
+                            <label>Отчество:</label>
+                            <input type="text" id="profile-contact-middle-name" class="profile-value-editable" placeholder="Отчество" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                border-radius: 6px;
+                                background: rgba(255, 255, 255, 0.05);
+                                color: #ffffff;
+                                font-size: 14px;
+                                box-sizing: border-box;
+                            ">
+                        </div>
+                        <div class="profile-field">
+                            <label>Телефон:</label>
+                            <div style="display: flex; gap: 8px;">
+                                <select id="profile-contact-phone-country-code" style="
+                                    flex: 0 0 80px;
+                                    padding: 8px;
+                                    border: 1px solid rgba(255, 255, 255, 0.2);
+                                    border-radius: 6px;
+                                    background: rgba(255, 255, 255, 0.05);
+                                    color: #ffffff;
+                                    font-size: 14px;
+                                ">
+                                    <option value="+7">+7</option>
+                                    <option value="+1">+1</option>
+                                    <option value="+44">+44</option>
+                                    <option value="+49">+49</option>
+                                    <option value="+33">+33</option>
+                                    <option value="+86">+86</option>
+                                    <option value="+81">+81</option>
+                                    <option value="+82">+82</option>
+                                    <option value="+91">+91</option>
+                                    <option value="+61">+61</option>
+                                </select>
+                                <input type="tel" id="profile-contact-phone-number" class="profile-value-editable" placeholder="Номер телефона" style="
+                                    flex: 1;
+                                    padding: 8px;
+                                    border: 1px solid rgba(255, 255, 255, 0.2);
+                                    border-radius: 6px;
+                                    background: rgba(255, 255, 255, 0.05);
+                                    color: #ffffff;
+                                    font-size: 14px;
+                                    box-sizing: border-box;
+                                ">
+                            </div>
+                        </div>
+                        <div class="profile-field">
+                            <label>Email:</label>
+                            <input type="email" id="profile-contact-email" class="profile-value-editable" placeholder="example@mail.com" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                border-radius: 6px;
+                                background: rgba(255, 255, 255, 0.05);
+                                color: #ffffff;
+                                font-size: 14px;
+                                box-sizing: border-box;
+                            ">
+                        </div>
+                        <div class="profile-field">
+                            <label>Город:</label>
+                            <input type="text" id="profile-contact-city" class="profile-value-editable" placeholder="Город" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                border-radius: 6px;
+                                background: rgba(255, 255, 255, 0.05);
+                                color: #ffffff;
+                                font-size: 14px;
+                                box-sizing: border-box;
+                            ">
+                        </div>
+                        <div class="profile-field">
+                            <label>Адрес:</label>
+                            <textarea id="profile-contact-address" class="profile-value-editable" placeholder="Адрес" rows="2" style="
+                                width: 100%;
+                                padding: 8px;
+                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                border-radius: 6px;
+                                background: rgba(255, 255, 255, 0.05);
+                                color: #ffffff;
+                                font-size: 14px;
+                                resize: vertical;
+                                box-sizing: border-box;
+                            "></textarea>
+                        </div>
+                    </div>
+                    <div style="margin-top: 16px; display: flex; justify-content: center;">
+                        <button id="profile-contact-save-btn" style="
+                            display: none;
+                            padding: 10px 20px;
+                            background: rgba(90, 200, 250, 0.2);
+                            color: #5ac8fa;
+                            border: 1px solid rgba(90, 200, 250, 0.4);
+                            border-radius: 6px;
+                            font-size: 14px;
+                            cursor: pointer;
+                            font-weight: 600;
+                        ">💾 Сохранить</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
