@@ -6,10 +6,11 @@
 // Статус: В процессе
 
 // Импорты зависимостей
-import { getCurrentShopSettings } from '../admin.js';
+import { getCurrentShopSettings, openAdmin } from '../admin.js';
 import { toggleHotOffer, trackShopVisit, updateProductHiddenAPI } from '../api.js';
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
 import { isMobileDevice } from '../utils/products_utils.js';
+import { showClientDetail } from './admin_clients.js';
 // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
 // НОВЫЙ КОД (используется сейчас)
 // ========== END REFACTORING STEP 2.1-2.2 ==========
@@ -811,7 +812,7 @@ function updateHiddenBadgeOnProductPage(isHidden, prod) {
 }
 
 // Показ страницы товара (вместо модального окна)
-export function showProductModal(prod, finalPrice, fullImages) {
+export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false, clientId = null) {
     if (!modalState) {
         console.error('❌ [PRODUCT PAGE] Modal state not initialized!');
         return;
@@ -831,16 +832,27 @@ export function showProductModal(prod, finalPrice, fullImages) {
     console.log(`[PRODUCT PAGE] Opening product page: productId=${prod.id}, productName="${prod.name}"`);
     
     // Определяем, с какой страницы мы пришли
-    // Проверяем, какая страница сейчас видна
-    if (favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex')) {
-        navigationHistory = 'favorites';
-        console.log('[PRODUCT PAGE] Coming from favorites page');
-    } else if (cartPage && (cartPage.style.display === 'block' || cartPage.style.display === 'flex')) {
-        navigationHistory = 'cart';
-        console.log('[PRODUCT PAGE] Coming from cart page');
+    // Если явно указано, что пришли из админки, сохраняем это (приоритет над другими проверками)
+    if (fromAdmin) {
+        navigationHistory = 'admin';
+        adminClientId = clientId || (typeof window !== 'undefined' ? window.adminClientId : null); // Сохраняем ID клиента для возврата
+        console.log('[PRODUCT PAGE] Coming from admin page, clientId:', adminClientId, 'fromAdmin:', fromAdmin);
     } else {
-        navigationHistory = 'main';
-        console.log('[PRODUCT PAGE] Coming from main page');
+        // Если НЕ из админки, ВСЕГДА сбрасываем историю навигации админки
+        // Это важно для случая, когда пользователь открывает товар с главной страницы после перехода из админки
+        if (favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex')) {
+            navigationHistory = 'favorites';
+            adminClientId = null; // Сбрасываем ID клиента, если не из админки
+            console.log('[PRODUCT PAGE] Coming from favorites page, resetting admin history');
+        } else if (cartPage && (cartPage.style.display === 'block' || cartPage.style.display === 'flex')) {
+            navigationHistory = 'cart';
+            adminClientId = null; // Сбрасываем ID клиента, если не из админки
+            console.log('[PRODUCT PAGE] Coming from cart page, resetting admin history');
+        } else {
+            navigationHistory = 'main';
+            adminClientId = null; // Сбрасываем ID клиента, если не из админки
+            console.log('[PRODUCT PAGE] Coming from main page, resetting admin history. fromAdmin:', fromAdmin);
+        }
     }
     
     // Сбрасываем ID загрузки при открытии нового товара
@@ -856,6 +868,8 @@ export function showProductModal(prod, finalPrice, fullImages) {
     enableHorizontalScrollBlock();
     
     // Скрываем все страницы и показываем страницу товара
+    const adminPage = document.getElementById('admin-page');
+    if (adminPage) adminPage.style.display = 'none';
     if (mainContent) mainContent.style.display = 'none';
     if (favoritesPage) favoritesPage.style.display = 'none';
     if (cartPage) cartPage.style.display = 'none';
@@ -1487,7 +1501,20 @@ export function showProductModal(prod, finalPrice, fullImages) {
 // ========== END REFACTORING STEP 3.1 ==========
 
 // История навигации - отслеживаем, откуда пришли на страницу товара
-let navigationHistory = null; // 'main' или 'favorites'
+let navigationHistory = null; // 'main', 'favorites', 'cart', или 'admin'
+let adminClientId = null; // ID клиента в админке, к которому нужно вернуться
+
+// Экспортируем переменные в window для доступа из других модулей
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'navigationHistory', {
+        get: () => navigationHistory,
+        set: (val) => { navigationHistory = val; }
+    });
+    Object.defineProperty(window, 'adminClientId', {
+        get: () => adminClientId,
+        set: (val) => { adminClientId = val; }
+    });
+}
 
 // Функция для закрытия страницы товара
 export function closeProductPage() {
@@ -1528,17 +1555,50 @@ export function closeProductPage() {
         if (cartPage) cartPage.style.display = 'none';
         
         // Показываем нужную страницу
-        if (navigationHistory === 'favorites' && favoritesPage) {
+        if (navigationHistory === 'admin') {
+            // Возвращаемся в админку
+            console.log('[PRODUCT PAGE] Returning to admin page, clientId:', adminClientId);
+            const savedClientId = adminClientId; // Сохраняем ID клиента перед сбросом
+            // НЕ сбрасываем navigationHistory и adminClientId здесь - они нужны для следующего открытия товара
+            // Сбрасываем их только если возвращаемся НЕ в админку
+            openAdmin().then(async () => {
+                // Если был открыт конкретный клиент, открываем его снова
+                // Добавляем небольшую задержку, чтобы админка успела полностью загрузиться
+                if (savedClientId) {
+                    console.log('[PRODUCT PAGE] Opening client detail:', savedClientId);
+                    setTimeout(async () => {
+                        try {
+                            await showClientDetail(savedClientId);
+                        } catch (err) {
+                            console.error('[PRODUCT PAGE] Error opening client detail:', err);
+                        }
+                    }, 100); // Небольшая задержка для загрузки админки
+                }
+            }).catch(err => {
+                console.error('[PRODUCT PAGE] Error opening admin:', err);
+                // Fallback: показываем главную страницу
+                if (mainContent) mainContent.style.display = 'block';
+                // Сбрасываем историю навигации только при ошибке
+                navigationHistory = null;
+                adminClientId = null;
+            });
+        } else if (navigationHistory === 'favorites' && favoritesPage) {
             favoritesPage.style.display = 'block';
+            // Сбрасываем историю навигации только если возвращаемся НЕ в админку
+            navigationHistory = null;
+            adminClientId = null;
         } else if (navigationHistory === 'cart' && cartPage) {
             cartPage.style.display = 'block';
+            // Сбрасываем историю навигации только если возвращаемся НЕ в админку
+            navigationHistory = null;
+            adminClientId = null;
         } else if (mainContent) {
             // По умолчанию возвращаемся на главную
             mainContent.style.display = 'block';
+            // Сбрасываем историю навигации только если возвращаемся НЕ в админку
+            navigationHistory = null;
+            adminClientId = null;
         }
-        
-        // Сбрасываем историю навигации
-        navigationHistory = null;
         
         // Сбрасываем состояние
         if (modalState) {

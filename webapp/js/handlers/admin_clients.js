@@ -1,9 +1,126 @@
 // Модуль обработчиков клиентов админки
+import { fetchProducts, getContext } from '../api.js';
 import { getClientDetailAPI, getClientsListAPI, updateClientContactAPI } from '../api/clients.js';
 import { cancelOrderAPI, completeOrderAPI } from '../api/orders.js';
 import { updatePurchaseStatusAPI } from '../api/purchases.js';
 import { cancelReservationAPI } from '../api/reservations.js';
+import { showProductModal } from '../products.js';
 import { showNotification } from '../utils/admin_utils.js';
+import { closeAdminPage } from './admin_init.js';
+
+/**
+ * Открывает страницу товара по product_id
+ */
+async function openProductById(productId, isDeleted = false) {
+    // Проверяем, является ли isDeleted строкой 'true' и преобразуем в boolean
+    const isDeletedBool = isDeleted === true || isDeleted === 'true' || String(isDeleted).toLowerCase() === 'true';
+    
+    if (!productId) {
+        console.warn('[CLIENT PRODUCT] Cannot open product - productId is missing');
+        return;
+    }
+    
+    if (isDeletedBool) {
+        console.warn('[CLIENT PRODUCT] Cannot open product - productId:', productId, 'isDeleted:', isDeletedBool);
+        showNotification('Товар был удален и недоступен для просмотра', 'error');
+        return;
+    }
+    
+    try {
+        // Получаем контекст для определения shop_owner_id и bot_id
+        const context = await getContext();
+        const shopOwnerId = context?.shop_owner_id || context?.user_id;
+        const botId = context?.bot_id || null;
+        
+        if (!shopOwnerId) {
+            console.error('[CLIENT PRODUCT] Failed to determine shop owner ID');
+            return;
+        }
+        
+        console.log('[CLIENT PRODUCT] Looking for product:', productId, 'shopOwnerId:', shopOwnerId, 'botId:', botId);
+        
+        // Получаем все товары и ищем нужный (передаем bot_id если есть)
+        const products = await fetchProducts(shopOwnerId, null, botId);
+        console.log('[CLIENT PRODUCT] Total products loaded:', products.length);
+        
+        let product = products.find(p => p.id === productId);
+        
+        // Если не нашли по id, ищем по sync_product_id (для синхронизированных товаров)
+        if (!product) {
+            product = products.find(p => p.sync_product_id === productId);
+            if (product) {
+                console.log('[CLIENT PRODUCT] Found by sync_product_id:', productId);
+            }
+        }
+        
+        if (!product) {
+            // Если товар не найден, но мы уже знаем, что он удален (isDeleted был true),
+            // то не показываем дополнительное уведомление - оно уже было показано выше
+            if (!isDeletedBool) {
+                console.warn('[CLIENT PRODUCT] Product not found in shop, productId:', productId);
+                showNotification('Товар не найден в магазине', 'error');
+            }
+            return;
+        }
+        
+        console.log('[CLIENT PRODUCT] Product found:', product.id, product.name);
+        
+        // Вычисляем финальную цену
+        const hasDiscount = product.discount > 0;
+        const finalPrice = hasDiscount ? Math.round(product.price * (1 - product.discount / 100)) : product.price;
+        
+        // Получаем изображения
+        let fullImages = [];
+        if (product.images_urls) {
+            try {
+                const imagesList = typeof product.images_urls === 'string' 
+                    ? JSON.parse(product.images_urls) 
+                    : product.images_urls;
+                if (Array.isArray(imagesList) && imagesList.length > 0) {
+                    const baseUrl = window.BASE_URL || '';
+                    fullImages = imagesList.map(img => 
+                        img.startsWith('http') ? img : (baseUrl + img)
+                    );
+                }
+            } catch (e) {
+                console.error('Error parsing images_urls:', e);
+            }
+        }
+        
+        // Проверяем, была ли открыта админка, и сохраняем это состояние
+        const adminPage = document.getElementById('admin-page');
+        const wasAdminOpen = adminPage && (adminPage.style.display === 'block' || adminPage.style.display === 'flex');
+        
+        // Определяем, пришли ли мы из админки
+        // Используем сохраненную историю навигации ТОЛЬКО если:
+        // 1. Админка открыта сейчас ИЛИ
+        // 2. Мы находимся в детальном виде клиента (currentClientId установлен)
+        // Это предотвращает использование старой истории навигации при открытии товара с главной страницы
+        let fromAdmin = wasAdminOpen;
+        let clientIdForReturn = currentClientId;
+        
+        // Проверяем сохраненную историю навигации только если админка открыта или мы в детальном виде клиента
+        if ((wasAdminOpen || currentClientId) && typeof window !== 'undefined' && window.navigationHistory === 'admin') {
+            fromAdmin = true;
+            // Используем сохраненный adminClientId, если currentClientId не установлен
+            if (!clientIdForReturn && typeof window !== 'undefined' && window.adminClientId) {
+                clientIdForReturn = window.adminClientId;
+            }
+        }
+        
+        // Закрываем админку перед открытием товара
+        if (wasAdminOpen) {
+            closeAdminPage();
+        }
+        
+        // Открываем страницу товара
+        // Передаем информацию о том, что мы пришли из админки и ID клиента для возврата
+        showProductModal(product, finalPrice, fullImages, fromAdmin, clientIdForReturn);
+    } catch (error) {
+        console.error('[CLIENT PRODUCT] Error opening product:', error, 'productId:', productId);
+        showNotification('Ошибка при открытии товара: ' + error.message, 'error');
+    }
+}
 
 /**
  * Форматирует время в читаемый формат
@@ -25,17 +142,127 @@ function formatTime(seconds) {
 }
 
 /**
+ * Создает выпадающую секцию (accordion)
+ * @param {string} id - Уникальный ID секции
+ * @param {string} title - Заголовок секции
+ * @param {string} content - HTML содержимое секции
+ * @param {boolean} defaultOpen - Открыта ли секция по умолчанию (по умолчанию false)
+ * @param {number} activeCount - Количество активных элементов для индикатора (по умолчанию 0)
+ * @returns {string} HTML код выпадающей секции
+ */
+function createCollapsibleSection(id, title, content, defaultOpen = false, activeCount = 0) {
+    const isOpen = defaultOpen ? 'true' : 'false';
+    const displayStyle = defaultOpen ? 'block' : 'none';
+    const arrowIcon = defaultOpen ? '▼' : '▶';
+    
+    // Индикатор активных элементов
+    const activeIndicator = activeCount > 0 ? `
+        <span class="active-indicator-badge" style="
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            background: #ff3b30;
+            color: #ffffff;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+            box-shadow: 0 0 8px rgba(255, 59, 48, 0.5);
+        ">${activeCount}</span>
+    ` : '';
+    
+    return `
+        <div class="collapsible-section" style="
+            background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+            backdrop-filter: blur(20px);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        ">
+            <div class="collapsible-header" data-section-id="${id}" style="
+                padding: 16px;
+                cursor: pointer;
+                user-select: none;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                transition: background-color 0.2s ease;
+            " onmouseover="this.style.backgroundColor='rgba(255, 255, 255, 0.05)'" onmouseout="this.style.backgroundColor='transparent'">
+                <h3 style="margin: 0; font-size: 18px; color: #ffffff !important; font-weight: 600; display: flex; align-items: center;">
+                    ${title}${activeIndicator}
+                </h3>
+                <span class="collapsible-arrow" style="
+                    font-size: 14px;
+                    color: #8e8e93;
+                    transition: transform 0.3s ease;
+                ">${arrowIcon}</span>
+            </div>
+            <div class="collapsible-content" id="section-${id}" style="
+                display: ${displayStyle};
+                padding: 20px 16px 16px 16px;
+            ">
+                ${content}
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Правильно парсит дату с сервера (предполагается UTC, если не указан часовой пояс)
+ * Конвертирует в локальное время пользователя
+ */
+function parseServerDate(dateString) {
+    if (!dateString) return null;
+    
+    // Если строка не содержит информации о часовом поясе (Z, +, -),
+    // предполагаем, что это UTC время и добавляем 'Z'
+    if (typeof dateString === 'string') {
+        // Проверяем, есть ли уже указание часового пояса
+        const hasTimezone = dateString.includes('Z') || 
+                            dateString.includes('+') || 
+                            (dateString.includes('-') && dateString.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}-\d{2}:\d{2}/));
+        
+        if (!hasTimezone) {
+            // Если это формат "YYYY-MM-DD HH:MM:SS" или "YYYY-MM-DDTHH:MM:SS", добавляем 'Z' для UTC
+            if (dateString.match(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/)) {
+                dateString = dateString.replace(' ', 'T') + 'Z';
+            }
+        }
+    }
+    
+    const date = new Date(dateString);
+    
+    // Проверяем, что дата валидна
+    if (isNaN(date.getTime())) {
+        console.warn('Invalid date string:', dateString);
+        return null;
+    }
+    
+    return date;
+}
+
+/**
  * Форматирует дату в читаемый формат
+ * Правильно обрабатывает время с сервера (UTC) и конвертирует в локальное время пользователя
  */
 function formatDate(dateString) {
     if (!dateString) return '—';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU', {
+    
+    const date = parseServerDate(dateString);
+    if (!date) return '—';
+    
+    // Используем toLocaleString для правильного отображения в локальном времени пользователя
+    return date.toLocaleString('ru-RU', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone // Используем локальный часовой пояс
     });
 }
 
@@ -340,6 +567,22 @@ export async function loadClients() {
                         <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Время в магазине</div>
                         <div style="font-size: 18px; font-weight: 600; color: #9C27B0 !important;">${formatTime(client.total_time_seconds)}</div>
                     </div>
+                    <div style="background: rgba(244, 67, 54, 0.1); padding: 8px; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">🛒 Заказы</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #F44336 !important;">${client.orders_count || 0}</div>
+                    </div>
+                    <div style="background: rgba(255, 193, 7, 0.1); padding: 8px; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">🔒 Резервации</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #FFC107 !important;">${client.reservations_count || 0}</div>
+                    </div>
+                    <div style="background: rgba(255, 87, 34, 0.1); padding: 8px; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">💰 Продажи</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #FF5722 !important;">${client.purchases_count || 0}</div>
+                    </div>
+                    <div style="background: rgba(233, 30, 99, 0.1); padding: 8px; border-radius: 8px;">
+                        <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">❤️ Избранное</div>
+                        <div style="font-size: 18px; font-weight: 600; color: #E91E63 !important;">${client.favorites_count || 0}</div>
+                    </div>
                 </div>
             `;
             
@@ -377,10 +620,15 @@ export async function loadClients() {
     }
 }
 
+// Сохраняем ID текущего открытого клиента для возврата после просмотра товара
+let currentClientId = null;
+
 /**
  * Показать детальную информацию о клиенте
  */
-async function showClientDetail(clientId) {
+export async function showClientDetail(clientId) {
+    // Сохраняем ID текущего клиента
+    currentClientId = clientId;
     const clientsList = document.getElementById('clients-list');
     if (!clientsList) return;
     
@@ -428,37 +676,28 @@ async function showClientDetail(clientId) {
                 cursor: pointer;
             ">💬 Написать в Telegram</a>`;
         
-        // Контактная информация клиента (дублируем с карточки)
+        // Контактная информация клиента (выпадающая секция)
         const fullName = [clientDetail.last_name, clientDetail.first_name, clientDetail.middle_name].filter(Boolean).join(' ').trim();
         const phone = clientDetail.phone_number ? `${clientDetail.phone_country_code || ''}${clientDetail.phone_number}`.trim() : null;
         
-        html += `
-            <div style="
-                background: var(--bg-glass, rgba(28, 28, 30, 0.8));
-                backdrop-filter: blur(20px);
-                border-radius: 12px;
-                padding: 12px;
-                margin-bottom: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            ">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <h3 style="margin: 0; font-size: 14px; color: #ffffff !important;">📋 Контактная информация</h3>
-                    <button class="edit-client-contact-detail-btn" data-client-id="${clientDetail.user_id}" style="
-                        padding: 4px 8px;
-                        background: rgba(90, 200, 250, 0.2);
-                        color: #5ac8fa;
-                        border: 1px solid rgba(90, 200, 250, 0.4);
-                        border-radius: 6px;
-                        font-size: 10px;
-                        cursor: pointer;
-                        font-weight: 600;
-                    ">✏️</button>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
+        let contactContent = `
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+                <button class="edit-client-contact-detail-btn" data-client-id="${clientDetail.user_id}" style="
+                    padding: 4px 8px;
+                    background: rgba(90, 200, 250, 0.2);
+                    color: #5ac8fa;
+                    border: 1px solid rgba(90, 200, 250, 0.4);
+                    border-radius: 6px;
+                    font-size: 10px;
+                    cursor: pointer;
+                    font-weight: 600;
+                ">✏️ Редактировать</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
         `;
         
         if (fullName) {
-            html += `
+            contactContent += `
                 <div class="copyable-field" data-copy-text="${fullName.replace(/"/g, '&quot;')}" style="
                     padding: 8px;
                     background: rgba(90, 200, 250, 0.1);
@@ -474,7 +713,7 @@ async function showClientDetail(clientId) {
         }
         
         if (phone) {
-            html += `
+            contactContent += `
                 <div class="copyable-field" data-copy-text="${phone.replace(/"/g, '&quot;')}" style="
                     padding: 8px;
                     background: rgba(90, 200, 250, 0.1);
@@ -490,7 +729,7 @@ async function showClientDetail(clientId) {
         }
         
         if (clientDetail.email) {
-            html += `
+            contactContent += `
                 <div class="copyable-field" data-copy-text="${clientDetail.email.replace(/"/g, '&quot;')}" style="
                     padding: 8px;
                     background: rgba(90, 200, 250, 0.1);
@@ -506,7 +745,7 @@ async function showClientDetail(clientId) {
         }
         
         if (clientDetail.city) {
-            html += `
+            contactContent += `
                 <div class="copyable-field" data-copy-text="${clientDetail.city.replace(/"/g, '&quot;')}" style="
                     padding: 8px;
                     background: rgba(90, 200, 250, 0.1);
@@ -522,7 +761,7 @@ async function showClientDetail(clientId) {
         }
         
         if (clientDetail.address) {
-            html += `
+            contactContent += `
                 <div class="copyable-field" data-copy-text="${clientDetail.address.replace(/"/g, '&quot;')}" style="
                     padding: 8px;
                     background: rgba(90, 200, 250, 0.1);
@@ -538,7 +777,7 @@ async function showClientDetail(clientId) {
         }
         
         if (!fullName && !phone && !clientDetail.email && !clientDetail.city && !clientDetail.address) {
-            html += `
+            contactContent += `
                 <div style="
                     padding: 8px;
                     text-align: center;
@@ -548,98 +787,156 @@ async function showClientDetail(clientId) {
             `;
         }
         
-        html += `
+        contactContent += `</div>`;
+        html += createCollapsibleSection('contact', `📋 Контактная информация`, contactContent);
+        
+        // Статистика клиента (объединенная секция: статистика + активность)
+        const statsContent = `
+            <div style="text-align: right; margin-bottom: 12px;">
+                ${usernameDisplay}
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                <div style="background: rgba(76, 175, 80, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Всего посещений</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #4CAF50 !important;">${clientDetail.stats.total_visits}</div>
+                </div>
+                <div style="background: rgba(33, 150, 243, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Просмотры товаров</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #2196F3 !important;">${clientDetail.stats.product_views}</div>
+                </div>
+                <div style="background: rgba(255, 152, 0, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Посещения магазина</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #FF9800 !important;">${clientDetail.stats.shop_visits}</div>
+                </div>
+                <div style="background: rgba(156, 39, 176, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Время в магазине</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #9C27B0 !important;">${formatTime(clientDetail.stats.total_time_seconds)}</div>
+                </div>
+                <div style="background: rgba(244, 67, 54, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">🛒 Заказы</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #F44336 !important;">${clientDetail.orders_count || 0}</div>
+                </div>
+                <div style="background: rgba(255, 193, 7, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">🔒 Резервации</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #FFC107 !important;">${clientDetail.reservations_count || 0}</div>
+                </div>
+                <div style="background: rgba(255, 87, 34, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">💰 Продажи</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #FF5722 !important;">${clientDetail.purchases_count || 0}</div>
+                </div>
+                <div style="background: rgba(233, 30, 99, 0.1); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">❤️ Избранное</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #E91E63 !important;">${clientDetail.favorites_count || 0}</div>
                 </div>
             </div>
-        `;
-        
-        // Статистика клиента
-        html += `
-            <div style="
-                background: var(--bg-glass, rgba(28, 28, 30, 0.8));
-                backdrop-filter: blur(20px);
-                border-radius: 12px;
-                padding: 16px;
-                margin-bottom: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            ">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h3 style="margin: 0; font-size: 18px; color: #ffffff !important;">📊 Статистика клиента</h3>
-                    <div style="text-align: right;">
-                        ${usernameDisplay}
-                    </div>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-                    <div style="background: rgba(76, 175, 80, 0.1); padding: 12px; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Всего посещений</div>
-                        <div style="font-size: 20px; font-weight: 600; color: #4CAF50 !important;">${clientDetail.stats.total_visits}</div>
-                    </div>
-                    <div style="background: rgba(33, 150, 243, 0.1); padding: 12px; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Просмотры товаров</div>
-                        <div style="font-size: 20px; font-weight: 600; color: #2196F3 !important;">${clientDetail.stats.product_views}</div>
-                    </div>
-                    <div style="background: rgba(255, 152, 0, 0.1); padding: 12px; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Посещения магазина</div>
-                        <div style="font-size: 20px; font-weight: 600; color: #FF9800 !important;">${clientDetail.stats.shop_visits}</div>
-                    </div>
-                    <div style="background: rgba(156, 39, 176, 0.1); padding: 12px; border-radius: 8px;">
-                        <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Время в магазине</div>
-                        <div style="font-size: 20px; font-weight: 600; color: #9C27B0 !important;">${formatTime(clientDetail.stats.total_time_seconds)}</div>
-                    </div>
-                </div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
-                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Первый визит</div>
-                    <div style="font-size: 14px; color: #ffffff !important;">${formatDate(clientDetail.stats.first_visit)}</div>
-                </div>
-                <div style="margin-top: 8px;">
-                    <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Последний визит</div>
-                    <div style="font-size: 14px; color: #ffffff !important;">${formatDate(clientDetail.stats.last_visit)}</div>
-                </div>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Первый визит</div>
+                <div style="font-size: 14px; color: #ffffff !important;">${formatDate(clientDetail.stats.first_visit)}</div>
+            </div>
+            <div style="margin-top: 8px;">
+                <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">Последний визит</div>
+                <div style="font-size: 14px; color: #ffffff !important;">${formatDate(clientDetail.stats.last_visit)}</div>
             </div>
         `;
+        html += createCollapsibleSection('stats', `📊 Статистика`, statsContent, true);
         
-        // Резервации - Активные и История
-        html += `
-            <div style="
-                background: var(--bg-glass, rgba(28, 28, 30, 0.8));
-                backdrop-filter: blur(20px);
-                border-radius: 12px;
-                padding: 16px;
-                margin-bottom: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            ">
-                <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #ffffff !important;">
-                    🔒 Резервации (${clientDetail.reservations_count})
-                </h3>
+        // Самые популярные товары (выпадающая секция)
+        if (clientDetail.most_viewed_products && clientDetail.most_viewed_products.length > 0) {
+            let mostViewedContent = `<div style="display: flex; flex-direction: column; gap: 12px;">`;
+            
+            clientDetail.most_viewed_products.forEach((product, index) => {
+                const imageUrl = product.image_url || '';
+                const priceText = product.price ? `${product.price.toFixed(2)} ₽` : 'Цена по запросу';
                 
-                <!-- Активные резервации -->
-                <div style="margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #4CAF50 !important;">Активные (${clientDetail.active_reservations?.length || 0})</h4>
-        `;
+                const canOpenProduct = product.product_id && !product.is_deleted;
+                mostViewedContent += `
+                    <div class="client-product-card" data-product-id="${product.product_id || ''}" data-is-deleted="${product.is_deleted || false}" style="
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                        padding: 12px;
+                        background: rgba(255, 255, 255, 0.05);
+                        border-radius: 8px;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        cursor: ${canOpenProduct ? 'pointer' : 'default'};
+                        transition: all 0.2s ease;
+                    " onmouseover="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.1)'" : ''}" onmouseout="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.05)'" : ''}">
+                        <div style="
+                            font-size: 18px;
+                            font-weight: 600;
+                            color: #FFC107 !important;
+                            min-width: 24px;
+                            text-align: center;
+                        ">${index + 1}</div>
+                        ${imageUrl ? `
+                            <img src="${imageUrl}" alt="${product.product_name}" style="
+                                width: 50px;
+                                height: 50px;
+                                object-fit: cover;
+                                border-radius: 8px;
+                            " onerror="this.style.display='none'">
+                        ` : ''}
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="
+                                font-size: 14px;
+                                font-weight: 600;
+                                color: #ffffff !important;
+                                margin-bottom: 4px;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                                white-space: nowrap;
+                            ">${product.product_name}</div>
+                            <div style="
+                                font-size: 12px;
+                                color: #8e8e93 !important;
+                            ">Просмотров: ${product.view_count}</div>
+                            <div style="
+                                font-size: 12px;
+                                color: #4CAF50 !important;
+                                font-weight: 500;
+                            ">${priceText}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            mostViewedContent += `</div>`;
+            html += createCollapsibleSection('most-viewed', `⭐ Самые популярные товары (${clientDetail.most_viewed_products.length})`, mostViewedContent);
+        }
+        
+        // Резервации - Активные и История (выпадающая секция)
+        let reservationsContent = '';
+        
+        // Активные резервации
+        reservationsContent += `<div style="margin-bottom: 16px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #4CAF50 !important;">Активные (${clientDetail.active_reservations?.length || 0})</h4>`;
         
         if (!clientDetail.active_reservations || clientDetail.active_reservations.length === 0) {
-            html += '<p style="color: #8e8e93 !important; font-size: 14px;">Активных резерваций нет</p>';
+            reservationsContent += '<p style="color: #8e8e93 !important; font-size: 14px;">Активных резерваций нет</p>';
         } else {
             clientDetail.active_reservations.forEach(res => {
-                const reservedUntil = res.reserved_until ? new Date(res.reserved_until) : null;
+                const reservedUntil = res.reserved_until ? parseServerDate(res.reserved_until) : null;
                 const now = new Date();
                 const timeLeft = reservedUntil ? Math.max(0, Math.floor((reservedUntil - now) / 1000 / 60)) : 0;
                 const hoursLeft = Math.floor(timeLeft / 60);
                 const minutesLeft = timeLeft % 60;
                 const timeLeftText = hoursLeft > 0 ? `${hoursLeft} ч ${minutesLeft} мин` : `${minutesLeft} мин`;
+                const canOpenProduct = res.product_id && !res.is_deleted;
                 
-                html += `
-                    <div style="
+                reservationsContent += `
+                    <div class="client-product-card" data-product-id="${res.product_id || ''}" data-is-deleted="${res.is_deleted || false}" style="
                         background: rgba(76, 175, 80, 0.1);
                         padding: 12px;
                         border-radius: 8px;
                         margin-bottom: 8px;
                         border: 1px solid rgba(76, 175, 80, 0.3);
-                    ">
+                        cursor: ${canOpenProduct ? 'pointer' : 'default'};
+                        transition: all 0.2s ease;
+                    " onmouseover="${canOpenProduct ? "this.style.background='rgba(76, 175, 80, 0.15)'" : ''}" onmouseout="${canOpenProduct ? "this.style.background='rgba(76, 175, 80, 0.1)'" : ''}">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
                             <div style="flex: 1;">
                                 <div style="font-size: 14px; font-weight: 600; color: #ffffff !important; margin-bottom: 4px;">
-                                    ${res.product_name}
+                                    ${res.product_name}${res.is_deleted ? ' <span style="color: #ff3b30; font-size: 11px;">(удален)</span>' : ''}
                                 </div>
                                 <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">
                                     ${formatDate(res.created_at)}
@@ -664,21 +961,19 @@ async function showClientDetail(clientId) {
             });
         }
         
-        html += '</div>';
+        reservationsContent += '</div>';
         
         // История резерваций
-        html += `
-                <div>
-                    <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #8e8e93 !important;">📜 История (${clientDetail.history_reservations?.length || 0})</h4>
-        `;
+        reservationsContent += `<div>
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #8e8e93 !important;">📜 История (${clientDetail.history_reservations?.length || 0})</h4>`;
         
         if (!clientDetail.history_reservations || clientDetail.history_reservations.length === 0) {
-            html += '<p style="color: #8e8e93 !important; font-size: 14px;">Истории резерваций нет</p>';
+            reservationsContent += '<p style="color: #8e8e93 !important; font-size: 14px;">Истории резерваций нет</p>';
         } else {
             const hasMore = clientDetail.history_reservations.length > 3;
             const maxHeight = hasMore ? 300 : 'auto';
             
-            html += `<div class="client-items-scroll" style="
+            reservationsContent += `<div class="client-items-scroll" style="
                 max-height: ${maxHeight}px;
                 overflow-y: ${hasMore ? 'auto' : 'visible'};
                 overflow-x: hidden;
@@ -686,16 +981,19 @@ async function showClientDetail(clientId) {
             ">`;
             
             clientDetail.history_reservations.forEach(res => {
-                html += `
-                    <div style="
+                const canOpenProduct = res.product_id && !res.is_deleted;
+                reservationsContent += `
+                    <div class="client-product-card" data-product-id="${res.product_id || ''}" data-is-deleted="${res.is_deleted || false}" style="
                         background: rgba(255, 255, 255, 0.05);
                         padding: 12px;
                         border-radius: 8px;
                         margin-bottom: 8px;
                         border: 1px solid rgba(255, 255, 255, 0.1);
-                    ">
+                        cursor: ${canOpenProduct ? 'pointer' : 'default'};
+                        transition: all 0.2s ease;
+                    " onmouseover="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.1)'" : ''}" onmouseout="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.05)'" : ''}">
                         <div style="font-size: 14px; font-weight: 600; color: #ffffff !important; margin-bottom: 4px;">
-                            ${res.product_name}
+                            ${res.product_name}${res.is_deleted ? ' <span style="color: #ff3b30; font-size: 11px;">(удален)</span>' : ''}
                         </div>
                         <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">
                             ${formatDate(res.created_at)}
@@ -707,50 +1005,43 @@ async function showClientDetail(clientId) {
                 `;
             });
             
-            html += '</div>';
+            reservationsContent += '</div>';
             
             if (hasMore) {
-                html += `<p style="color: #8e8e93 !important; font-size: 12px; margin-top: 8px; text-align: center;">
+                reservationsContent += `<p style="color: #8e8e93 !important; font-size: 12px; margin-top: 8px; text-align: center;">
                     Всего ${clientDetail.history_reservations.length} резерваций в истории
                 </p>`;
             }
         }
         
-        html += '</div></div>';
+        reservationsContent += '</div>';
+        const activeReservationsCount = clientDetail.active_reservations?.length || 0;
+        html += createCollapsibleSection('reservations', `🔒 Резервации (${clientDetail.reservations_count})`, reservationsContent, false, activeReservationsCount);
         
-        // Заказы - Активные и История
-        html += `
-            <div style="
-                background: var(--bg-glass, rgba(28, 28, 30, 0.8));
-                backdrop-filter: blur(20px);
-                border-radius: 12px;
-                padding: 16px;
-                margin-bottom: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            ">
-                <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #ffffff !important;">
-                    🛒 Заказы (${clientDetail.orders_count})
-                </h3>
-                
-                <!-- Активные заказы -->
-                <div style="margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #FF9800 !important;">Активные (${clientDetail.active_orders?.length || 0})</h4>
-        `;
+        // Заказы - Активные и История (выпадающая секция)
+        let ordersContent = '';
+        
+        // Активные заказы
+        ordersContent += `<div style="margin-bottom: 16px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #FF9800 !important;">Активные (${clientDetail.active_orders?.length || 0})</h4>`;
         
         if (!clientDetail.active_orders || clientDetail.active_orders.length === 0) {
-            html += '<p style="color: #8e8e93 !important; font-size: 14px;">Активных заказов нет</p>';
+            ordersContent += '<p style="color: #8e8e93 !important; font-size: 14px;">Активных заказов нет</p>';
         } else {
             clientDetail.active_orders.forEach(order => {
-                html += `
-                    <div style="
+                const canOpenProduct = order.product_id && !order.is_deleted;
+                ordersContent += `
+                    <div class="client-product-card" data-product-id="${order.product_id || ''}" data-is-deleted="${order.is_deleted || false}" style="
                         background: rgba(255, 152, 0, 0.1);
                         padding: 12px;
                         border-radius: 8px;
                         margin-bottom: 8px;
                         border: 1px solid rgba(255, 152, 0, 0.3);
-                    ">
+                        cursor: ${canOpenProduct ? 'pointer' : 'default'};
+                        transition: all 0.2s ease;
+                    " onmouseover="${canOpenProduct ? "this.style.background='rgba(255, 152, 0, 0.15)'" : ''}" onmouseout="${canOpenProduct ? "this.style.background='rgba(255, 152, 0, 0.1)'" : ''}">
                         <div style="font-size: 14px; font-weight: 600; color: #ffffff !important; margin-bottom: 4px;">
-                            ${order.product_name} (${order.quantity} шт.)
+                            ${order.product_name}${order.is_deleted ? ' <span style="color: #ff3b30; font-size: 11px;">(удален)</span>' : ''} (${order.quantity} шт.)
                         </div>
                         <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">
                             ${formatDate(order.created_at)}
@@ -790,21 +1081,19 @@ async function showClientDetail(clientId) {
             });
         }
         
-        html += '</div>';
+        ordersContent += '</div>';
         
         // История заказов
-        html += `
-                <div>
-                    <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #8e8e93 !important;">📜 История (${clientDetail.history_orders?.length || 0})</h4>
-        `;
+        ordersContent += `<div>
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #8e8e93 !important;">📜 История (${clientDetail.history_orders?.length || 0})</h4>`;
         
         if (!clientDetail.history_orders || clientDetail.history_orders.length === 0) {
-            html += '<p style="color: #8e8e93 !important; font-size: 14px;">Истории заказов нет</p>';
+            ordersContent += '<p style="color: #8e8e93 !important; font-size: 14px;">Истории заказов нет</p>';
         } else {
             const hasMore = clientDetail.history_orders.length > 3;
             const maxHeight = hasMore ? 360 : 'auto';
             
-            html += `<div class="client-items-scroll" style="
+            ordersContent += `<div class="client-items-scroll" style="
                 max-height: ${maxHeight}px;
                 overflow-y: ${hasMore ? 'auto' : 'visible'};
                 overflow-x: hidden;
@@ -814,16 +1103,19 @@ async function showClientDetail(clientId) {
             clientDetail.history_orders.forEach(order => {
                 const status = order.is_completed ? 'Выполнен' : 'Отменен';
                 const statusColor = order.is_completed ? '#4CAF50' : '#ff3b30';
-                html += `
-                    <div style="
+                const canOpenProduct = order.product_id && !order.is_deleted;
+                ordersContent += `
+                    <div class="client-product-card" data-product-id="${order.product_id || ''}" data-is-deleted="${order.is_deleted || false}" style="
                         background: rgba(255, 255, 255, 0.05);
                         padding: 12px;
                         border-radius: 8px;
                         margin-bottom: 8px;
                         border: 1px solid rgba(255, 255, 255, 0.1);
-                    ">
+                        cursor: ${canOpenProduct ? 'pointer' : 'default'};
+                        transition: all 0.2s ease;
+                    " onmouseover="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.1)'" : ''}" onmouseout="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.05)'" : ''}">
                         <div style="font-size: 14px; font-weight: 600; color: #ffffff !important; margin-bottom: 4px;">
-                            ${order.product_name} (${order.quantity} шт.)
+                            ${order.product_name}${order.is_deleted ? ' <span style="color: #ff3b30; font-size: 11px;">(удален)</span>' : ''} (${order.quantity} шт.)
                         </div>
                         <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">
                             ${formatDate(order.created_at)}
@@ -840,50 +1132,43 @@ async function showClientDetail(clientId) {
                 `;
             });
             
-            html += '</div>';
+            ordersContent += '</div>';
             
             if (hasMore) {
-                html += `<p style="color: #8e8e93 !important; font-size: 12px; margin-top: 8px; text-align: center;">
+                ordersContent += `<p style="color: #8e8e93 !important; font-size: 12px; margin-top: 8px; text-align: center;">
                     Всего ${clientDetail.history_orders.length} заказов в истории
                 </p>`;
             }
         }
         
-        html += '</div></div>';
+        ordersContent += '</div>';
+        const activeOrdersCount = clientDetail.active_orders?.length || 0;
+        html += createCollapsibleSection('orders', `🛒 Заказы (${clientDetail.orders_count})`, ordersContent, false, activeOrdersCount);
         
-        // Продажи (purchases) - Активные и История
-        html += `
-            <div style="
-                background: var(--bg-glass, rgba(28, 28, 30, 0.8));
-                backdrop-filter: blur(20px);
-                border-radius: 12px;
-                padding: 16px;
-                margin-bottom: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            ">
-                <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #ffffff !important;">
-                    💰 Продажи (${clientDetail.purchases_count})
-                </h3>
-                
-                <!-- Активные продажи -->
-                <div style="margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #FF9800 !important;">Активные (${clientDetail.active_purchases?.length || 0})</h4>
-        `;
+        // Продажи (purchases) - Активные и История (выпадающая секция)
+        let purchasesContent = '';
+        
+        // Активные продажи
+        purchasesContent += `<div style="margin-bottom: 16px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #FF9800 !important;">Активные (${clientDetail.active_purchases?.length || 0})</h4>`;
         
         if (!clientDetail.active_purchases || clientDetail.active_purchases.length === 0) {
-            html += '<p style="color: #8e8e93 !important; font-size: 14px;">Активных продаж нет</p>';
+            purchasesContent += '<p style="color: #8e8e93 !important; font-size: 14px;">Активных продаж нет</p>';
         } else {
             clientDetail.active_purchases.forEach(purchase => {
-                html += `
-                    <div style="
+                const canOpenProduct = purchase.product_id && !purchase.is_deleted;
+                purchasesContent += `
+                    <div class="client-product-card" data-product-id="${purchase.product_id || ''}" data-is-deleted="${purchase.is_deleted || false}" style="
                         background: rgba(255, 152, 0, 0.1);
                         padding: 12px;
                         border-radius: 8px;
                         margin-bottom: 8px;
                         border: 1px solid rgba(255, 152, 0, 0.3);
-                    ">
+                        cursor: ${canOpenProduct ? 'pointer' : 'default'};
+                        transition: all 0.2s ease;
+                    " onmouseover="${canOpenProduct ? "this.style.background='rgba(255, 152, 0, 0.15)'" : ''}" onmouseout="${canOpenProduct ? "this.style.background='rgba(255, 152, 0, 0.1)'" : ''}">
                         <div style="font-size: 14px; font-weight: 600; color: #ffffff !important; margin-bottom: 4px;">
-                            ${purchase.product_name}
+                            ${purchase.product_name}${purchase.is_deleted ? ' <span style="color: #ff3b30; font-size: 11px;">(удален)</span>' : ''}
                         </div>
                         <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">
                             ${formatDate(purchase.created_at)}
@@ -928,21 +1213,19 @@ async function showClientDetail(clientId) {
             });
         }
         
-        html += '</div>';
+        purchasesContent += '</div>';
         
         // История продаж
-        html += `
-                <div>
-                    <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #8e8e93 !important;">📜 История (${clientDetail.history_purchases?.length || 0})</h4>
-        `;
+        purchasesContent += `<div>
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #8e8e93 !important;">📜 История (${clientDetail.history_purchases?.length || 0})</h4>`;
         
         if (!clientDetail.history_purchases || clientDetail.history_purchases.length === 0) {
-            html += '<p style="color: #8e8e93 !important; font-size: 14px;">Истории продаж нет</p>';
+            purchasesContent += '<p style="color: #8e8e93 !important; font-size: 14px;">Истории продаж нет</p>';
         } else {
             const hasMore = clientDetail.history_purchases.length > 3;
             const maxHeight = hasMore ? 420 : 'auto';
             
-            html += `<div class="client-items-scroll" style="
+            purchasesContent += `<div class="client-items-scroll" style="
                 max-height: ${maxHeight}px;
                 overflow-y: ${hasMore ? 'auto' : 'visible'};
                 overflow-x: hidden;
@@ -952,16 +1235,19 @@ async function showClientDetail(clientId) {
             clientDetail.history_purchases.forEach(purchase => {
                 const status = purchase.is_completed ? 'Выполнена' : 'Отменена';
                 const statusColor = purchase.is_completed ? '#4CAF50' : '#ff3b30';
-                html += `
-                    <div style="
+                const canOpenProduct = purchase.product_id && !purchase.is_deleted;
+                purchasesContent += `
+                    <div class="client-product-card" data-product-id="${purchase.product_id || ''}" data-is-deleted="${purchase.is_deleted || false}" style="
                         background: rgba(255, 255, 255, 0.05);
                         padding: 12px;
                         border-radius: 8px;
                         margin-bottom: 8px;
                         border: 1px solid rgba(255, 255, 255, 0.1);
-                    ">
+                        cursor: ${canOpenProduct ? 'pointer' : 'default'};
+                        transition: all 0.2s ease;
+                    " onmouseover="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.1)'" : ''}" onmouseout="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.05)'" : ''}">
                         <div style="font-size: 14px; font-weight: 600; color: #ffffff !important; margin-bottom: 4px;">
-                            ${purchase.product_name}
+                            ${purchase.product_name}${purchase.is_deleted ? ' <span style="color: #ff3b30; font-size: 11px;">(удален)</span>' : ''}
                         </div>
                         <div style="font-size: 12px; color: #8e8e93 !important; margin-bottom: 4px;">
                             ${formatDate(purchase.created_at)}
@@ -983,40 +1269,29 @@ async function showClientDetail(clientId) {
                 `;
             });
             
-            html += '</div>';
+            purchasesContent += '</div>';
             
             if (hasMore) {
-                html += `<p style="color: #8e8e93 !important; font-size: 12px; margin-top: 8px; text-align: center;">
+                purchasesContent += `<p style="color: #8e8e93 !important; font-size: 12px; margin-top: 8px; text-align: center;">
                     Всего ${clientDetail.history_purchases.length} продаж в истории
                 </p>`;
             }
         }
         
-        html += '</div></div>';
+        purchasesContent += '</div>';
+        const activePurchasesCount = clientDetail.active_purchases?.length || 0;
+        html += createCollapsibleSection('purchases', `💰 Продажи (${clientDetail.purchases_count})`, purchasesContent, false, activePurchasesCount);
         
-        // Избранное
-        html += `
-            <div style="
-                background: var(--bg-glass, rgba(28, 28, 30, 0.8));
-                backdrop-filter: blur(20px);
-                border-radius: 12px;
-                padding: 16px;
-                margin-bottom: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            ">
-                <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #ffffff !important;">
-                    ❤️ Избранное (${clientDetail.favorites_count})
-                </h3>
-        `;
+        // Избранное (выпадающая секция)
+        let favoritesContent = '';
         
         if (clientDetail.favorites.length === 0) {
-            html += '<p style="color: #8e8e93 !important; font-size: 14px;">Избранного нет</p>';
+            favoritesContent = '<p style="color: #8e8e93 !important; font-size: 14px;">Избранного нет</p>';
         } else {
-            // Показываем все элементы, но ограничиваем высоту контейнера (примерно 3 элемента)
             const hasMore = clientDetail.favorites.length > 3;
-            const maxHeight = hasMore ? 270 : 'auto'; // Примерно 3 элемента по 90px
+            const maxHeight = hasMore ? 270 : 'auto';
             
-            html += `<div class="client-items-scroll" style="
+            favoritesContent += `<div class="client-items-scroll" style="
                 max-height: ${maxHeight}px;
                 overflow-y: ${hasMore ? 'auto' : 'visible'};
                 overflow-x: hidden;
@@ -1024,16 +1299,19 @@ async function showClientDetail(clientId) {
             ">`;
             
             clientDetail.favorites.forEach(fav => {
-                html += `
-                    <div style="
+                const canOpenProduct = fav.product_id && !fav.is_deleted;
+                favoritesContent += `
+                    <div class="client-product-card" data-product-id="${fav.product_id || ''}" data-is-deleted="${fav.is_deleted || false}" style="
                         background: rgba(255, 255, 255, 0.05);
                         padding: 12px;
                         border-radius: 8px;
                         margin-bottom: 8px;
                         border: 1px solid rgba(255, 255, 255, 0.1);
-                    ">
+                        cursor: ${canOpenProduct ? 'pointer' : 'default'};
+                        transition: all 0.2s ease;
+                    " onmouseover="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.1)'" : ''}" onmouseout="${canOpenProduct ? "this.style.background='rgba(255, 255, 255, 0.05)'" : ''}">
                         <div style="font-size: 14px; font-weight: 600; color: #ffffff !important; margin-bottom: 4px;">
-                            ${fav.product_name}
+                            ${fav.product_name}${fav.is_deleted ? ' <span style="color: #ff3b30; font-size: 11px;">(удален)</span>' : ''}
                         </div>
                         <div style="font-size: 12px; color: #8e8e93 !important;">
                             Добавлено: ${formatDate(fav.created_at)}
@@ -1042,18 +1320,62 @@ async function showClientDetail(clientId) {
                 `;
             });
             
-            html += '</div>';
+            favoritesContent += '</div>';
             
             if (hasMore) {
-                html += `<p style="color: #8e8e93 !important; font-size: 12px; margin-top: 8px; text-align: center;">
+                favoritesContent += `<p style="color: #8e8e93 !important; font-size: 12px; margin-top: 8px; text-align: center;">
                     Всего ${clientDetail.favorites.length} товаров в избранном (прокрутите список для просмотра всех)
                 </p>`;
             }
         }
         
-        html += '</div>';
+        html += createCollapsibleSection('favorites', `❤️ Избранное (${clientDetail.favorites_count})`, favoritesContent);
         
         clientsList.innerHTML = html;
+        
+        // Добавляем обработчик для кликов на карточки товаров (делегирование событий)
+        clientsList.addEventListener('click', async (e) => {
+            // Ищем ближайшую карточку товара
+            const productCard = e.target.closest('.client-product-card');
+            if (!productCard) return;
+            
+            // Предотвращаем открытие товара при клике на кнопки внутри карточки
+            if (e.target.closest('button')) {
+                return;
+            }
+            
+            const productIdStr = productCard.dataset.productId;
+            const productId = productIdStr ? parseInt(productIdStr) : null;
+            // Проверяем isDeleted из dataset - может быть 'true', 'false', true, false или undefined
+            const isDeletedAttr = productCard.dataset.isDeleted;
+            const isDeleted = isDeletedAttr === 'true' || isDeletedAttr === true || String(isDeletedAttr).toLowerCase() === 'true';
+            
+            console.log('[CLIENT PRODUCT CLICK] productId:', productId, 'isDeleted:', isDeleted, 'isDeletedAttr:', isDeletedAttr);
+            
+            if (productId) {
+                // Вызываем openProductById для всех товаров (включая удаленные) для показа уведомления
+                await openProductById(productId, isDeleted);
+            } else if (isDeleted) {
+                // Если товар удален, но productId отсутствует, все равно показываем уведомление
+                showNotification('Товар был удален и недоступен для просмотра', 'error');
+            }
+        });
+        
+        // Добавляем обработчики для выпадающих секций
+        const collapsibleHeaders = clientsList.querySelectorAll('.collapsible-header');
+        collapsibleHeaders.forEach(header => {
+            header.addEventListener('click', () => {
+                const sectionId = header.dataset.sectionId;
+                const content = document.getElementById(`section-${sectionId}`);
+                const arrow = header.querySelector('.collapsible-arrow');
+                
+                if (content && arrow) {
+                    const isOpen = content.style.display !== 'none';
+                    content.style.display = isOpen ? 'none' : 'block';
+                    arrow.textContent = isOpen ? '▶' : '▼';
+                }
+            });
+        });
         
         // Добавляем обработчик кнопки "Назад"
         const backBtn = document.getElementById('clients-back-btn');
