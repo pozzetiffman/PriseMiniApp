@@ -35,6 +35,7 @@ class Product(Base):
     is_sold = Column(Boolean, default=False)  # Продан ли товар (скрыт с витрины)
     is_made_to_order = Column(Boolean, default=False)  # Товар под заказ
     is_for_sale = Column(Boolean, default=False)  # Товар для покупки (с диапазоном цен)
+    is_sale_enabled = Column(Boolean, default=False)  # Товар доступен для продажи клиентам (когда мы продаем товар)
     price_from = Column(Float, nullable=True)  # Цена от (для товаров для покупки с диапазоном)
     price_to = Column(Float, nullable=True)  # Цена до (для товаров для покупки с диапазоном)
     price_fixed = Column(Float, nullable=True)  # Фиксированная цена покупки (для товаров для покупки с фиксированной ценой)
@@ -196,6 +197,32 @@ class Purchase(Base):
     
     product = relationship("Product", backref="purchases")
 
+class SaleOrder(Base):
+    __tablename__ = "sale_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)  # ID товара
+    user_id = Column(BigInteger, index=True)  # ID владельца магазина (создателя товара)
+    ordered_by_user_id = Column(BigInteger, index=True)  # ID пользователя, который заказал (купил)
+    quantity = Column(Integer, default=1)  # Количество заказанного товара
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время создания заказа
+    is_completed = Column(Boolean, default=False)  # Выполнен ли заказ
+    is_cancelled = Column(Boolean, default=False)  # Отменен ли заказ
+    # Поля формы оформления заказа на покупку
+    promo_code = Column(String, nullable=True)  # Промокод
+    first_name = Column(String, nullable=True)  # Имя
+    last_name = Column(String, nullable=True)  # Фамилия
+    phone_country_code = Column(String, nullable=True)  # Код страны телефона
+    phone_number = Column(String, nullable=True)  # Номер телефона
+    email = Column(String, nullable=True)  # Почта
+    notes = Column(Text, nullable=True)  # Примечание
+    delivery_method = Column(String, nullable=True)  # Способ доставки (delivery/pickup)
+    payment_method = Column(String, nullable=True)  # Способ оплаты (online/crypto/cash)
+    status = Column(String, default='pending')  # Статус заказа (pending/completed/cancelled)
+    snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент заказа
+    
+    product = relationship("Product", backref="sale_orders")
+
 class WebAppContext(Base):
     __tablename__ = "webapp_contexts"
 
@@ -246,6 +273,23 @@ class Favorite(Base):
     product = relationship("Product", backref="favorites")
     
     # Уникальный индекс на пару (product_id, user_id) будет создан через миграцию
+
+class CartItem(Base):
+    __tablename__ = "cart_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), index=True)  # ID товара
+    user_id = Column(BigInteger, index=True)  # ID пользователя, который добавил в корзину
+    shop_owner_id = Column(BigInteger, index=True)  # ID владельца магазина (для фильтрации)
+    bot_id = Column(Integer, ForeignKey("bots.id"), nullable=True, index=True)  # ID бота (для независимых магазинов)
+    quantity = Column(Integer, default=1)  # Количество товара в корзине
+    selected = Column(Boolean, default=True)  # Выбран ли товар для оформления
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Время добавления в корзину
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # Время последнего обновления
+    
+    product = relationship("Product", backref="cart_items")
+    
+    # Уникальный индекс на пару (product_id, user_id, shop_owner_id, bot_id) будет создан через миграцию
 
 
 

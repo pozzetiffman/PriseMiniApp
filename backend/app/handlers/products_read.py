@@ -51,6 +51,9 @@ def get_product_by_id(
         )
     ).first()
     
+    # Логируем информацию о описании товара для отладки
+    print(f"🔍 [PRODUCT BY ID DEBUG] Product {product.id} '{product.name}': description={product.description}, type={type(product.description)}, has_description={bool(product.description)}")
+    
     return {
         "id": product.id,
         "name": product.name,
@@ -67,6 +70,7 @@ def get_product_by_id(
         "is_sold": product.is_sold,
         "is_made_to_order": product.is_made_to_order,
         "is_for_sale": getattr(product, 'is_for_sale', False),
+        "is_sale_enabled": getattr(product, 'is_sale_enabled', False),
         "price_from": getattr(product, 'price_from', None),
         "price_to": getattr(product, 'price_to', None),
         "price_fixed": getattr(product, 'price_fixed', None),
@@ -86,7 +90,7 @@ def get_products(
     viewer_id: Optional[int] = None  # ID пользователя, который просматривает товары (для фильтрации скрытых)
 ):
     """Получить список товаров с автоматической синхронизацией между основным магазином и ботами"""
-    print(f"DEBUG: get_products called with user_id={user_id}, category_id={category_id}, bot_id={bot_id}")
+    print(f"📦 [PRODUCTS] get_products called with user_id={user_id}, category_id={category_id}, bot_id={bot_id}, viewer_id={viewer_id}")
     
     # Автоматическая синхронизация: проверяем расхождения между основным магазином и ботами
     # Находим все подключенные боты пользователя
@@ -275,7 +279,7 @@ def get_products(
         query = query.filter(models.Product.category_id == category_id)
     products = query.all()
     # Логируем информацию о товарах и их изображениях
-    print(f"DEBUG: Found {len(products)} products for user {user_id}")
+    print(f"📦 [PRODUCTS] Found {len(products)} products for user {user_id}, bot_id={bot_id}, category_id={category_id}")
     result = []
     for prod in products:
         # Преобразуем images_urls из JSON строки в список
@@ -358,6 +362,10 @@ def get_products(
             elif '/static/uploads/' in first_image:
                 print(f"WARNING: Product {prod.id} image URL still contains /static/uploads/ - should use /api/images/")
         
+        # Логируем информацию о описании товара для отладки
+        description_value = prod.description
+        print(f"🔍 [PRODUCTS DEBUG] Product {prod.id} '{prod.name}': description={description_value}, type={type(description_value)}, has_description={bool(description_value)}")
+        
         result.append({
             "id": prod.id,
             "name": prod.name,
@@ -373,6 +381,7 @@ def get_products(
             "is_reserved": has_reservation,
             "is_made_to_order": is_made_to_order,
             "is_for_sale": getattr(prod, 'is_for_sale', False),
+            "is_sale_enabled": getattr(prod, 'is_sale_enabled', False),
             "price_from": getattr(prod, 'price_from', None),
             "price_to": getattr(prod, 'price_to', None),
             "price_fixed": getattr(prod, 'price_fixed', None),
@@ -384,5 +393,6 @@ def get_products(
             "reservation": reservation_data
         })
     
+    print(f"📦 [PRODUCTS] Returning {len(result)} products")
     return result
 

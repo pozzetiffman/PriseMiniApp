@@ -347,3 +347,41 @@ export async function updateProductHiddenAPI(productId, shopOwnerId, isHidden) {
 
 // ========== END REFACTORING STEP 5.9 ==========
 
+// ========== REFACTORING STEP 5.10: updateProductSaleEnabledAPI() ==========
+// Обновление статуса 'продажа' товара (без уведомлений)
+export async function updateProductSaleEnabledAPI(productId, shopOwnerId, isSaleEnabled) {
+    const url = `${API_BASE}/api/products/${productId}/update-sale-enabled?user_id=${shopOwnerId}`;
+    console.log(`Updating product sale-enabled: productId=${productId}, isSaleEnabled=${isSaleEnabled}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            is_sale_enabled: isSaleEnabled
+        })
+    });
+    
+    const responseText = await response.text();
+    console.log(`Update product sale-enabled response: status=${response.status}, body=${responseText}`);
+    
+    if (response.ok) {
+        const result = JSON.parse(responseText);
+        console.log(`✅ Sale-enabled updated successfully: is_sale_enabled=${result.is_sale_enabled}`);
+    }
+    
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить статус "продажа"';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    
+    return JSON.parse(responseText);
+}
+
+
+// ========== END REFACTORING STEP 5.10 ==========

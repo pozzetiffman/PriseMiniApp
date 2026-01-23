@@ -743,38 +743,42 @@ async def get_cart_reservations(
                     sync_id = product_info.get("id") or reservation.product_id
         else:
             # Fallback: используем актуальный товар (для обратной совместимости со старыми резервациями)
-            product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
-            if product:
-                sync_id = product.sync_product_id or product.id
-                has_valid_product = True
-                # Формируем product_info из актуального товара для frontend
-                images_urls_list = None
-                if product.images_urls:
-                    try:
-                        images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
-                    except (json.JSONDecodeError, TypeError):
-                        images_urls_list = []
-                
-                calculated_price = get_product_price_from_dict({
-                    "price": product.price,
-                    "discount": product.discount or 0,
-                    "is_for_sale": product.is_for_sale or False,
-                    "price_type": product.price_type or 'range',
-                    "price_fixed": product.price_fixed,
-                    "price_from": product.price_from,
-                    "price_to": product.price_to
-                })
-                
-                product_info = {
-                    "id": product.id,
-                    "name": product.name,
-                    "description": product.description,
-                    "price": calculated_price,
-                    "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
-                    "image_url": make_full_url(product.image_url) if product.image_url else None,
-                    "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
-                    "is_unavailable": False
-                }
+            # Проверяем, что product_id не None
+            if reservation.product_id is None:
+                has_valid_product = False
+            else:
+                product = db.query(models.Product).filter(models.Product.id == reservation.product_id).first()
+                if product:
+                    sync_id = product.sync_product_id or product.id
+                    has_valid_product = True
+                    # Формируем product_info из актуального товара для frontend
+                    images_urls_list = None
+                    if product.images_urls:
+                        try:
+                            images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
+                        except (json.JSONDecodeError, TypeError):
+                            images_urls_list = []
+                    
+                    calculated_price = get_product_price_from_dict({
+                        "price": product.price,
+                        "discount": product.discount or 0,
+                        "is_for_sale": product.is_for_sale or False,
+                        "price_type": product.price_type or 'range',
+                        "price_fixed": product.price_fixed,
+                        "price_from": product.price_from,
+                        "price_to": product.price_to
+                    })
+                    
+                    product_info = {
+                        "id": product.id,
+                        "name": product.name,
+                        "description": product.description,
+                        "price": calculated_price,
+                        "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
+                        "image_url": make_full_url(product.image_url) if product.image_url else None,
+                        "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else [],
+                        "is_unavailable": False
+                    }
         
         if has_valid_product:
             # Если это первый раз, когда мы видим этот sync_product_id, добавляем резервацию

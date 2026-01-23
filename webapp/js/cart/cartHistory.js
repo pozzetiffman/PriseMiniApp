@@ -11,6 +11,9 @@ import { getOrdersHistoryAPI } from '../api/orders.js';
 // НОВЫЙ ИМПОРТ из модуля api/purchases.js
 import { getPurchasesHistoryAPI } from '../api/purchases.js';
 // ========== END REFACTORING STEP 9.4 ==========
+// ========== SALE ORDERS: getSaleOrdersHistoryAPI() ==========
+import { getSaleOrdersHistoryAPI } from '../api/sale_orders.js';
+// ========== END SALE ORDERS ==========
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 // import { API_BASE, fetchReservationsHistory, getBaseHeadersNoAuth, getOrdersHistoryAPI, getPurchasesHistoryAPI } from '../api.js';
 // ========== END REFACTORING STEP 8 ==========
@@ -436,3 +439,112 @@ export async function loadPurchasesHistory() {
 }
 // ========== END REFACTORING STEP 4.3 ==========
 
+// ========== SALE ORDERS: loadSaleOrdersHistory() ==========
+/**
+ * Загрузка истории заказов на покупку (завершенные и отмененные)
+ */
+export async function loadSaleOrdersHistory() {
+    console.log('📦 [SALE ORDER] loadSaleOrdersHistory: Starting...');
+    const historyItems = findCartElement('sale-orders-history-items');
+    if (!historyItems) {
+        console.error('❌ [SALE ORDER] loadSaleOrdersHistory: sale-orders-history-items element not found');
+        return;
+    }
+    
+    historyItems.innerHTML = '<p class="loading">Загрузка истории заказов на покупку...</p>';
+    
+    try {
+        console.log('📦 [SALE ORDER] loadSaleOrdersHistory: Fetching sale orders history from API...');
+        const allSaleOrders = await getSaleOrdersHistoryAPI();
+        console.log('📦 [SALE ORDER] loadSaleOrdersHistory: Got sale orders:', allSaleOrders ? allSaleOrders.length : 0);
+        
+        if (!allSaleOrders || allSaleOrders.length === 0) {
+            historyItems.innerHTML = '<p class="loading">У вас нет истории заказов на покупку</p>';
+            return;
+        }
+        
+        // Рендерим список истории заказов на покупку
+        historyItems.innerHTML = '';
+        for (const saleOrder of allSaleOrders) {
+            try {
+                // Используем product из snapshot
+                let product = saleOrder.product;
+                
+                // Fallback: если product не пришел из snapshot, загружаем по product_id
+                if (!product && saleOrder.product_id) {
+                    const productUrl = `${API_BASE}/api/products/${saleOrder.product_id}`;
+                    const productResponse = await fetch(productUrl, {
+                        headers: getBaseHeadersNoAuth()
+                    });
+                    
+                    if (!productResponse.ok) {
+                        console.warn(`📦 [SALE ORDER] loadSaleOrdersHistory: Failed to fetch product ${saleOrder.product_id}:`, productResponse.status);
+                        continue;
+                    }
+                    
+                    product = await productResponse.json();
+                }
+                
+                if (!product || !product.name) {
+                    console.warn('📦 [SALE ORDER] loadSaleOrdersHistory: Sale order missing valid product:', saleOrder.id);
+                    continue;
+                }
+                
+                // Использование импортированных функций из утилит
+                const imageUrl = getProductImageUrl(product, API_BASE);
+                const priceDisplay = getProductPriceDisplay(product);
+                
+                const historyItem = document.createElement('div');
+                historyItem.className = 'cart-item';
+                
+                const imageContainer = createImageContainer(imageUrl, product.name);
+                
+                // Статус заказа
+                let statusText = '';
+                let statusColor = '';
+                if (saleOrder.is_completed) {
+                    statusText = '✅ Выполнен';
+                    statusColor = '#4CAF50';
+                } else if (saleOrder.is_cancelled) {
+                    statusText = '❌ Отменен';
+                    statusColor = '#F44336';
+                } else {
+                    statusText = '⏳ В обработке';
+                    statusColor = '#FFA500';
+                }
+                
+                // Форматирование даты через импортированную функцию
+                const dateText = formatDateToMoscow(saleOrder.created_at);
+                
+                historyItem.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3>${product.name}</h3>
+                        <p class="cart-item-price">${priceDisplay} × ${saleOrder.quantity} шт.</p>
+                        <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
+                        ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
+                    </div>
+                `;
+                
+                // Вставляем контейнер изображения в начало
+                historyItem.insertBefore(imageContainer, historyItem.firstChild);
+                historyItems.appendChild(historyItem);
+                console.log('📦 [SALE ORDER] loadSaleOrdersHistory: Added history item for product:', product.name);
+            } catch (e) {
+                console.error(`❌ [SALE ORDER] loadSaleOrdersHistory: Error processing sale order ${saleOrder.id}:`, e);
+            }
+        }
+        
+        console.log('📦 [SALE ORDER] loadSaleOrdersHistory: Completed, total items:', historyItems.children.length);
+    } catch (error) {
+        console.error('❌ [SALE ORDER] loadSaleOrdersHistory: Error loading sale orders history:', error);
+        // Удаляем элемент загрузки если он есть
+        const loadingElement = historyItems.querySelector('.loading');
+        if (loadingElement) loadingElement.remove();
+        
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'loading';
+        errorMessage.textContent = `Ошибка загрузки: ${error.message}`;
+        historyItems.appendChild(errorMessage);
+    }
+}
+// ========== END SALE ORDERS ==========

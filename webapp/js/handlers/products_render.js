@@ -371,6 +371,48 @@ export async function renderProducts(products) {
             });
         }
         
+        // Создаем кнопку корзины (левый нижний угол) - только для клиентов
+        let cartButton = null;
+        if (isClient) {
+            cartButton = document.createElement('button');
+            cartButton.className = 'cart-button-card';
+            cartButton.setAttribute('aria-label', 'Добавить в корзину');
+            cartButton.dataset.productId = prod.id;
+            
+            // SVG иконка корзины
+            cartButton.innerHTML = `
+                <svg viewBox="0 0 24 24" class="cart-icon" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
+                </svg>
+            `;
+            
+            // Обработчик клика на кнопку корзины
+            cartButton.addEventListener('click', async (e) => {
+                e.stopPropagation(); // Предотвращаем открытие модального окна товара
+                e.preventDefault(); // Предотвращаем стандартное поведение
+                
+                try {
+                    // Импортируем функцию добавления в корзину
+                    const { addProductToCart } = await import('../cart/cartNew.js');
+                    await addProductToCart(prod, 1);
+                    
+                    // Визуальная обратная связь
+                    cartButton.style.transform = 'scale(0.9)';
+                    setTimeout(() => {
+                        cartButton.style.transform = 'scale(1)';
+                    }, 200);
+                } catch (error) {
+                    console.error('❌ Error adding to cart:', error);
+                    console.error('❌ Error details:', {
+                        message: error.message,
+                        stack: error.stack,
+                        name: error.name
+                    });
+                    alert('Ошибка при добавлении товара в корзину: ' + (error.message || 'Неизвестная ошибка'));
+                }
+            });
+        }
+        
         // Создаем badge скрытого товара (только для админа)
         let hiddenBadge = null;
         if (isHiddenForAdmin) {
@@ -563,6 +605,10 @@ export async function renderProducts(products) {
             if (favoriteButton) {
                 imageDiv.appendChild(favoriteButton);
             }
+            // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
+            if (cartButton) {
+                imageDiv.appendChild(cartButton);
+            }
             
             // Добавляем badge резервации в нижней части фото
             if (reservedBadge) {
@@ -592,11 +638,15 @@ export async function renderProducts(products) {
                 if (reservedBadge) {
                     imageDiv.appendChild(reservedBadge);
                 }
-                // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
-                if (favoriteButton) {
-                    imageDiv.appendChild(favoriteButton);
-                }
-            };
+                    // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
+                    if (favoriteButton) {
+                        imageDiv.appendChild(favoriteButton);
+                    }
+                    // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
+                    if (cartButton) {
+                        imageDiv.appendChild(cartButton);
+                    }
+                };
             
             // Определяем, мобильное устройство или десктоп
             const isMobile = isMobileDevice();
@@ -667,6 +717,10 @@ export async function renderProducts(products) {
                     // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
                     if (favoriteButton) {
                         imageDiv.appendChild(favoriteButton);
+                    }
+                    // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
+                    if (cartButton) {
+                        imageDiv.appendChild(cartButton);
                     }
                     
                     // Устанавливаем blob URL
@@ -747,6 +801,10 @@ export async function renderProducts(products) {
                 if (favoriteButton) {
                     imageDiv.appendChild(favoriteButton);
                 }
+                // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
+                if (cartButton) {
+                    imageDiv.appendChild(cartButton);
+                }
                 
                 // Устанавливаем прямой URL
                 img.src = fullImg;
@@ -785,6 +843,10 @@ export async function renderProducts(products) {
             // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
             if (favoriteButton) {
                 imageDiv.appendChild(favoriteButton);
+            }
+            // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
+            if (cartButton) {
+                imageDiv.appendChild(cartButton);
             }
             
             // Добавляем badge резервации в нижней части фото даже если нет изображения
@@ -1059,8 +1121,9 @@ export async function renderProducts(products) {
         
         // Устанавливаем обработчик через addEventListener
         card.addEventListener('click', function cardClickHandler(e) {
-            // Проверяем, не кликнули ли на кнопку избранного или другие интерактивные элементы
+            // Проверяем, не кликнули ли на кнопку избранного, корзины или другие интерактивные элементы
             if (e.target.closest('.favorite-button-card') || 
+                e.target.closest('.cart-button-card') ||
                 e.target.closest('button') || 
                 e.target.closest('a')) {
                 return; // Не открываем модальное окно, если кликнули на кнопку

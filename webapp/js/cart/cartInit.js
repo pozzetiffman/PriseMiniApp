@@ -5,6 +5,7 @@
 
 // Импорты зависимостей
 import { switchCartSubtab, switchCartTab, updateCartTabsVisibility } from './cartTabs.js';
+import { openCartPageNew, initCartNew } from './cartNew.js';
 
 // Переменная для хранения интервала обновления корзины
 let cartInitInterval = null;
@@ -74,57 +75,13 @@ export function setupCartButton() {
         setupCartButtonAttempts = 0; // Сбрасываем счетчик при успехе
         cartButton.onclick = async () => {
             try {
-                // Получаем страницу корзины и другие страницы
-                const cartPage = document.getElementById('cart-page');
-                const mainContent = document.getElementById('main-content');
-                const productPage = document.getElementById('product-page');
-                const favoritesPage = document.getElementById('favorites-page');
-                
-                if (cartPage) {
-                    // Скрываем все другие страницы
-                    if (mainContent) mainContent.style.display = 'none';
-                    if (productPage) productPage.style.display = 'none';
-                    if (favoritesPage) favoritesPage.style.display = 'none';
-                    
-                    // Показываем страницу корзины
-                    cartPage.style.display = 'block';
-                    
-                    // Обновляем видимость вкладок и выбираем активную вкладку (после показа страницы)
-                    // Делаем это асинхронно, чтобы не блокировать UI
-                    setTimeout(async () => {
-                        try {
-                            // Обновляем видимость вкладок перед открытием
-                            const tabsData = await updateCartTabsVisibility();
-                            
-                            // Выбираем первую доступную вкладку
-                            let defaultTab = 'reservations';
-                            if (tabsData.hasReservations) {
-                                defaultTab = 'reservations';
-                            } else if (tabsData.hasOrders) {
-                                defaultTab = 'orders';
-                            } else if (tabsData.hasPurchases) {
-                                defaultTab = 'purchases';
-                            }
-                            
-                            switchCartTab(defaultTab);
-                        } catch (err) {
-                            console.error('❌ Error updating cart tabs or switching tab:', err);
-                            // В случае ошибки просто показываем первую вкладку
-                            try {
-                                switchCartTab('reservations');
-                            } catch (switchErr) {
-                                console.error('❌ Error in switchCartTab:', switchErr);
-                            }
-                        }
-                    }, 50);
-                } else {
-                    console.error('❌ Cart page or main content not found');
-                }
+                // Открываем новую корзину вместо старой
+                openCartPageNew();
             } catch (err) {
                 console.error('❌ Error opening cart:', err);
             }
         };
-        console.log('✅ Cart button click handler set up');
+        console.log('✅ Cart button click handler set up (new cart)');
     } else {
         setupCartButtonAttempts++;
         console.log('[CART INIT] Cart button not found, retrying... (attempt', setupCartButtonAttempts, 'of', MAX_SETUP_BUTTON_ATTEMPTS + ')');

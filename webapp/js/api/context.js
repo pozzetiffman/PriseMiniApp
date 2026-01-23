@@ -9,7 +9,8 @@ import { API_BASE, getBaseHeaders } from './config.js';
 
 // Получение контекста магазина
 export async function getContext(shopOwnerId = null) {
-    console.log('📡 getContext called, shopOwnerId:', shopOwnerId);
+    console.log('📡 [CONTEXT API] getContext called, shopOwnerId:', shopOwnerId);
+    console.log('📡 [CONTEXT API] API_BASE:', API_BASE);
     
     // Согласно аудиту: приложение работает ТОЛЬКО через Telegram
     // === ИСПРАВЛЕНИЕ: Проверка fallback состояния ===
@@ -26,8 +27,9 @@ export async function getContext(shopOwnerId = null) {
         url += `?shop_owner_id=${shopOwnerId}`;
     }
     
-    console.log("📡 Fetching context from:", url);
-    console.log("📡 Headers keys:", Object.keys(headers));
+    console.log("📡 [CONTEXT API] Fetching context from:", url);
+    console.log("📡 [CONTEXT API] Headers keys:", Object.keys(headers));
+    console.log("📡 [CONTEXT API] Has X-Telegram-Init-Data:", !!headers["X-Telegram-Init-Data"]);
     
     // === ИСПРАВЛЕНИЕ: Добавляем таймаут для предотвращения зависания ===
     const TIMEOUT_MS = 10000; // 10 секунд

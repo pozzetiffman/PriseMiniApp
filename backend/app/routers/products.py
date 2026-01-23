@@ -15,7 +15,7 @@ from ..utils.products_sync import sync_product_to_all_bots_with_rename, sync_pro
 from ..handlers.products_sold import get_sold_products as get_sold_products_handler, delete_sold_product as delete_sold_product_handler, delete_sold_products as delete_sold_products_handler
 from ..handlers.products_read import get_product_by_id as get_product_by_id_handler, get_products as get_products_handler
 from ..handlers.products_create import create_product as create_product_handler, sync_all_products as sync_all_products_handler
-from ..handlers.products_update import update_product as update_product_handler, toggle_hot_offer as toggle_hot_offer_handler, update_price_discount as update_price_discount_handler, update_name_description as update_name_description_handler, update_quantity as update_quantity_handler, update_made_to_order as update_made_to_order_handler, update_for_sale as update_for_sale_handler, update_quantity_show_enabled as update_quantity_show_enabled_handler, bulk_update_made_to_order as bulk_update_made_to_order_handler, update_hidden as update_hidden_handler
+from ..handlers.products_update import update_product as update_product_handler, toggle_hot_offer as toggle_hot_offer_handler, update_price_discount as update_price_discount_handler, update_name_description as update_name_description_handler, update_quantity as update_quantity_handler, update_made_to_order as update_made_to_order_handler, update_for_sale as update_for_sale_handler, update_quantity_show_enabled as update_quantity_show_enabled_handler, bulk_update_made_to_order as bulk_update_made_to_order_handler, update_hidden as update_hidden_handler, update_sale_enabled as update_sale_enabled_handler
 from ..handlers.products_delete import delete_product as delete_product_handler, mark_product_sold as mark_product_sold_handler
 
 router = APIRouter(prefix="/api/products", tags=["products"])
@@ -184,6 +184,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.quantity_unit = db_product.quantity_unit
                 matching.quantity_show_enabled = db_product.quantity_show_enabled
                 matching.is_hidden = db_product.is_hidden
+                matching.is_sale_enabled = db_product.is_sale_enabled
                 matching.category_id = category_id_for_bot
                 # Обновляем sync_product_id если он не был установлен
                 if not matching.sync_product_id:
@@ -247,6 +248,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
                         is_hidden=db_product.is_hidden,
+                        is_sale_enabled=db_product.is_sale_enabled,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -373,6 +375,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.is_made_to_order = db_product.is_made_to_order
                 matching.quantity_show_enabled = db_product.quantity_show_enabled
                 matching.is_hidden = db_product.is_hidden
+                matching.is_sale_enabled = db_product.is_sale_enabled
                 # Обновляем поля для продажи
                 matching.is_for_sale = db_product.is_for_sale
                 matching.price_from = db_product.price_from
@@ -475,6 +478,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
                         is_hidden=db_product.is_hidden,
+                        is_sale_enabled=db_product.is_sale_enabled,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -781,6 +785,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
                         is_hidden=db_product.is_hidden,
+                        is_sale_enabled=db_product.is_sale_enabled,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
@@ -1128,6 +1133,7 @@ async def sync_all_products(
                     price_to=main_product.price_to,
                     quantity_from=main_product.quantity_from,
                     quantity_unit=main_product.quantity_unit,
+                    is_sale_enabled=main_product.is_sale_enabled,
                     category_id=category_id_for_bot
                 )
                 db.add(new_product)
@@ -1290,6 +1296,7 @@ async def sync_all_products(
                         quantity_unit=bot_product.quantity_unit,
                         quantity_show_enabled=bot_product.quantity_show_enabled,
                         is_hidden=bot_product.is_hidden,
+                        is_sale_enabled=bot_product.is_sale_enabled,
                         category_id=category_id_for_main
                     )
                     db.add(new_main_product)
@@ -1608,6 +1615,7 @@ def get_product_by_id(
         "is_sold": product.is_sold,
         "is_made_to_order": product.is_made_to_order,
         "is_for_sale": getattr(product, 'is_for_sale', False),
+        "is_sale_enabled": getattr(product, 'is_sale_enabled', False),
         "price_from": getattr(product, 'price_from', None),
         "price_to": getattr(product, 'price_to', None),
         "price_fixed": getattr(product, 'price_fixed', None),
@@ -1633,7 +1641,16 @@ def get_products(
     db: Session = Depends(database.get_db)
 ):
     """Получить список товаров с автоматической синхронизацией между основным магазином и ботами"""
-    return get_products_handler(user_id, category_id, bot_id, db, viewer_id=viewer_id)
+    print(f"📦 [API] GET /api/products/ - user_id={user_id}, category_id={category_id}, bot_id={bot_id}, viewer_id={viewer_id}")
+    try:
+        result = get_products_handler(user_id, category_id, bot_id, db, viewer_id=viewer_id)
+        print(f"📦 [API] GET /api/products/ - returning {len(result)} products")
+        return result
+    except Exception as e:
+        print(f"❌ [API] GET /api/products/ - error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 # СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 """
@@ -1729,6 +1746,7 @@ def get_products(
                         quantity_unit=bot_product.quantity_unit,
                         quantity_show_enabled=bot_product.quantity_show_enabled,
                         is_hidden=bot_product.is_hidden,
+                        is_sale_enabled=bot_product.is_sale_enabled,
                         category_id=category_id_for_main
                     )
                     db.add(new_main_product)
@@ -1806,6 +1824,7 @@ def get_products(
                         quantity_unit=main_product.quantity_unit,
                         quantity_show_enabled=main_product.quantity_show_enabled,
                         is_hidden=main_product.is_hidden,
+                        is_sale_enabled=main_product.is_sale_enabled,
                         category_id=category_id_for_bot
                     )
                     db.add(new_bot_product)
@@ -1925,6 +1944,7 @@ def get_products(
             "is_reserved": has_reservation,
             "is_made_to_order": is_made_to_order,
             "is_for_sale": getattr(prod, 'is_for_sale', False),
+            "is_sale_enabled": getattr(prod, 'is_sale_enabled', False),
             "price_from": getattr(prod, 'price_from', None),
             "price_to": getattr(prod, 'price_to', None),
             "price_fixed": getattr(prod, 'price_fixed', None),
@@ -2782,6 +2802,18 @@ def update_hidden(
     """Обновление статуса скрытия товара (без уведомлений)"""
     return update_hidden_handler(product_id, hidden_update, user_id, db)
 # ========== END REFACTORING STEP 6.9 ==========
+
+# ========== REFACTORING STEP 6.10: update_sale_enabled ==========
+@router.patch("/{product_id}/update-sale-enabled")
+def update_sale_enabled(
+    product_id: int,
+    sale_enabled_update: schemas.SaleEnabledUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление статуса 'продажа' для товара (без уведомлений)"""
+    return update_sale_enabled_handler(product_id, sale_enabled_update, user_id, db)
+# ========== END REFACTORING STEP 6.10 ==========
 
 # ========== REFACTORING STEP 6.10: bulk_update_made_to_order ==========
 # НОВЫЙ КОД (используется сейчас)

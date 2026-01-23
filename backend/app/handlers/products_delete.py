@@ -64,6 +64,28 @@ async def delete_product(
     # Если нет initData - это запрос от бота (localhost), проверяем только что user_id совпадает с владельцем товара
     # (товар уже проверен выше, что он принадлежит user_id)
     
+    # Удаляем все связанные записи из избранного перед удалением товара
+    # Это необходимо, так как product_id в favorites имеет ограничение NOT NULL
+    # Сначала удаляем избранное для текущего товара
+    db.query(models.Favorite).filter(
+        models.Favorite.product_id == product_id
+    ).delete()
+    
+    # Если есть sync_product_id, удаляем избранное для всех синхронизированных товаров
+    sync_id = db_product.sync_product_id or product_id
+    if sync_id:
+        # Находим все товары с таким же sync_product_id
+        synced_products = db.query(models.Product).filter(
+            models.Product.user_id == user_id,
+            models.Product.sync_product_id == sync_id
+        ).all()
+        
+        # Удаляем избранное для всех найденных товаров
+        for synced_product in synced_products:
+            db.query(models.Favorite).filter(
+                models.Favorite.product_id == synced_product.id
+            ).delete()
+    
     # Сначала синхронизируем удаление товара во все боты (двусторонняя синхронизация)
     # Это удалит все синхронизированные копии товара из БД
     sync_product_to_all_bots(db_product, db, action="delete")

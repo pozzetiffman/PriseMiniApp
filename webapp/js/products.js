@@ -82,7 +82,8 @@ export function initProductsDependencies(dependencies) {
         cancelReservation: dependencies.cancelReservation,
         showPurchaseModal: dependencies.showPurchaseModal,
         showReservationModal: dependencies.showReservationModal,
-        showOrderModal: dependencies.showOrderModal
+        showOrderModal: dependencies.showOrderModal,
+        showSaleOrderModal: dependencies.showSaleOrderModal
         // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
         // showModalImage больше не передается через зависимости, она импортируется напрямую в products_modal.js
         // ========== END REFACTORING STEP 2.1-2.2 ==========

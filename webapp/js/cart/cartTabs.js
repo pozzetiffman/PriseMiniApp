@@ -11,6 +11,9 @@ import { getMyOrdersAPI, getOrdersHistoryAPI } from '../api/orders.js';
 // НОВЫЙ ИМПОРТ из модуля api/purchases.js
 import { getMyPurchasesAPI } from '../api/purchases.js';
 // ========== END REFACTORING STEP 9.2 ==========
+// ========== SALE ORDERS: getMySaleOrdersAPI(), getSaleOrdersHistoryAPI() ==========
+import { getMySaleOrdersAPI, getSaleOrdersHistoryAPI } from '../api/sale_orders.js';
+// ========== END SALE ORDERS ==========
 // ========== REFACTORING STEP 9.4: getPurchasesHistoryAPI() ==========
 // НОВЫЙ ИМПОРТ из модуля api/purchases.js
 import { getPurchasesHistoryAPI } from '../api/purchases.js';
@@ -18,8 +21,8 @@ import { getPurchasesHistoryAPI } from '../api/purchases.js';
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 // import { fetchReservationsHistory, fetchUserReservations, getMyOrdersAPI, getMyPurchasesAPI, getOrdersHistoryAPI, getPurchasesHistoryAPI } from '../api.js';
 // ========== END REFACTORING STEP 8 ==========
-import { loadCart, loadOrders, loadPurchases } from './cartActive.js';
-import { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory } from './cartHistory.js';
+import { loadCart, loadOrders, loadPurchases, loadSaleOrders } from './cartActive.js';
+import { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory, loadSaleOrdersHistory } from './cartHistory.js';
 
 /**
  * Вспомогательная функция для поиска элементов корзины
@@ -53,8 +56,8 @@ function findCartElement(elementId) {
 
 /**
  * Переключение основных вкладок корзины
- * Управляет отображением секций: reservations, orders, purchases
- * @param {string} tabName - Имя вкладки для переключения ('reservations', 'orders', 'purchases')
+ * Управляет отображением секций: reservations, orders, purchases, sale-orders
+ * @param {string} tabName - Имя вкладки для переключения ('reservations', 'orders', 'purchases', 'sale-orders')
  */
 export function switchCartTab(tabName) {
     console.log(`🛒 switchCartTab: switching to tab "${tabName}"`);
@@ -74,13 +77,14 @@ export function switchCartTab(tabName) {
         const reservationsSection = container.querySelector('#reservations-section');
         const ordersSection = container.querySelector('#orders-section');
         const purchasesSection = container.querySelector('#purchases-section');
+        const saleOrdersSection = container.querySelector('#sale-orders-section');
         
         if (!tabs || tabs.length === 0) {
             console.warn('⚠️ Cart tabs not found');
             return;
         }
         
-        if (!reservationsSection || !ordersSection || !purchasesSection) {
+        if (!reservationsSection || !ordersSection || !purchasesSection || !saleOrdersSection) {
             console.warn('⚠️ Cart sections not found');
             return;
         }
@@ -106,6 +110,7 @@ export function switchCartTab(tabName) {
     reservationsSection.style.display = 'none';
     ordersSection.style.display = 'none';
     purchasesSection.style.display = 'none';
+    saleOrdersSection.style.display = 'none';
     
     // Показываем нужную секцию и активируем первую подвкладку
     // КРИТИЧНО: switchCartSubtab делает API вызовы, поэтому вызываем его асинхронно
@@ -138,6 +143,15 @@ export function switchCartTab(tabName) {
                 console.error('❌ Error in switchCartSubtab for purchases:', err);
             }
         }, 0);
+    } else if (tabName === 'sale-orders') {
+        saleOrdersSection.style.display = 'block';
+        setTimeout(() => {
+            try {
+                switchCartSubtab('sale-orders-active');
+            } catch (err) {
+                console.error('❌ Error in switchCartSubtab for sale-orders:', err);
+            }
+        }, 0);
     }
     } catch (error) {
         console.error('❌ Error in switchCartTab:', error);
@@ -150,7 +164,7 @@ export function switchCartTab(tabName) {
 /**
  * Переключение подвкладок корзины
  * Управляет отображением активных элементов и истории для каждой секции
- * @param {string} subtabName - Имя подвкладки для переключения ('reservations-active', 'reservations-history', 'orders-active', 'orders-history', 'purchases-active', 'purchases-history')
+ * @param {string} subtabName - Имя подвкладки для переключения ('reservations-active', 'reservations-history', 'orders-active', 'orders-history', 'purchases-active', 'purchases-history', 'sale-orders-active', 'sale-orders-history')
  */
 export function switchCartSubtab(subtabName) {
     console.log(`🛒 switchCartSubtab: switching to subtab "${subtabName}"`);
@@ -172,6 +186,10 @@ export function switchCartSubtab(subtabName) {
             mainTab = 'purchases';
             activeContainer = findCartElement('purchases-items');
             historyContainer = findCartElement('purchases-history-items');
+        } else if (subtabName.startsWith('sale-orders-')) {
+            mainTab = 'sale-orders';
+            activeContainer = findCartElement('sale-orders-items');
+            historyContainer = findCartElement('sale-orders-history-items');
         }
         
         if (!activeContainer || !historyContainer) {
@@ -217,6 +235,11 @@ export function switchCartSubtab(subtabName) {
             loadPurchases().catch(err => {
                 console.warn('⚠️ Error loading purchases:', err);
             });
+        } else if (mainTab === 'sale-orders') {
+            console.log('📦 [SALE ORDER] Loading active sale orders...');
+            loadSaleOrders().catch(err => {
+                console.warn('⚠️ [SALE ORDER] Error loading sale orders:', err);
+            });
         }
     } else if (subtabName.endsWith('-history')) {
         activeContainer.style.display = 'none';
@@ -237,6 +260,11 @@ export function switchCartSubtab(subtabName) {
             console.log('🛒 Loading sales history...');
             loadPurchasesHistory().catch(err => {
                 console.warn('⚠️ Error loading purchases history:', err);
+            });
+        } else if (mainTab === 'sale-orders') {
+            console.log('📦 [SALE ORDER] Loading sale orders history...');
+            loadSaleOrdersHistory().catch(err => {
+                console.warn('⚠️ [SALE ORDER] Error loading sale orders history:', err);
             });
         }
     }
@@ -361,6 +389,7 @@ export async function updateCartTabsVisibility() {
         const reservationsTab = Array.from(tabs).find(tab => tab.dataset.tab === 'reservations');
         const ordersTab = Array.from(tabs).find(tab => tab.dataset.tab === 'orders');
         const purchasesTab = Array.from(tabs).find(tab => tab.dataset.tab === 'purchases');
+        const saleOrdersTab = Array.from(tabs).find(tab => tab.dataset.tab === 'sale-orders');
         
         if (reservationsTab) {
             if (hasReservations) {
@@ -392,6 +421,44 @@ export async function updateCartTabsVisibility() {
             }
         }
         
+        // Проверяем заказы на покупку (активные + история) с таймаутом
+        let hasSaleOrders = false;
+        try {
+            const allSaleOrders = await withTimeout(
+                getMySaleOrdersAPI(), 
+                3000, 
+                'Timeout fetching sale orders'
+            );
+            const activeCount = (allSaleOrders || []).filter(o => !o.is_completed && !o.is_cancelled).length;
+            
+            let historyCount = 0;
+            try {
+                const historySaleOrders = await withTimeout(
+                    getSaleOrdersHistoryAPI(), 
+                    3000, 
+                    'Timeout fetching sale orders history'
+                );
+                historyCount = (historySaleOrders || []).filter(o => o.is_completed === true || o.is_cancelled === true).length;
+            } catch (e) {
+                console.warn('⚠️ Failed to fetch sale orders history for visibility check:', e.message);
+            }
+            
+            hasSaleOrders = activeCount > 0 || historyCount > 0;
+            console.log(`📦 [SALE ORDER] Sale Orders: ${activeCount} active, ${historyCount} history, hasData: ${hasSaleOrders}`);
+        } catch (e) {
+            console.warn('⚠️ Failed to check sale orders:', e.message);
+        }
+        
+        if (saleOrdersTab) {
+            if (hasSaleOrders) {
+                saleOrdersTab.style.display = '';
+                saleOrdersTab.classList.remove('hidden');
+            } else {
+                saleOrdersTab.style.display = 'none';
+                saleOrdersTab.classList.add('hidden');
+            }
+        }
+        
         // КРИТИЧНО: НЕ вызываем switchCartTab здесь при обновлении видимости!
         // switchCartTab вызывает switchCartSubtab, который делает API вызовы и может блокировать загрузку.
         // Переключение вкладки должно происходить только при явном действии пользователя или при открытии корзины.
@@ -403,9 +470,9 @@ export async function updateCartTabsVisibility() {
             console.log(`🛒 Active tab is hidden, removed active class (will be set when cart is opened)`);
         }
         
-        console.log(`🛒 Tabs visibility updated: Reservations=${hasReservations}, Orders=${hasOrders}, Purchases=${hasPurchases}`);
+        console.log(`🛒 Tabs visibility updated: Reservations=${hasReservations}, Orders=${hasOrders}, Purchases=${hasPurchases}, SaleOrders=${hasSaleOrders}`);
         
-        return { hasReservations, hasOrders, hasPurchases };
+        return { hasReservations, hasOrders, hasPurchases, hasSaleOrders };
     } catch (error) {
         console.error('❌ Error updating cart tabs visibility:', error);
         return { hasReservations: true, hasOrders: true, hasPurchases: true }; // По умолчанию показываем все

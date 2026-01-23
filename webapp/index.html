@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#1c1c1e">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -60,6 +60,105 @@
             </div>
         </div>
         
+        <!-- Страница оформления покупки (отдельная страница вместо модального окна) -->
+        <div id="sale-order-page" class="sale-order-page" style="display: none;">
+            <div class="sale-order-page-header">
+                <button id="sale-order-page-back" class="sale-order-page-back">← Назад</button>
+            </div>
+            <div class="sale-order-page-content">
+                <h2 class="sale-order-page-title">🛒 Оформление заказа</h2>
+                
+                <!-- Шаг 1: Промокод и количество -->
+                <div id="sale-order-page-step-1" class="sale-order-step active">
+                    <div class="sale-order-product-summary" id="sale-order-page-product-summary"></div>
+                    <div class="sale-order-form-field">
+                        <label for="sale-order-page-promo-code">Промокод (если есть):</label>
+                        <input type="text" id="sale-order-page-promo-code" placeholder="Введите промокод" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="sale-order-form-field">
+                        <label for="sale-order-page-quantity">Количество:</label>
+                        <input type="number" id="sale-order-page-quantity" min="1" value="1" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                        <div id="sale-order-page-total" class="sale-order-total"></div>
+                    </div>
+                    <button id="sale-order-page-step-1-next" class="reserve-btn" style="width: 100%; margin-top: 12px;">Продолжить →</button>
+                </div>
+                
+                <!-- Шаг 2: Личные данные -->
+                <div id="sale-order-page-step-2" class="sale-order-step">
+                    <div class="sale-order-form-field">
+                        <label for="sale-order-page-first-name">Имя <span style="color: red;">*</span>:</label>
+                        <input type="text" id="sale-order-page-first-name" required placeholder="Введите имя" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="sale-order-form-field">
+                        <label for="sale-order-page-last-name">Фамилия <span style="color: red;">*</span>:</label>
+                        <input type="text" id="sale-order-page-last-name" required placeholder="Введите фамилию" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="sale-order-form-field">
+                        <label for="sale-order-page-phone">Номер телефона <span style="color: red;">*</span>:</label>
+                        <div style="display: flex; gap: 8px;">
+                            <select id="sale-order-page-phone-country-code" style="flex: 0 0 100px; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                                <option value="+7">+7</option>
+                                <option value="+1">+1</option>
+                                <option value="+44">+44</option>
+                            </select>
+                            <input type="tel" id="sale-order-page-phone-number" required placeholder="Введите номер телефона" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                        </div>
+                    </div>
+                    <div class="sale-order-form-field">
+                        <label for="sale-order-page-email">Почта:</label>
+                        <input type="email" id="sale-order-page-email" placeholder="Введите email" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="sale-order-form-field">
+                        <label for="sale-order-page-notes">Примечание:</label>
+                        <textarea id="sale-order-page-notes" rows="3" placeholder="Дополнительная информация" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical;"></textarea>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button id="sale-order-page-step-2-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
+                        <button id="sale-order-page-step-2-next" class="reserve-btn" style="flex: 1;">Продолжить →</button>
+                    </div>
+                </div>
+                
+                <!-- Шаг 3: Способ доставки и оплата -->
+                <div id="sale-order-page-step-3" class="sale-order-step">
+                    <div class="sale-order-form-field">
+                        <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ получения:</label>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <label class="delivery-option">
+                                <input type="radio" name="sale-order-page-delivery-method" value="delivery" checked>
+                                <span>🚚 Доставка</span>
+                            </label>
+                            <label class="delivery-option">
+                                <input type="radio" name="sale-order-page-delivery-method" value="pickup">
+                                <span>🏪 Самовывоз</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="sale-order-form-field">
+                        <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ оплаты:</label>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <label class="delivery-option">
+                                <input type="radio" name="sale-order-page-payment-method" value="online" checked>
+                                <span>💳 Онлайн оплата (скоро)</span>
+                            </label>
+                            <label class="delivery-option">
+                                <input type="radio" name="sale-order-page-payment-method" value="crypto">
+                                <span>₿ Криптовалюта (скоро)</span>
+                            </label>
+                            <label class="delivery-option">
+                                <input type="radio" name="sale-order-page-payment-method" value="cash">
+                                <span>💵 Наличные при получении</span>
+                            </label>
+                        </div>
+                        <p style="font-size: 12px; color: var(--text-hint); margin-top: 8px;">💡 Онлайн оплата и криптовалюта будут доступны в ближайшее время</p>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button id="sale-order-page-step-3-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
+                        <button id="sale-order-page-step-3-submit" class="reserve-btn" style="flex: 1;">✅ Оформить заказ</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Страница избранного -->
         <div id="favorites-page" class="favorites-page" style="display: none;">
             <div class="favorites-page-header">
@@ -73,7 +172,7 @@
             </div>
         </div>
         
-        <!-- Страница корзины (отдельная страница вместо модального окна) -->
+        <!-- Старая страница корзины (ОТКЛЮЧЕНА, но сохранена для возможности восстановления) -->
         <div id="cart-page" class="cart-page" style="display: none;">
             <div class="cart-page-header">
                 <button id="cart-page-back" class="cart-page-back">← Назад</button>
@@ -84,6 +183,7 @@
                     <button class="cart-tab active" data-tab="reservations">🔒 Резервации</button>
                     <button class="cart-tab" data-tab="orders">🛒 Заказы</button>
                     <button class="cart-tab" data-tab="purchases">💰 Продажи</button>
+                    <button class="cart-tab" data-tab="sale-orders">🛍️ Покупки</button>
                 </div>
                 
                 <!-- Резервации -->
@@ -127,6 +227,107 @@
                         <!-- История продаж будет здесь -->
                     </div>
                 </div>
+                
+                <!-- Покупки -->
+                <div id="sale-orders-section" class="cart-section" style="display: none;">
+                    <div class="cart-subtabs">
+                        <button class="cart-subtab active" data-subtab="sale-orders-active">Активные</button>
+                        <button class="cart-subtab" data-subtab="sale-orders-history">📜 История</button>
+                    </div>
+                    <div id="sale-orders-items" class="cart-items">
+                        <!-- Активные покупки будут здесь -->
+                    </div>
+                    <div id="sale-orders-history-items" class="cart-items" style="display: none;">
+                        <!-- История покупок будет здесь -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Новая страница корзины -->
+        <div id="cart-page-new" class="cart-page" style="display: none;">
+            <!-- Новое верхнее меню корзины (фиксированное, как футер) -->
+            <div class="cart-new-top-menu">
+                    <button id="cart-page-new-close" class="cart-top-menu-close" aria-label="Закрыть">←</button>
+                    <div class="cart-top-menu-title-container">
+                        <span id="cart-top-menu-count" class="cart-top-menu-count">0 товаров</span>
+                        <h2 class="cart-top-menu-title">Корзина</h2>
+                    </div>
+                    <div class="cart-top-menu-right">
+                        <button id="cart-top-delete-selected" class="cart-top-menu-btn" aria-label="Удалить выбранные" style="display: none;">
+                            <svg viewBox="0 0 24 24" class="cart-top-menu-icon" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                            </svg>
+                        </button>
+                        <label class="cart-top-menu-select-all">
+                            <input type="checkbox" id="cart-top-select-all" checked>
+                            <svg viewBox="0 0 24 24" class="cart-top-menu-icon" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                            </svg>
+                        </label>
+                    </div>
+                </div>
+            <div class="cart-page-content">
+                <!-- Список товаров в корзине -->
+                <div id="cart-new-items" class="cart-new-items">
+                    <div style="padding: 40px 20px; text-align: center; color: var(--text-hint, #999);">
+                        <p style="font-size: 18px; margin-bottom: 8px;">🛒</p>
+                        <p>Корзина пуста</p>
+                    </div>
+                </div>
+                
+                <!-- Блок промокода и итогов -->
+                <div id="cart-new-summary" class="cart-new-summary" style="display: none;">
+                    <!-- Промокод -->
+                    <div class="cart-summary-promo">
+                        <input type="text" id="cart-promo-code" class="cart-promo-input" placeholder="Промокод" enterkeyhint="done" inputmode="text">
+                        <button id="cart-apply-promo" class="cart-promo-btn">Применить</button>
+                    </div>
+                    
+                    <!-- Информация о заказе -->
+                    <div class="cart-summary-info">
+                        <div class="cart-summary-row">
+                            <span class="cart-summary-label">Кол товара</span>
+                            <span id="cart-summary-count" class="cart-summary-value">0 товаров</span>
+                        </div>
+                        <div class="cart-summary-row">
+                            <span class="cart-summary-label">Общая цена без скидки</span>
+                            <span id="cart-summary-original-total" class="cart-summary-value">0₽</span>
+                        </div>
+                        <div class="cart-summary-row cart-summary-discount" id="cart-summary-discount-row" style="display: none;">
+                            <span class="cart-summary-label">Выгода</span>
+                            <span id="cart-summary-discount-info" class="cart-summary-value cart-summary-discount-value">
+                                <span id="cart-summary-discount-percent"></span>
+                                <span id="cart-summary-discount-amount"></span>
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <!-- Разделитель -->
+                    <div class="cart-summary-divider"></div>
+                    
+                    <!-- Итого -->
+                    <div class="cart-summary-total">
+                        <div class="cart-summary-total-row">
+                            <span class="cart-summary-total-label">Цена по карте</span>
+                            <span id="cart-summary-total-card" class="cart-summary-total-value cart-summary-total-green">0₽</span>
+                        </div>
+                        <div class="cart-summary-total-row">
+                            <span class="cart-summary-total-label">Цена наличными</span>
+                            <span class="cart-summary-total-value">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Статичная кнопка оформления заказа (закреплена внизу) -->
+            <div id="cart-new-footer" class="cart-new-footer" style="display: none;">
+                <button id="cart-new-checkout-btn" class="cart-checkout-btn">
+                    <span id="cart-footer-count-text" class="cart-checkout-count">0 товаров</span>
+                    <span class="cart-checkout-label">к оформлению</span>
+                    <span id="cart-footer-total-amount" class="cart-checkout-price">0₽</span>
+                    <span id="cart-footer-old-price" class="cart-checkout-old-price" style="display: none;"></span>
+                </button>
             </div>
         </div>
         
@@ -138,45 +339,23 @@
             <div class="admin-page-content">
                 <div id="admin-tabs-info" style="display: none;"></div>
                 <div class="admin-tabs">
-                    <button class="admin-tab active" data-tab="stats">
-                        <span style="font-size: 18px;">📊</span>
-                        <span>Статистика</span>
-                    </button>
-                    <button class="admin-tab" data-tab="orders">
-                        <span style="font-size: 18px;">🛒</span>
-                        <span>Заказы</span>
-                    </button>
-                    <button class="admin-tab" data-tab="reservations">
-                        <span style="font-size: 18px;">🔒</span>
-                        <span>Резервации</span>
+                    <button class="admin-tab active" data-tab="clients">
+                        <span style="font-size: 18px;">👥</span>
+                        <span>Клиенты</span>
                     </button>
                     <button class="admin-tab" data-tab="sold">
                         <span style="font-size: 18px;">✅</span>
                         <span>Проданные</span>
                     </button>
-                    <button class="admin-tab" data-tab="purchases">
-                        <span style="font-size: 18px;">💰</span>
-                        <span>Покупки</span>
-                    </button>
-                    <button class="admin-tab" data-tab="clients">
-                        <span style="font-size: 18px;">👥</span>
-                        <span>Клиенты</span>
+                    <button class="admin-tab" data-tab="stats">
+                        <span style="font-size: 18px;">📊</span>
+                        <span>Статистика</span>
                     </button>
                 </div>
                 <div class="admin-modal-body">
-                    <div id="admin-tab-stats" class="admin-tab-content active">
-                        <div id="stats-content" class="stats-content">
-                            <p class="loading">Загрузка статистики...</p>
-                        </div>
-                    </div>
-                    <div id="admin-tab-orders" class="admin-tab-content">
-                        <div id="orders-list" class="orders-list">
-                            <p class="loading">Загрузка заказов...</p>
-                        </div>
-                    </div>
-                    <div id="admin-tab-reservations" class="admin-tab-content">
-                        <div id="reservations-list" class="reservations-list">
-                            <p class="loading">Загрузка резерваций...</p>
+                    <div id="admin-tab-clients" class="admin-tab-content active">
+                        <div id="clients-list" class="clients-list">
+                            <p class="loading">Загрузка клиентов...</p>
                         </div>
                     </div>
                     <div id="admin-tab-sold" class="admin-tab-content">
@@ -184,14 +363,9 @@
                             <p class="loading">Загрузка истории продаж...</p>
                         </div>
                     </div>
-                    <div id="admin-tab-purchases" class="admin-tab-content">
-                        <div id="purchases-list" class="purchases-list">
-                            <p class="loading">Загрузка заявок на покупку...</p>
-                        </div>
-                    </div>
-                    <div id="admin-tab-clients" class="admin-tab-content">
-                        <div id="clients-list" class="clients-list">
-                            <p class="loading">Загрузка клиентов...</p>
+                    <div id="admin-tab-stats" class="admin-tab-content">
+                        <div id="stats-content" class="stats-content">
+                            <p class="loading">Загрузка статистики...</p>
                         </div>
                     </div>
                 </div>
@@ -326,6 +500,103 @@
                 <div style="display: flex; gap: 12px; margin-top: 12px;">
                     <button id="order-step-3-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
                     <button id="order-step-3-submit" class="reserve-btn" style="flex: 1;">✅ Оформить заказ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно для оформления заказа на покупку (когда мы продаем товар клиенту) -->
+    <div id="sale-order-modal" class="modal">
+        <div class="modal-content reservation-modal-content order-form-modal">
+            <span class="modal-close sale-order-close">&times;</span>
+            <h2 class="reservation-title">🛒 Оформление заказа</h2>
+            
+            <!-- Шаг 1: Промокод и количество -->
+            <div id="sale-order-step-1" class="order-step active">
+                <div class="order-product-summary" id="sale-order-product-summary"></div>
+                <div class="order-form-field">
+                    <label for="sale-order-promo-code">Промокод (если есть):</label>
+                    <input type="text" id="sale-order-promo-code" placeholder="Введите промокод" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="sale-order-quantity">Количество:</label>
+                    <input type="number" id="sale-order-quantity" min="1" value="1" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    <div id="sale-order-total" class="order-total"></div>
+                </div>
+                <button id="sale-order-step-1-next" class="reserve-btn" style="width: 100%; margin-top: 12px;">Продолжить →</button>
+            </div>
+            
+            <!-- Шаг 2: Личные данные -->
+            <div id="sale-order-step-2" class="order-step">
+                <div class="order-form-field">
+                    <label for="sale-order-first-name">Имя <span style="color: red;">*</span>:</label>
+                    <input type="text" id="sale-order-first-name" required placeholder="Введите имя" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="sale-order-last-name">Фамилия <span style="color: red;">*</span>:</label>
+                    <input type="text" id="sale-order-last-name" required placeholder="Введите фамилию" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="sale-order-phone">Номер телефона <span style="color: red;">*</span>:</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="sale-order-phone-country-code" style="flex: 0 0 100px; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                            <option value="+7">+7</option>
+                            <option value="+1">+1</option>
+                            <option value="+44">+44</option>
+                        </select>
+                        <input type="tel" id="sale-order-phone-number" required placeholder="Введите номер телефона" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                </div>
+                <div class="order-form-field">
+                    <label for="sale-order-email">Почта:</label>
+                    <input type="email" id="sale-order-email" placeholder="Введите email" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                </div>
+                <div class="order-form-field">
+                    <label for="sale-order-notes">Примечание:</label>
+                    <textarea id="sale-order-notes" rows="3" placeholder="Дополнительная информация" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical;"></textarea>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 12px;">
+                    <button id="sale-order-step-2-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
+                    <button id="sale-order-step-2-next" class="reserve-btn" style="flex: 1;">Продолжить →</button>
+                </div>
+            </div>
+            
+            <!-- Шаг 3: Способ доставки и оплата -->
+            <div id="sale-order-step-3" class="order-step">
+                <div class="order-form-field">
+                    <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ получения:</label>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <label class="delivery-option">
+                            <input type="radio" name="sale-delivery-method" value="delivery" checked>
+                            <span>🚚 Доставка</span>
+                        </label>
+                        <label class="delivery-option">
+                            <input type="radio" name="sale-delivery-method" value="pickup">
+                            <span>🏪 Самовывоз</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="order-form-field">
+                    <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ оплаты:</label>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <label class="delivery-option">
+                            <input type="radio" name="sale-payment-method" value="online" checked>
+                            <span>💳 Онлайн оплата (скоро)</span>
+                        </label>
+                        <label class="delivery-option">
+                            <input type="radio" name="sale-payment-method" value="crypto">
+                            <span>₿ Криптовалюта (скоро)</span>
+                        </label>
+                        <label class="delivery-option">
+                            <input type="radio" name="sale-payment-method" value="cash">
+                            <span>💵 Наличные при получении</span>
+                        </label>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-hint); margin-top: 8px;">💡 Онлайн оплата и криптовалюта будут доступны в ближайшее время</p>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 12px;">
+                    <button id="sale-order-step-3-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
+                    <button id="sale-order-step-3-submit" class="reserve-btn" style="flex: 1;">✅ Оформить заказ</button>
                 </div>
             </div>
         </div>
@@ -542,6 +813,18 @@
                         </div>
                         <label class="toggle-switch">
                             <input type="checkbox" id="edit-made-to-order">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="edit-product-field" id="edit-sale-enabled-field">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label for="edit-sale-enabled" style="margin-bottom: 0;">Продажа</label>
+                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Если включено, клиенты смогут купить этот товар</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="edit-sale-enabled">
                             <span class="toggle-slider"></span>
                         </label>
                     </div>

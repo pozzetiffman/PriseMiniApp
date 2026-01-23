@@ -682,7 +682,7 @@ export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMade
 // ========== REFACTORING STEP 5.6: updateProductQuantityShowEnabledAPI() ==========
 // НОВЫЙ КОД (используется сейчас)
 // Реэкспорт для обратной совместимости
-export { updateProductHiddenAPI, updateProductQuantityShowEnabledAPI } from './api/products_update.js';
+export { updateProductHiddenAPI, updateProductQuantityShowEnabledAPI, updateProductSaleEnabledAPI } from './api/products_update.js';
 
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 /*
@@ -1451,6 +1451,16 @@ export async function getAllPurchasesAPI(shopOwnerId) {
 // НОВЫЙ КОД (реэкспорт для обратной совместимости)
 export { getAllPurchasesAPI } from './api/purchases.js';
 // ========== END REFACTORING STEP 9.5 ==========
+
+// ========== SALE ORDERS: Реэкспорт всех функций sale_orders для обратной совместимости ==========
+// ВАЖНО: Все функции реэкспортируются из одного модуля для избежания проблем с порядком загрузки
+export {
+    cancelSaleOrderAPI,
+    createSaleOrderAPI,
+    getMySaleOrdersAPI,
+    getSaleOrdersHistoryAPI
+} from './api/sale_orders.js';
+// ========== END SALE ORDERS ==========
 
 // ========== REFACTORING STEP 9.6: updatePurchaseStatusAPI() ==========
 // СТАРЫЙ КОД (закомментирован, перенесен в api/purchases.js)

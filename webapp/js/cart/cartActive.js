@@ -11,6 +11,9 @@ import { getMyOrdersAPI } from '../api/orders.js';
 // НОВЫЙ ИМПОРТ из модуля api/purchases.js
 import { getMyPurchasesAPI } from '../api/purchases.js';
 // ========== END REFACTORING STEP 9.2 ==========
+// ========== SALE ORDERS: getMySaleOrdersAPI() ==========
+import { getMySaleOrdersAPI } from '../api/sale_orders.js';
+// ========== END SALE ORDERS ==========
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 // import { API_BASE, fetchUserReservations, getBaseHeadersNoAuth, getMyOrdersAPI, getMyPurchasesAPI } from '../api.js';
 // ========== END REFACTORING STEP 8 ==========
@@ -471,3 +474,123 @@ export async function loadPurchases() {
 }
 // ========== END REFACTORING STEP 5.3 ==========
 
+// ========== SALE ORDERS: loadSaleOrders() ==========
+/**
+ * Загрузка активных заказов на покупку в корзину
+ * Отображает список активных заказов на покупку текущего пользователя
+ */
+export async function loadSaleOrders() {
+    console.log('📦 [SALE ORDER] loadSaleOrders: Starting...');
+    const saleOrdersItems = findCartElement('sale-orders-items');
+    if (!saleOrdersItems) {
+        console.error('❌ [SALE ORDER] loadSaleOrders: sale-orders-items element not found');
+        return;
+    }
+    
+    saleOrdersItems.innerHTML = '<p class="loading">Загрузка заказов на покупку...</p>';
+    
+    try {
+        console.log('📦 [SALE ORDER] loadSaleOrders: Fetching sale orders from API...');
+        const allSaleOrders = await getMySaleOrdersAPI();
+        console.log('📦 [SALE ORDER] loadSaleOrders: Got sale orders:', allSaleOrders ? allSaleOrders.length : 0);
+        
+        if (!allSaleOrders || allSaleOrders.length === 0) {
+            saleOrdersItems.innerHTML = '<p class="loading">У вас нет заказов на покупку</p>';
+            return;
+        }
+        
+        // Фильтруем только активные заказы на покупку (не завершенные и не отмененные)
+        const activeSaleOrders = allSaleOrders.filter(o => !o.is_completed && !o.is_cancelled);
+        console.log(`📦 [SALE ORDER] loadSaleOrders: Filtered to ${activeSaleOrders.length} active sale orders from ${allSaleOrders.length} total`);
+        
+        if (activeSaleOrders.length === 0) {
+            saleOrdersItems.innerHTML = '<p class="loading">У вас нет активных заказов на покупку</p>';
+            return;
+        }
+        
+        // Рендерим список заказов на покупку
+        saleOrdersItems.innerHTML = '';
+        for (const saleOrder of activeSaleOrders) {
+            try {
+                // Используем информацию о товаре из saleOrder.product (если есть)
+                let product = saleOrder.product;
+                
+                // Fallback: если product не пришел, загружаем по product_id
+                if (!product && saleOrder.product_id) {
+                    const productUrl = `${API_BASE}/api/products/${saleOrder.product_id}`;
+                    const productResponse = await fetch(productUrl, {
+                        headers: getBaseHeadersNoAuth()
+                    });
+                    
+                    if (!productResponse.ok) {
+                        console.warn(`📦 [SALE ORDER] loadSaleOrders: Failed to fetch product ${saleOrder.product_id}:`, productResponse.status);
+                        continue;
+                    }
+                    
+                    product = await productResponse.json();
+                }
+                
+                if (!product || !product.name) {
+                    console.warn('📦 [SALE ORDER] loadSaleOrders: Sale order missing valid product:', saleOrder.id);
+                    continue;
+                }
+                
+                // Использование импортированных функций из утилит
+                const imageUrl = getProductImageUrl(product, API_BASE);
+                const priceDisplay = getProductPriceDisplay(product);
+                
+                const saleOrderItem = document.createElement('div');
+                saleOrderItem.className = 'cart-item';
+                
+                const imageContainer = createImageContainer(imageUrl, product.name, '[SALE ORDERS IMG]');
+                
+                // Статус заказа
+                let statusText = '';
+                let statusColor = '';
+                if (saleOrder.is_completed) {
+                    statusText = '✅ Выполнен';
+                    statusColor = '#4CAF50';
+                } else if (saleOrder.is_cancelled) {
+                    statusText = '❌ Отменен';
+                    statusColor = '#F44336';
+                } else {
+                    statusText = '⏳ В обработке';
+                    statusColor = '#FFA500';
+                }
+                
+                // Показываем кнопку отмены только для активных заказов (не завершенных и не отмененных)
+                const cancelButton = (!saleOrder.is_completed && !saleOrder.is_cancelled) 
+                    ? `<div class="cart-item-actions">
+                        <button class="cancel-order-btn" onclick="window.cancelSaleOrderFromCart(${saleOrder.id})" title="Отменить заказ на покупку">Отмена</button>
+                       </div>`
+                    : '';
+                
+                // Форматирование даты через импортированную функцию
+                const dateText = formatDateToMoscow(saleOrder.created_at);
+                
+                saleOrderItem.innerHTML = `
+                    <div class="cart-item-info">
+                        <h3>${product.name}</h3>
+                        <p class="cart-item-price">${priceDisplay} × ${saleOrder.quantity} шт.</p>
+                        <p class="cart-item-time" style="color: ${statusColor};">${statusText}</p>
+                        ${dateText ? `<p style="font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px;">📅 ${dateText}</p>` : ''}
+                    </div>
+                    ${cancelButton}
+                `;
+                
+                saleOrderItem.insertBefore(imageContainer, saleOrderItem.firstChild);
+                saleOrdersItems.appendChild(saleOrderItem);
+            } catch (e) {
+                console.error('❌ [SALE ORDER] Error loading sale order item:', e);
+            }
+        }
+        
+        if (saleOrdersItems.children.length === 0) {
+            saleOrdersItems.innerHTML = '<p class="loading">Не удалось загрузить заказы на покупку</p>';
+        }
+    } catch (error) {
+        console.error('❌ [SALE ORDER] Error loading sale orders:', error);
+        saleOrdersItems.innerHTML = `<p class="loading">Ошибка загрузки: ${error.message}</p>`;
+    }
+}
+// ========== END SALE ORDERS ==========

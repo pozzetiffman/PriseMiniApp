@@ -1,7 +1,9 @@
 // Главный файл приложения - инициализация и координация модулей
 import { initAdmin, loadShopSettings, openAdmin } from './admin.js';
 import { getContext } from './api.js';
-import { initCart, loadCart, loadOrders, loadPurchases, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
+import { API_BASE } from './api/config.js';
+import { initCart, loadCart, loadOrders, loadPurchases, loadSaleOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
+import { initCartNew, updateCartButtonCount } from './cart/cartNew.js';
 import { initSettingsModal, openSettings } from './handlers/admin_settings_modal.js';
 import { initProfile, setupProfileButton } from './profile.js';
 import { getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
@@ -16,12 +18,16 @@ import {
 } from './categories.js';
 // Импорт функций рендеринга товаров из отдельного модуля (рефакторинг)
 import { initProductsDependencies, renderProducts, showProductModal } from './products.js';
+// Импорт функции закрытия страницы товара
+import { closeProductPage } from './handlers/products_modal.js';
 // Импорт функций редактирования товаров из отдельного модуля (рефакторинг)
 import { deleteProduct, initProductEditDependencies, markAsSold, showEditProductModal, showSellModal } from './product-edit.js';
 // Импорт функций резерваций из отдельного модуля (рефакторинг)
 import { cancelReservation, initReservationsDependencies, showReservationModal } from './reservations.js';
 // Импорт функций заказов из отдельного модуля (рефакторинг)
 import { initOrdersDependencies, showOrderModal } from './orders.js';
+// Импорт функций заказов на покупку из отдельного модуля
+import { initSaleOrdersDependencies, showSaleOrderModal } from './sale_orders.js';
 // Импорт функций продаж из отдельного модуля (рефакторинг)
 import { initPurchasesDependencies, showPurchaseModal } from './purchases.js';
 // Импорт функций фильтров из отдельного модуля (рефакторинг)
@@ -70,6 +76,7 @@ const reservationModal = document.getElementById('reservation-modal');
 const reservationClose = document.querySelector('.reservation-close');
 const orderModal = document.getElementById('order-modal');
 const orderClose = document.querySelector('.order-close');
+const saleOrderPage = document.getElementById('sale-order-page');
 const sellModal = document.getElementById('sell-modal');
 const sellClose = document.querySelector('.sell-close');
 
@@ -331,7 +338,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         cancelReservation: cancelReservation,
         showPurchaseModal: showPurchaseModal,
         showReservationModal: showReservationModal,
-        showOrderModal: showOrderModal
+        showOrderModal: showOrderModal,
+        showSaleOrderModal: showSaleOrderModal
     });
     
     // 4.4 Инициализируем зависимости для модуля резерваций
@@ -355,6 +363,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadData: loadData, // Функция для загрузки данных
         updateCartUI: updateCartUI, // Функция для обновления корзины
         loadOrders: loadOrders // Функция для загрузки заказов
+    });
+    
+    // 4.5.1 Инициализируем зависимости для модуля заказов на покупку
+    initSaleOrdersDependencies({
+        appContextGetter: () => appContext, // Функция-геттер для получения appContext
+        allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
+        saleOrderPage: saleOrderPage, // DOM элемент страницы заказа на покупку
+        loadData: loadData, // Функция для загрузки данных
+        updateCartUI: updateCartUI, // Функция для обновления корзины
+        loadSaleOrders: loadSaleOrders, // Функция для загрузки заказов на покупку
+        closeProductPage: closeProductPage // Функция для закрытия страницы товара
     });
     
     // 4.6 Инициализируем зависимости для модуля продаж
@@ -397,7 +416,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('[APP INIT] Debug mode: using shopOwnerId from debug_user:', shopOwnerId);
         }
         
+        console.log('📡 [APP] Calling getContext with shopOwnerId:', shopOwnerId);
+        console.log('📡 [APP] API_BASE:', API_BASE);
         appContext = await getContext(shopOwnerId);
+        console.log('✅ [APP] Context loaded successfully:', appContext);
         
         if (!appContext) {
             throw new Error('Context is null after loading');
@@ -499,6 +521,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 7. Инициализируем корзину
     setupCartButton();
     initCart();
+    // Инициализируем новую корзину (старая отключена, но сохранена)
+    initCartNew();
+    // Добавляем updateCartButtonCount в window для доступа из других модулей
+    window.updateCartButtonCount = updateCartButtonCount;
+    // Обновляем счетчик корзины при инициализации
+    updateCartButtonCount();
     
     // 8. Загружаем настройки магазина
     if (appContext.role === 'owner') {
@@ -621,20 +649,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     // КРИТИЧНО: Обновление корзины происходит ТОЛЬКО после полной загрузки данных
     // чтобы не блокировать инициализацию приложения
     setTimeout(async () => {
-        console.log('[APP INIT] Step 11: Updating cart UI after data load...');
+        console.log('[APP INIT] Step 11: Updating cart button count after data load...');
         try {
-            await updateCartUI();
-            console.log('[APP INIT] Step 11: Cart UI updated successfully');
+            // Обновляем счетчик корзины из новой корзины
+            updateCartButtonCount();
+            console.log('[APP INIT] Step 11: Cart button count updated successfully');
             
-            // Запускаем периодическое обновление корзины (каждые 30 секунд)
+            // Запускаем периодическое обновление счетчика корзины (каждые 30 секунд)
             // Это делается здесь, а не в initCart(), чтобы не блокировать инициализацию
             setInterval(() => {
-                updateCartUI().catch(err => {
-                    console.warn('⚠️ Error in periodic cart update:', err);
-                });
+                updateCartButtonCount();
             }, 30000);
         } catch (e) {
-            console.error('❌ Error updating cart:', e);
+            console.error('❌ Error updating cart button count:', e);
         }
     }, 1000); // Запускаем через 1 секунду после загрузки данных
     

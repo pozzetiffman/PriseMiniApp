@@ -3,7 +3,7 @@
 
 import { getCurrentShopSettings, loadShopSettings } from './admin.js';
 import { API_BASE, fetchCategories, fetchProducts, getShopSettings, trackShopVisit } from './api.js';
-import { updateCartUI } from './cart.js';
+import { updateCartButtonCount } from './cart/cartNew.js';
 import { renderCategories } from './categories.js';
 import { applyFilters, updateProductFilterOptions } from './filters.js';
 
@@ -25,13 +25,13 @@ export function initDataDependencies(dependencies) {
 
 // Загрузка данных (категории и товары)
 export async function loadData() {
-    console.log('🚀 loadData() called');
+    console.log('🚀 [DATA] loadData() called');
     
     const appContext = appContextGetter ? appContextGetter() : null;
-    console.log('🚀 appContext:', appContext);
+    console.log('🚀 [DATA] appContext:', appContext);
     
     if (!appContext) {
-        console.error('❌ loadData: appContext is null!');
+        console.error('❌ [DATA] loadData: appContext is null!');
         if (productsGridElement) {
             productsGridElement.innerHTML = '<p class="loading">Ошибка: контекст не загружен</p>';
         }
@@ -217,8 +217,8 @@ export async function loadData() {
         
         // Обновляем корзину
         console.log('🛒 Step 3: Updating cart...');
-        await updateCartUI();
-        console.log('✅ Step 3 complete: Cart updated');
+        updateCartButtonCount();
+        console.log('✅ Step 3 complete: Cart button count updated');
         
         console.log('✅✅✅ loadData() completed successfully!');
     } catch (e) {

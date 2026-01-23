@@ -99,7 +99,7 @@ export function createAdminModal() {
             ${!tabsInfoHidden ? `
             <div class="admin-tabs-info" id="admin-tabs-info" style="position: relative; padding: 10px 40px 10px 16px; font-size: 12px; color: var(--tg-theme-hint-color, #999); text-align: center; background: rgba(90, 200, 250, 0.1); border-radius: 8px; margin: 12px 16px 12px 16px; border: 1px solid rgba(90, 200, 250, 0.2); line-height: 1.4;">
                 <button class="admin-tabs-info-close" style="position: absolute; top: 50%; right: 8px; transform: translateY(-50%); background: transparent; border: none; color: var(--tg-theme-hint-color, #999); font-size: 18px; cursor: pointer; padding: 4px 8px; line-height: 1; opacity: 0.7; transition: opacity 0.2s;" title="Скрыть">×</button>
-                💡 <strong style="color: var(--tg-theme-text-color, #fff);">Адаптивные вкладки:</strong> показываются только при наличии данных. Пустые вкладки (Заказы, Резервации, Проданные, Покупки) скрываются автоматически.
+                💡 <strong style="color: var(--tg-theme-text-color, #fff);">Адаптивные вкладки:</strong> показываются только при наличии данных. Пустая вкладка (Проданные) скрывается автоматически.
             </div>
             ` : ''}
             <div class="admin-tabs">
@@ -181,9 +181,8 @@ export function createAdminModal() {
 // ========== REFACTORING STEP 2.5: updateAdminTabsVisibility ==========
 /**
  * Проверка наличия данных и обновление видимости вкладок админки
- * Проверяет наличие активных элементов и истории для каждой секции (orders, reservations, sold, purchases)
- * и обновляет видимость соответствующих вкладок
- * @returns {Promise<{hasOrders: boolean, hasReservations: boolean, hasSold: boolean, hasPurchases: boolean}>} Объект с информацией о наличии данных
+ * Проверяет наличие проданных товаров и обновляет видимость соответствующей вкладки
+ * @returns {Promise<{hasSold: boolean}>} Объект с информацией о наличии данных
  */
 export async function updateAdminTabsVisibility() {
     console.log('📊 updateAdminTabsVisibility: Checking data availability...');
@@ -193,7 +192,7 @@ export async function updateAdminTabsVisibility() {
         const tabs = document.querySelectorAll('.admin-tab');
         if (!tabs || tabs.length === 0) {
             console.warn('⚠️ Admin tabs not found in DOM yet, skipping visibility update');
-            return { hasOrders: true, hasReservations: true, hasSold: true, hasPurchases: true };
+            return { hasSold: true };
         }
         
         // Получаем shop_owner_id из глобального appContext
@@ -208,75 +207,7 @@ export async function updateAdminTabsVisibility() {
         
         if (!shopOwnerId) {
             console.warn('⚠️ Cannot determine shop_owner_id, showing all tabs');
-            return { hasOrders: true, hasReservations: true, hasSold: true, hasPurchases: true };
-        }
-        
-        // Проверяем заказы (активные + история)
-        let hasOrders = false;
-        try {
-            const { getShopOrdersAPI } = await import('../api/orders.js');
-            const allOrders = await getShopOrdersAPI();
-            
-            const activeCount = (allOrders || []).filter(o => !o.is_completed && !o.is_cancelled).length;
-            const historyCount = (allOrders || []).filter(o => o.is_completed === true || o.is_cancelled === true).length;
-            
-            hasOrders = activeCount > 0 || historyCount > 0;
-            console.log(`📊 Orders: ${activeCount} active, ${historyCount} history, hasData: ${hasOrders}`);
-        } catch (e) {
-            console.warn('⚠️ Failed to check orders:', e);
-        }
-        
-        // Проверяем резервации (активные + история)
-        let hasReservations = false;
-        try {
-            const { API_BASE, getBaseHeaders } = await import('../api/config.js');
-            const response = await fetch(`${API_BASE}/api/reservations/user/me`, {
-                headers: getBaseHeaders()
-            });
-            
-            if (response.ok) {
-                const allReservations = await response.json();
-                const now = new Date();
-                
-                const activeCount = (allReservations || []).filter(r => {
-                    const isActive = r.is_active === true || r.is_active === "true" || r.is_active === 1;
-                    if (!isActive) return false;
-                    
-                    if (!r.reserved_until) return false;
-                    
-                    let reservedUntilStr = r.reserved_until;
-                    if (!reservedUntilStr.includes('Z') && !reservedUntilStr.includes('+') && !reservedUntilStr.includes('-', 10)) {
-                        reservedUntilStr = reservedUntilStr + 'Z';
-                    }
-                    const reservedUntil = new Date(reservedUntilStr);
-                    
-                    if (isNaN(reservedUntil.getTime())) return false;
-                    
-                    return reservedUntil > now;
-                }).length;
-                
-                const historyCount = (allReservations || []).filter(r => {
-                    const isActive = r.is_active === true || r.is_active === "true" || r.is_active === 1;
-                    if (!isActive) return true;
-                    
-                    if (!r.reserved_until) return true;
-                    
-                    let reservedUntilStr = r.reserved_until;
-                    if (!reservedUntilStr.includes('Z') && !reservedUntilStr.includes('+') && !reservedUntilStr.includes('-', 10)) {
-                        reservedUntilStr = reservedUntilStr + 'Z';
-                    }
-                    const reservedUntil = new Date(reservedUntilStr);
-                    
-                    if (isNaN(reservedUntil.getTime())) return true;
-                    
-                    return reservedUntil <= now;
-                }).length;
-                
-                hasReservations = activeCount > 0 || historyCount > 0;
-                console.log(`📊 Reservations: ${activeCount} active, ${historyCount} history, hasData: ${hasReservations}`);
-            }
-        } catch (e) {
-            console.warn('⚠️ Failed to check reservations:', e);
+            return { hasSold: true };
         }
         
         // Проверяем проданные товары (это уже история)
@@ -290,48 +221,12 @@ export async function updateAdminTabsVisibility() {
             console.warn('⚠️ Failed to check sold products:', e);
         }
         
-        // Проверяем покупки (активные + история)
-        let hasPurchases = false;
-        try {
-            const { getAllPurchasesAPI } = await import('../api/purchases.js');
-            const allPurchases = await getAllPurchasesAPI(shopOwnerId);
-            
-            const activeCount = (allPurchases || []).filter(p => !p.is_completed && !p.is_cancelled).length;
-            const historyCount = (allPurchases || []).filter(p => p.is_completed === true || p.is_cancelled === true).length;
-            
-            hasPurchases = activeCount > 0 || historyCount > 0;
-            console.log(`📊 Purchases: ${activeCount} active, ${historyCount} history, hasData: ${hasPurchases}`);
-        } catch (e) {
-            console.warn('⚠️ Failed to check purchases:', e);
-        }
-        
         // Обновляем видимость вкладок (tabs уже получены выше)
-        const ordersTab = Array.from(tabs).find(tab => tab.dataset.tab === 'orders');
-        const reservationsTab = Array.from(tabs).find(tab => tab.dataset.tab === 'reservations');
         const soldTab = Array.from(tabs).find(tab => tab.dataset.tab === 'sold');
-        const purchasesTab = Array.from(tabs).find(tab => tab.dataset.tab === 'purchases');
         // Статистика всегда показывается
         const statsTab = Array.from(tabs).find(tab => tab.dataset.tab === 'stats');
-        
-        if (ordersTab) {
-            if (hasOrders) {
-                ordersTab.style.display = '';
-                ordersTab.classList.remove('hidden');
-            } else {
-                ordersTab.style.display = 'none';
-                ordersTab.classList.add('hidden');
-            }
-        }
-        
-        if (reservationsTab) {
-            if (hasReservations) {
-                reservationsTab.style.display = '';
-                reservationsTab.classList.remove('hidden');
-            } else {
-                reservationsTab.style.display = 'none';
-                reservationsTab.classList.add('hidden');
-            }
-        }
+        // Клиенты всегда показываются
+        const clientsTab = Array.from(tabs).find(tab => tab.dataset.tab === 'clients');
         
         if (soldTab) {
             if (hasSold) {
@@ -343,20 +238,16 @@ export async function updateAdminTabsVisibility() {
             }
         }
         
-        if (purchasesTab) {
-            if (hasPurchases) {
-                purchasesTab.style.display = '';
-                purchasesTab.classList.remove('hidden');
-            } else {
-                purchasesTab.style.display = 'none';
-                purchasesTab.classList.add('hidden');
-            }
-        }
-        
         // Статистика всегда видима
         if (statsTab) {
             statsTab.style.display = '';
             statsTab.classList.remove('hidden');
+        }
+        
+        // Клиенты всегда видимы
+        if (clientsTab) {
+            clientsTab.style.display = '';
+            clientsTab.classList.remove('hidden');
         }
         
         // Если текущая активная вкладка скрыта, переключаемся на первую доступную
@@ -390,12 +281,12 @@ export async function updateAdminTabsVisibility() {
             }
         }
         
-        console.log(`📊 Tabs visibility updated: Orders=${hasOrders}, Reservations=${hasReservations}, Sold=${hasSold}, Purchases=${hasPurchases}`);
+        console.log(`📊 Tabs visibility updated: Sold=${hasSold}`);
         
-        return { hasOrders, hasReservations, hasSold, hasPurchases };
+        return { hasSold };
     } catch (error) {
         console.error('❌ Error updating admin tabs visibility:', error);
-        return { hasOrders: true, hasReservations: true, hasSold: true, hasPurchases: true }; // По умолчанию показываем все
+        return { hasSold: true }; // По умолчанию показываем все
     }
 }
 // ========== END REFACTORING STEP 2.5 ==========
@@ -424,11 +315,8 @@ export async function openAdmin(dependencies) {
         getShopSettings,
         checkAllProductsMadeToOrder,
         switchAdminTab,
-        loadOrders,
-        loadReservations,
         loadSoldProducts,
         loadStats,
-        loadPurchases,
         loadClients,
         getAdminModal,
         setAdminModal,
@@ -529,23 +417,17 @@ export async function openAdmin(dependencies) {
         tabs.forEach(tab => {
             tab.onclick = () => {
                 switchAdminTab(tab.dataset.tab, {
-                    loadOrders,
-                    loadReservations,
                     loadSoldProducts,
                     loadStats,
-                    loadPurchases,
                     loadClients
                 });
             };
         });
         
         // Сначала переключаемся на вкладку по умолчанию, чтобы админка открылась сразу
-        switchAdminTab('stats', {
-            loadOrders,
-            loadReservations,
+        switchAdminTab('clients', {
             loadSoldProducts,
             loadStats,
-            loadPurchases,
             loadClients
         });
         
@@ -563,11 +445,8 @@ export async function openAdmin(dependencies) {
                 );
                 if (firstVisibleTab) {
                 switchAdminTab(firstVisibleTab.dataset.tab, {
-                    loadOrders,
-                    loadReservations,
                     loadSoldProducts,
                     loadStats,
-                    loadPurchases,
                     loadClients
                 });
                 }
@@ -612,21 +491,16 @@ export function closeAdminPage() {
 // ========== REFACTORING STEP 2.4: switchAdminTab ==========
 /**
  * Переключение вкладок админки
- * @param {string} tabName - Название вкладки ('orders', 'reservations', 'sold', 'stats', 'purchases')
+ * @param {string} tabName - Название вкладки ('sold', 'stats', 'clients')
  * @param {Object} dependencies - Объект с зависимостями
- * @param {Function} dependencies.loadOrders - Функция загрузки заказов
- * @param {Function} dependencies.loadReservations - Функция загрузки резерваций
  * @param {Function} dependencies.loadSoldProducts - Функция загрузки проданных товаров
  * @param {Function} dependencies.loadStats - Функция загрузки статистики
- * @param {Function} dependencies.loadPurchases - Функция загрузки покупок
+ * @param {Function} dependencies.loadClients - Функция загрузки клиентов
  */
 export function switchAdminTab(tabName, dependencies) {
     const {
-        loadOrders,
-        loadReservations,
         loadSoldProducts,
         loadStats,
-        loadPurchases,
         loadClients
     } = dependencies;
     
@@ -750,16 +624,6 @@ export function switchAdminTab(tabName, dependencies) {
         }
     }
     
-    // Если переключились на вкладку "Заказы", загружаем данные
-    if (tabName === 'orders') {
-        loadOrders();
-    }
-    
-    // Если переключились на вкладку "Резервации", загружаем данные
-    if (tabName === 'reservations') {
-        loadReservations();
-    }
-    
     // Если переключились на вкладку "Проданные", загружаем данные
     if (tabName === 'sold') {
         loadSoldProducts();
@@ -769,11 +633,6 @@ export function switchAdminTab(tabName, dependencies) {
     if (tabName === 'stats') {
         // Загружаем статистику (по умолчанию "Все время")
         loadStats();
-    }
-    
-    // Если переключились на вкладку "Покупки", загружаем данные
-    if (tabName === 'purchases') {
-        loadPurchases();
     }
     
     // Если переключились на вкладку "Клиенты", загружаем данные

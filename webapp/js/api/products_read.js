@@ -47,6 +47,20 @@ export async function fetchProducts(shopOwnerId, categoryId = null, botId = null
         });
         
         console.log("✅ Products fetched:", validProducts.length, `(из ${data.length})`);
+        
+        // Логируем информацию о описаниях товаров для отладки
+        if (validProducts.length > 0) {
+            console.log(`[PRODUCTS API DEBUG] Checking descriptions for ${validProducts.length} products:`);
+            validProducts.forEach((prod, index) => {
+                console.log(`[PRODUCTS API DEBUG] Product ${prod.id} (${prod.name}):`, {
+                    hasDescription: !!prod.description,
+                    description: prod.description,
+                    descriptionType: typeof prod.description,
+                    descriptionLength: prod.description ? prod.description.length : 0
+                });
+            });
+        }
+        
         return validProducts;
     } catch (e) {
         console.error("❌ Error fetching products:", e);

@@ -9,9 +9,12 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel, validator
 from ..db import models, database
 from ..utils.telegram_auth import validate_init_data_multi_bot
+from ..utils.product_snapshot import get_product_display_info_from_snapshot
+from ..utils.products_utils import make_full_url
 import os
 import requests
 import re
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -33,6 +36,10 @@ class ClientInfo(BaseModel):
     last_visit: Optional[datetime] = None
     first_visit: Optional[datetime] = None
     active_deals_count: int = 0  # Количество активных сделок (резервации + заказы + покупки)
+    orders_count: int = 0  # Общее количество заказов
+    reservations_count: int = 0  # Общее количество резерваций
+    purchases_count: int = 0  # Общее количество покупок
+    favorites_count: int = 0  # Общее количество избранного
     # Контактная информация из заказов/покупок
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -68,6 +75,8 @@ class ClientDetail(BaseModel):
     history_reservations: List[dict] = []
     history_orders: List[dict] = []
     history_purchases: List[dict] = []
+    # Самые популярные товары (топ-5 по просмотрам)
+    most_viewed_products: List[dict] = []
     # Контактная информация
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -304,6 +313,35 @@ async def get_clients_list(
         
         active_deals_count = active_reservations_count + active_orders_count + active_purchases_count
         
+        # Подсчитываем общее количество заказов, резерваций, покупок и избранного
+        total_orders_count = db.query(func.count(models.Order.id)).filter(
+            and_(
+                models.Order.user_id == shop_owner_id,
+                models.Order.ordered_by_user_id == visitor_id
+            )
+        ).scalar() or 0
+        
+        total_reservations_count = db.query(func.count(models.Reservation.id)).filter(
+            and_(
+                models.Reservation.user_id == shop_owner_id,
+                models.Reservation.reserved_by_user_id == visitor_id
+            )
+        ).scalar() or 0
+        
+        total_purchases_count = db.query(func.count(models.Purchase.id)).filter(
+            and_(
+                models.Purchase.user_id == shop_owner_id,
+                models.Purchase.purchased_by_user_id == visitor_id
+            )
+        ).scalar() or 0
+        
+        total_favorites_count = db.query(func.count(models.Favorite.id)).filter(
+            and_(
+                models.Favorite.shop_owner_id == shop_owner_id,
+                models.Favorite.user_id == visitor_id
+            )
+        ).scalar() or 0
+        
         # Получаем контактную информацию из последнего заказа или покупки
         # Сначала проверяем заказы (более приоритетны)
         last_order = db.query(models.Order).filter(
@@ -359,6 +397,10 @@ async def get_clients_list(
             last_visit=last_visit,
             first_visit=first_visit,
             active_deals_count=active_deals_count,
+            orders_count=total_orders_count,
+            reservations_count=total_reservations_count,
+            purchases_count=total_purchases_count,
+            favorites_count=total_favorites_count,
             first_name=client_first_name,
             last_name=client_last_name,
             middle_name=client_middle_name,
@@ -480,11 +522,32 @@ async def get_client_detail(
     now = datetime.utcnow()
     
     for res in reservations:
-        product = db.query(models.Product).filter(models.Product.id == res.product_id).first()
+        product = None
+        product_name = "Товар удален"
+        is_deleted = False
+        
+        # Сначала пытаемся получить товар из БД
+        if res.product_id:
+            product = db.query(models.Product).filter(models.Product.id == res.product_id).first()
+        
+        # Если товар не найден, пытаемся получить из snapshot
+        if not product and res.snapshot_id:
+            snapshot = db.query(models.UserProductSnapshot).filter(
+                models.UserProductSnapshot.snapshot_id == res.snapshot_id
+            ).first()
+            if snapshot:
+                product_info = get_product_display_info_from_snapshot(snapshot)
+                if product_info and product_info.get("name"):
+                    product_name = product_info.get("name")
+                    is_deleted = True
+        elif product:
+            product_name = product.name
+        
         reservation_data = {
             "id": res.id,
             "product_id": res.product_id,
-            "product_name": product.name if product else "Товар удален",
+            "product_name": product_name,
+            "is_deleted": is_deleted,
             "created_at": res.created_at.isoformat() if res.created_at else None,
             "reserved_until": res.reserved_until.isoformat() if res.reserved_until else None,
             "is_active": res.is_active
@@ -511,11 +574,32 @@ async def get_client_detail(
     history_orders_data = []
     
     for order in orders:
-        product = db.query(models.Product).filter(models.Product.id == order.product_id).first()
+        product = None
+        product_name = "Товар удален"
+        is_deleted = False
+        
+        # Сначала пытаемся получить товар из БД
+        if order.product_id:
+            product = db.query(models.Product).filter(models.Product.id == order.product_id).first()
+        
+        # Если товар не найден, пытаемся получить из snapshot
+        if not product and order.snapshot_id:
+            snapshot = db.query(models.UserProductSnapshot).filter(
+                models.UserProductSnapshot.snapshot_id == order.snapshot_id
+            ).first()
+            if snapshot:
+                product_info = get_product_display_info_from_snapshot(snapshot)
+                if product_info and product_info.get("name"):
+                    product_name = product_info.get("name")
+                    is_deleted = True
+        elif product:
+            product_name = product.name
+        
         order_data = {
             "id": order.id,
             "product_id": order.product_id,
-            "product_name": product.name if product else "Товар удален",
+            "product_name": product_name,
+            "is_deleted": is_deleted,
             "quantity": order.quantity,
             "created_at": order.created_at.isoformat() if order.created_at else None,
             "status": order.status,
@@ -552,11 +636,32 @@ async def get_client_detail(
     history_purchases_data = []
     
     for purchase in purchases:
-        product = db.query(models.Product).filter(models.Product.id == purchase.product_id).first()
+        product = None
+        product_name = "Товар удален"
+        is_deleted = False
+        
+        # Сначала пытаемся получить товар из БД
+        if purchase.product_id:
+            product = db.query(models.Product).filter(models.Product.id == purchase.product_id).first()
+        
+        # Если товар не найден, пытаемся получить из snapshot
+        if not product and purchase.snapshot_id:
+            snapshot = db.query(models.UserProductSnapshot).filter(
+                models.UserProductSnapshot.snapshot_id == purchase.snapshot_id
+            ).first()
+            if snapshot:
+                product_info = get_product_display_info_from_snapshot(snapshot)
+                if product_info and product_info.get("name"):
+                    product_name = product_info.get("name")
+                    is_deleted = True
+        elif product:
+            product_name = product.name
+        
         purchase_data = {
             "id": purchase.id,
             "product_id": purchase.product_id,
-            "product_name": product.name if product else "Товар удален",
+            "product_name": product_name,
+            "is_deleted": is_deleted,
             "created_at": purchase.created_at.isoformat() if purchase.created_at else None,
             "status": purchase.status,
             "is_completed": purchase.is_completed,
@@ -592,14 +697,27 @@ async def get_client_detail(
     
     favorites_data = []
     for fav in favorites:
-        product = db.query(models.Product).filter(models.Product.id == fav.product_id).first()
-        if product:  # Показываем только если товар еще существует
-            favorites_data.append({
-                "id": fav.id,
-                "product_id": fav.product_id,
-                "product_name": product.name,
-                "created_at": fav.created_at.isoformat() if fav.created_at else None
-            })
+        product = None
+        product_name = "Товар удален"
+        is_deleted = False
+        
+        # Сначала пытаемся получить товар из БД
+        if fav.product_id:
+            product = db.query(models.Product).filter(models.Product.id == fav.product_id).first()
+        
+        # Если товар не найден, показываем как удаленный
+        if not product:
+            is_deleted = True
+        else:
+            product_name = product.name
+        
+        favorites_data.append({
+            "id": fav.id,
+            "product_id": fav.product_id,
+            "product_name": product_name,
+            "is_deleted": is_deleted,
+            "created_at": fav.created_at.isoformat() if fav.created_at else None
+        })
     
     # Получаем контактную информацию из последнего заказа и покупки
     # Purchase имеет приоритет для адреса и города, Order - для email и phone_country_code
@@ -650,6 +768,40 @@ async def get_client_detail(
         contact_phone_country_code = last_order.phone_country_code
         contact_email = last_order.email
     
+    # Получаем самые популярные товары (топ-5 по просмотрам)
+    most_viewed_products_query = db.query(
+        models.ShopVisit.product_id,
+        func.count(models.ShopVisit.id).label('view_count'),
+        models.Product.name,
+        models.Product.image_url,
+        models.Product.price
+    ).join(
+        models.Product, models.ShopVisit.product_id == models.Product.id
+    ).filter(
+        and_(
+            models.ShopVisit.shop_owner_id == shop_owner_id,
+            models.ShopVisit.visitor_id == client_id,
+            models.ShopVisit.product_id.isnot(None)
+        )
+    ).group_by(
+        models.ShopVisit.product_id,
+        models.Product.name,
+        models.Product.image_url,
+        models.Product.price
+    ).order_by(
+        desc('view_count')
+    ).limit(5).all()
+    
+    most_viewed_products_data = []
+    for product_id, view_count, product_name, image_url, price in most_viewed_products_query:
+        most_viewed_products_data.append({
+            "product_id": product_id,
+            "product_name": product_name,
+            "view_count": view_count,
+            "image_url": image_url,
+            "price": float(price) if price else None
+        })
+    
     return ClientDetail(
         user_id=client_id,
         username=username,
@@ -668,6 +820,7 @@ async def get_client_detail(
         history_reservations=history_reservations_data,
         history_orders=history_orders_data,
         history_purchases=history_purchases_data,
+        most_viewed_products=most_viewed_products_data,
         first_name=contact_first_name,
         last_name=contact_last_name,
         middle_name=contact_middle_name,

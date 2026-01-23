@@ -586,13 +586,9 @@ async def get_my_orders(
         if not has_snapshot and not has_product_id:
             continue
         
-        # Если есть product_id, проверяем, существует ли товар
-        if has_product_id:
-            product = db.query(models.Product).filter(models.Product.id == order.product_id).first()
-            if not product:
-                continue
-        # Если есть только snapshot (без product_id), проверяем, что snapshot содержит валидную информацию
-        elif has_snapshot:
+        # ВАЖНО: Если есть snapshot, заказ должен отображаться, даже если товар был удален
+        # Snapshot как раз и нужен для сохранения информации о товаре на момент заказа
+        if has_snapshot:
             snapshot = db.query(models.UserProductSnapshot).filter(
                 models.UserProductSnapshot.snapshot_id == order.snapshot_id
             ).first()
@@ -604,19 +600,13 @@ async def get_my_orders(
             if not product_info or not product_info.get("name"):
                 continue
             
-            # КРИТИЧНО: Проверяем, существует ли товар из snapshot в БД и доступен ли он
-            # Если товар был удален (snapshot.product_id == None) или товар скрыт - не показываем в активной корзине
-            if snapshot.product_id:
-                product = db.query(models.Product).filter(models.Product.id == snapshot.product_id).first()
-                if not product:
-                    continue
-                if product.is_hidden:
-                    continue
-            else:
-                # Товар был удален (product_id в snapshot стал NULL)
-                continue
-        
-        valid_orders.append(order)
+            # Если есть snapshot с валидными данными, заказ отображается независимо от наличия товара в БД
+            valid_orders.append(order)
+        # Если нет snapshot, но есть product_id, проверяем, существует ли товар
+        elif has_product_id:
+            product = db.query(models.Product).filter(models.Product.id == order.product_id).first()
+            if product:
+                valid_orders.append(order)
     
     # Формируем ответ с информацией о товаре из snapshot или из продукта
     result = []

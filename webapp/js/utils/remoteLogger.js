@@ -226,37 +226,31 @@ export function initRemoteLogger() {
     const originalInfo = console.info;
     
     if (!enabled && forceRemoteLog !== '1' && forceRemoteLog !== 'true') {
-        // Используем оригинальный console.log, чтобы не попасть в рекурсию
-        originalLog('📡 Remote logging disabled (debug mode or browser). Add ?remote_log=1 to enable.');
+        // В режиме отладки не перехватываем логи
         return;
     }
     
-    // Используем оригинальный console.log для начальных сообщений
-    originalLog('📡 Remote logging enabled - logs will be sent to server');
-    originalLog('📡 To view logs, check backend console or add ?remote_log=1 to URL');
-    originalLog('📡 Debug config:', DEBUG_CONFIG);
-    
-    // Перехватываем console.log
+    // Перехватываем console.log (БЕЗ вывода в консоль браузера)
     console.log = function(...args) {
-        originalLog.apply(console, args);
+        // НЕ вызываем originalLog - логи только на сервер
         addLogToBuffer('log', args);
     };
     
-    // Перехватываем console.error
+    // Перехватываем console.error (БЕЗ вывода в консоль браузера)
     console.error = function(...args) {
-        originalError.apply(console, args);
+        // НЕ вызываем originalError - логи только на сервер
         addLogToBuffer('error', args);
     };
     
-    // Перехватываем console.warn
+    // Перехватываем console.warn (БЕЗ вывода в консоль браузера)
     console.warn = function(...args) {
-        originalWarn.apply(console, args);
+        // НЕ вызываем originalWarn - логи только на сервер
         addLogToBuffer('warn', args);
     };
     
-    // Перехватываем console.info
+    // Перехватываем console.info (БЕЗ вывода в консоль браузера)
     console.info = function(...args) {
-        originalInfo.apply(console, args);
+        // НЕ вызываем originalInfo - логи только на сервер
         addLogToBuffer('info', args);
     };
     

@@ -13,6 +13,7 @@ class ProductBase(BaseModel):
     quantity: int = 0  # Количество товара на складе
     is_made_to_order: bool = False  # Товар под заказ
     is_for_sale: bool = False  # Товар для покупки (с диапазоном цен)
+    is_sale_enabled: bool = False  # Товар доступен для продажи клиентам (когда мы продаем товар)
     price_from: Optional[float] = None  # Цена от (для товаров для покупки с диапазоном)
     price_to: Optional[float] = None  # Цена до (для товаров для покупки с диапазоном)
     price_fixed: Optional[float] = None  # Фиксированная цена покупки (для товаров для покупки с фиксированной ценой)
@@ -68,6 +69,9 @@ class QuantityShowEnabledUpdate(BaseModel):
 
 class HiddenUpdate(BaseModel):
     is_hidden: bool  # Скрыть/показать товар для клиентов
+
+class SaleEnabledUpdate(BaseModel):
+    is_sale_enabled: bool  # Включить/выключить продажу товара клиентам
 
 
 

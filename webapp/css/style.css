@@ -55,6 +55,9 @@ html {
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     position: relative;
+    /* Предотвращаем увеличение страницы при появлении клавиатуры */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 body {
@@ -364,10 +367,10 @@ header h1 {
 
 .cart-button {
     padding: 0 14px;
-    background: linear-gradient(135deg, rgba(76, 175, 80, 0.15) 0%, rgba(76, 175, 80, 0.08) 100%);
+    background: linear-gradient(135deg, rgba(58, 58, 60, 0.75) 0%, rgba(44, 44, 46, 0.65) 100%);
     backdrop-filter: var(--blur-medium);
     -webkit-backdrop-filter: var(--blur-medium);
-    border: 1px solid rgba(76, 175, 80, 0.3);
+    border: 1px solid var(--border-glass);
     border-radius: 16px;
     color: var(--text-primary);
     font-size: 13px;
@@ -375,8 +378,8 @@ header h1 {
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
-    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.15),
-                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    box-shadow: 0 2px 8px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     min-height: 44px;
     height: 44px;
     display: flex;
@@ -391,12 +394,29 @@ header h1 {
     align-self: center;
 }
 
+/* Состояние: есть товары в корзине - зеленое свечение (как у избранного красное) */
+.cart-button.cart-has-items {
+    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(76, 175, 80, 0.15);
+    border-color: rgba(76, 175, 80, 0.4);
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(76, 175, 80, 0.12) 100%);
+}
+
 .cart-button:hover {
-    background: linear-gradient(135deg, rgba(76, 175, 80, 0.25) 0%, rgba(76, 175, 80, 0.15) 100%);
+    background: linear-gradient(135deg, rgba(72, 72, 74, 0.85) 0%, rgba(58, 58, 60, 0.75) 100%);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px var(--shadow-medium),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    transform: translateY(-1px);
+}
+
+.cart-button.cart-has-items:hover {
+    box-shadow: 0 6px 24px rgba(76, 175, 80, 0.35),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+                0 4px 12px rgba(76, 175, 80, 0.25);
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.3) 0%, rgba(76, 175, 80, 0.2) 100%);
     border-color: rgba(76, 175, 80, 0.5);
-    box-shadow: 0 6px 24px rgba(76, 175, 80, 0.25),
-                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
-    transform: translateY(-2px);
 }
 
 .cart-button:active {
@@ -461,17 +481,27 @@ header h1 {
 }
 
 #cart-count {
-    background: linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.7) 100%);
-    color: white;
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.3) 0%, rgba(128, 128, 128, 0.2) 100%);
+    color: rgba(255, 255, 255, 0.5);
     padding: 2px 8px;
     border-radius: 12px;
     font-size: 11px;
     font-weight: 700;
     min-width: 20px;
     text-align: center;
-    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4),
-                0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
     line-height: 1;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Счетчик корзины с товарами - зеленый фон */
+.cart-button.cart-has-items #cart-count,
+button.cart-button.cart-has-items #cart-count,
+#cart-button.cart-has-items #cart-count {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.7) 100%) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset !important;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -481,9 +511,17 @@ header h1 {
 
 .cart-button[style*="display: none"] #cart-count,
 .cart-button:not([style*="display: block"]):not([style*="display: flex"]) #cart-count {
-    background: linear-gradient(135deg, rgba(128, 128, 128, 0.3) 0%, rgba(128, 128, 128, 0.2) 100%);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-    color: rgba(255, 255, 255, 0.5);
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.3) 0%, rgba(128, 128, 128, 0.2) 100%) !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2) !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Убеждаемся, что когда корзина имеет товары, счетчик зеленый */
+.cart-button.cart-has-items:not([style*="display: none"]) #cart-count {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.7) 100%) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset !important;
 }
 
 
@@ -2061,28 +2099,27 @@ header h1 {
     z-index: 1000;
     /* Фон под общий стиль проекта - градиент как в body */
     background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 50%, #1c1c1e 100%);
-    background-attachment: fixed;
+    background-attachment: scroll; /* Изменено с fixed на scroll для предотвращения проблем при прокрутке */
     overflow-y: auto;
     overflow-x: hidden;
     /* Запрещаем горизонтальный скролл */
     max-width: 100vw;
     width: 100%;
-    /* Safe area insets для полноэкранного режима на мобильных */
-    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    /* Safe area insets для полноэкранного режима на мобильных - убираем padding-top, так как меню теперь внутри контента */
+    padding-top: 0; /* Убрали padding-top, чтобы меню было первым элементом */
     padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px));
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-right: env(safe-area-inset-right, 0px);
+    padding-left: 0; /* Убрали padding-left, так как меню имеет свой padding */
+    padding-right: 0; /* Убрали padding-right, так как меню имеет свой padding */
     /* Скрываем scrollbar */
     scrollbar-width: none;
     -ms-overflow-style: none;
-    /* Плавная прокрутка с bounce эффектом */
+    /* Плавная прокрутка */
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
-    /* Разрешаем вертикальный bounce, запрещаем горизонтальный */
-    overscroll-behavior-y: auto;
+    /* Предотвращаем bounce-эффект и серый фон при прокрутке */
+    overscroll-behavior: contain; /* Предотвращает прокрутку родительского элемента и серый фон */
+    overscroll-behavior-y: contain;
     overscroll-behavior-x: none;
-    overscroll-behavior-block: auto;
-    overscroll-behavior-inline: none;
     /* Дополнительная защита от горизонтального скролла */
     touch-action: pan-y;
     /* Плавность прокрутки для iOS */
@@ -2092,7 +2129,7 @@ header h1 {
 /* Декоративный фон для страницы корзины (как в body::before) */
 .cart-page::before {
     content: '';
-    position: fixed;
+    position: absolute; /* Изменено с fixed на absolute для предотвращения проблем при прокрутке */
     top: 0;
     left: 0;
     right: 0;
@@ -2106,6 +2143,184 @@ header h1 {
 
 .cart-page::-webkit-scrollbar {
     display: none;
+}
+
+/* Верхнее меню корзины (фиксированное, остается на месте при прокрутке, как футер) */
+.cart-new-top-menu {
+    display: none; /* По умолчанию скрыто */
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    padding-top: calc(12px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); /* Отступ от системных кнопок Telegram */
+    padding-right: calc(16px + env(safe-area-inset-right, 0px)); /* Отступ справа для системных кнопок */
+    padding-left: calc(16px + env(safe-area-inset-left, 0px)); /* Отступ слева для системных кнопок */
+    margin: 0;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-bottom: 1px solid var(--border-glass);
+    position: fixed; /* Фиксированное позиционирование - остается на месте при прокрутке, как футер */
+    top: 0; /* Фиксируется вверху */
+    left: 0;
+    right: 0;
+    z-index: 400; /* Такой же z-index как у футера */
+    min-height: 56px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+
+/* Показываем меню только когда страница корзины видна */
+#cart-page-new[style*="display: block"] .cart-new-top-menu,
+#cart-page-new[style*="display:flex"] .cart-new-top-menu {
+    display: flex;
+}
+
+.cart-top-menu-close {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+}
+
+.cart-top-menu-close:hover {
+    background: var(--bg-glass-light);
+}
+
+.cart-top-menu-close:active {
+    transform: scale(0.95);
+    background: var(--bg-glass-light);
+}
+
+.cart-top-menu-title-container {
+    position: absolute; /* Абсолютное позиционирование для центрирования */
+    left: 50%;
+    transform: translateX(-50%); /* Центрирование по горизонтали */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px; /* Увеличенный отступ между счетчиком и заголовком */
+    pointer-events: none; /* Чтобы не мешало кликам */
+    z-index: 1;
+}
+
+.cart-top-menu-count {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-hint, #999);
+    opacity: 0.7;
+    line-height: 1;
+    white-space: nowrap;
+    margin-bottom: 0; /* Убран отрицательный отступ */
+}
+
+.cart-top-menu-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.cart-top-menu-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.cart-top-menu-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+}
+
+.cart-top-menu-btn:hover {
+    background: var(--bg-glass-light);
+}
+
+.cart-top-menu-btn:active {
+    transform: scale(0.95);
+    background: var(--bg-glass-light);
+}
+
+.cart-top-menu-icon {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+    stroke: none;
+}
+
+.cart-top-menu-select-all {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    padding: 0;
+    margin: 0;
+}
+
+.cart-top-menu-select-all input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.cart-top-menu-select-all .cart-top-menu-icon {
+    width: 22px;
+    height: 22px;
+    fill: var(--text-primary);
+    stroke: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cart-top-menu-select-all:hover {
+    background: var(--bg-glass-light);
+}
+
+.cart-top-menu-select-all:active {
+    transform: scale(0.95);
+}
+
+.cart-top-menu-select-all input[type="checkbox"]:checked + .cart-top-menu-icon {
+    fill: #5ac8fa;
+    filter: drop-shadow(0 0 4px rgba(90, 200, 250, 0.5));
+}
+
+.cart-top-menu-select-all input[type="checkbox"]:not(:checked) + .cart-top-menu-icon {
+    fill: var(--text-hint);
+    opacity: 0.6;
 }
 
 .cart-page[style*="display: block"],
@@ -2158,13 +2373,13 @@ header h1 {
 }
 
 .cart-page-content {
-    padding: 12px 16px;
-    padding-top: 8px;
+    padding: 0; /* Убираем padding, так как меню теперь фиксированное */
+    padding-top: calc(56px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 12px); /* Отступ сверху для фиксированного меню */
     padding-bottom: calc(20px + var(--tg-safe-area-inset-bottom, 0px));
-    max-width: 600px;
+    max-width: 100%; /* Убрали ограничение max-width, чтобы меню занимало всю ширину */
     width: 100%;
     box-sizing: border-box;
-    margin: 0 auto;
+    margin: 0; /* Убрали margin: 0 auto, чтобы контент занимал всю ширину */
     position: relative;
     z-index: 1;
     /* Запрещаем горизонтальный скролл */
@@ -2198,6 +2413,215 @@ header h1 {
 
 .cart-page[style*="display: block"] {
     animation: cartPageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ========== СТРАНИЦА ОФОРМЛЕНИЯ ПОКУПКИ (отдельная страница вместо модального окна) ========== */
+.sale-order-page {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    /* Фон под общий стиль проекта - градиент как в body */
+    background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 50%, #1c1c1e 100%);
+    background-attachment: fixed;
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Запрещаем горизонтальный скролл */
+    max-width: 100vw;
+    width: 100%;
+    /* Safe area insets для полноэкранного режима на мобильных */
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px));
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    /* Скрываем scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    /* Плавная прокрутка с bounce эффектом */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    /* Разрешаем вертикальный bounce, запрещаем горизонтальный */
+    overscroll-behavior-y: auto;
+    overscroll-behavior-x: none;
+    overscroll-behavior-block: auto;
+    overscroll-behavior-inline: none;
+    /* Дополнительная защита от горизонтального скролла */
+    touch-action: pan-y;
+    /* Плавность прокрутки для iOS */
+    -webkit-scroll-behavior: smooth;
+}
+
+/* Декоративный фон для страницы оформления покупки (как в body::before) */
+.sale-order-page::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(90, 200, 250, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(90, 200, 250, 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.sale-order-page::-webkit-scrollbar {
+    display: none;
+}
+
+.sale-order-page[style*="display: block"],
+.sale-order-page[style*="display:flex"] {
+    display: block !important;
+}
+
+.sale-order-page-header {
+    position: relative;
+    z-index: 100;
+    background: transparent;
+    padding: 8px 16px;
+    padding-top: calc(8px + var(--tg-safe-area-inset-top, 0px));
+    margin-bottom: 4px;
+}
+
+.sale-order-page-back {
+    /* Кнопка как часть контента - двигается вместе со страницей */
+    position: relative;
+    z-index: 101;
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 12px;
+    margin-top: 8px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sale-order-page-back:hover {
+    background: var(--bg-glass);
+    transform: translateX(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.sale-order-page-back:active {
+    transform: translateX(0);
+    background: var(--bg-glass-light);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.sale-order-page-content {
+    padding: 12px 16px;
+    padding-top: 8px;
+    padding-bottom: calc(20px + var(--tg-safe-area-inset-bottom, 0px));
+    max-width: 600px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+    /* Запрещаем горизонтальный скролл */
+    overflow-x: hidden;
+    min-width: 0;
+    /* Плавная прокрутка */
+    scroll-behavior: smooth;
+    -webkit-scroll-behavior: smooth;
+}
+
+.sale-order-page-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    line-height: 1.3;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.sale-order-step {
+    display: none;
+}
+
+.sale-order-step.active {
+    display: block;
+}
+
+.sale-order-product-summary {
+    margin-bottom: 16px;
+}
+
+.sale-order-form-field {
+    margin-bottom: 16px;
+}
+
+.sale-order-form-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.sale-order-total {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-radius: 12px;
+    border: 1px solid var(--border-glass);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.delivery-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-radius: 12px;
+    border: 1px solid var(--border-glass);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.delivery-option:hover {
+    background: var(--bg-glass-light);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.delivery-option input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--tg-theme-button-color);
+}
+
+/* Анимация появления страницы */
+@keyframes saleOrderPageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.sale-order-page[style*="display: block"] {
+    animation: saleOrderPageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Стили для страницы избранного (похожие на cart-page) */
@@ -4121,7 +4545,6 @@ main {
     overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
     /* Предотвращаем перетаскивание на уровне контейнера */
     -webkit-user-drag: none !important;
-    user-drag: none !important;
 }
 
 .stats-section {
@@ -4157,7 +4580,6 @@ main {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     /* Предотвращаем перетаскивание */
     -webkit-user-drag: none !important;
-    user-drag: none !important;
     -webkit-user-select: none;
     user-select: none;
     /* Для будущей функциональности клика */
@@ -4343,7 +4765,6 @@ main {
 .top-product-item {
     /* Убраны все анимации и интерактивность */
     -webkit-user-drag: none !important;
-    user-drag: none !important;
     -webkit-user-select: none;
     user-select: none;
     pointer-events: none;
@@ -4356,7 +4777,6 @@ main {
 .visit-item {
     /* Убраны все анимации и интерактивность */
     -webkit-user-drag: none !important;
-    user-drag: none !important;
     -webkit-user-select: none;
     user-select: none;
     pointer-events: none;
@@ -5098,4 +5518,620 @@ main {
         height: 40px;
         font-size: 18px;
     }
+}
+
+/* Индикатор активных элементов в выпадающих секциях админки */
+.active-indicator-badge {
+    animation: activePulse 2s ease-in-out infinite;
+}
+
+@keyframes activePulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+        box-shadow: 0 0 8px rgba(255, 59, 48, 0.5);
+    }
+    50% {
+        opacity: 0.85;
+        transform: scale(1.08);
+        box-shadow: 0 0 12px rgba(255, 59, 48, 0.7);
+    }
+}
+
+/* ========== НОВАЯ КОРЗИНА ========== */
+
+/* Кнопка корзины на карточке товара */
+.cart-button-card {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    width: 36px;
+    height: 36px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 12;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.cart-button-card:hover {
+    background: rgba(0, 0, 0, 0.85);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.cart-button-card:active {
+    transform: scale(0.95);
+}
+
+.cart-button-card .cart-icon {
+    width: 18px;
+    height: 18px;
+    stroke: #ffffff;
+    fill: none;
+}
+
+/* Панель управления корзиной */
+.cart-new-controls {
+    padding: 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-bottom: 1px solid var(--border-glass);
+    margin-bottom: 8px;
+}
+
+.cart-controls-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.cart-select-all-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.cart-select-all-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.cart-delete-btn {
+    padding: 8px 16px;
+    background: rgba(255, 59, 48, 0.2);
+    border: 1px solid rgba(255, 59, 48, 0.4);
+    border-radius: 8px;
+    color: #ff3b30;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cart-delete-btn:hover {
+    background: rgba(255, 59, 48, 0.3);
+    border-color: rgba(255, 59, 48, 0.6);
+}
+
+.cart-promo-container {
+    display: flex;
+    gap: 8px;
+}
+
+.cart-promo-input {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 16px; /* Минимум 16px предотвращает зум на iOS */
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.cart-promo-input::placeholder {
+    color: var(--text-hint);
+}
+
+.cart-promo-btn {
+    padding: 10px 20px;
+    background: rgba(90, 200, 250, 0.2);
+    border: 1px solid rgba(90, 200, 250, 0.4);
+    border-radius: 8px;
+    color: #5ac8fa;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cart-promo-btn:hover {
+    background: rgba(90, 200, 250, 0.3);
+    border-color: rgba(90, 200, 250, 0.6);
+}
+
+/* Блок промокода и итогов */
+.cart-new-summary {
+    margin: 16px 12px;
+    margin-bottom: 20px; /* Уменьшен отступ снизу */
+    padding: 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    box-shadow: 0 4px 16px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    position: relative; /* Убираем фиксированное позиционирование, если было */
+}
+
+.cart-summary-promo {
+    display: flex;
+    gap: 12px; /* Увеличен gap для лучшего визуального отступа */
+    margin-bottom: 16px;
+    padding: 0;
+    padding-right: 4px; /* Добавляем небольшой отступ справа от края блока */
+    align-items: stretch; /* Выравнивание по высоте */
+}
+
+.cart-summary-promo .cart-promo-input {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 16px; /* Минимум 16px предотвращает зум на iOS */
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.cart-summary-promo .cart-promo-input::placeholder {
+    color: var(--text-hint);
+}
+
+.cart-summary-promo .cart-promo-btn {
+    padding: 10px 12px; /* Уменьшен padding для более компактной кнопки */
+    background: rgba(90, 200, 250, 0.2);
+    border: 1px solid rgba(90, 200, 250, 0.4);
+    border-radius: 8px;
+    color: #5ac8fa;
+    font-size: 13px; /* Немного уменьшен шрифт */
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-width: auto; /* Убираем минимальную ширину */
+    box-sizing: border-box; /* Учитываем padding в размере */
+    margin-right: 0; /* Убираем margin справа, так как gap уже есть */
+}
+
+.cart-summary-promo .cart-promo-btn:hover {
+    background: rgba(90, 200, 250, 0.3);
+    border-color: rgba(90, 200, 250, 0.6);
+}
+
+.cart-summary-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.cart-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+
+.cart-summary-label {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.cart-summary-value {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.cart-summary-discount {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cart-summary-discount-value {
+    color: #ff3b30;
+    font-weight: 600;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.cart-summary-divider {
+    height: 1px;
+    background: var(--border-glass);
+    margin: 12px 0;
+    opacity: 0.5;
+}
+
+.cart-summary-total {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.cart-summary-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 15px;
+}
+
+.cart-summary-total-label {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.cart-summary-total-value {
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.cart-summary-total-green {
+    color: #4caf50;
+}
+
+/* Список товаров в корзине */
+.cart-new-items {
+    padding: 12px 4px 0; /* Отступ сверху такой же как между карточками (12px) */
+    min-height: auto; /* Убрали фиксированную минимальную высоту, чтобы summary был сразу после товаров */
+    max-width: 100%;
+    width: 100%;
+}
+
+.cart-item-card {
+    display: flex;
+    gap: 16px;
+    padding: 20px 24px;
+    min-height: 200px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    margin-bottom: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    align-items: stretch;
+}
+
+.cart-item-card:hover {
+    background: var(--bg-glass-light);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px var(--shadow-light);
+}
+
+.cart-item-checkbox-container {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+}
+
+.cart-item-checkbox {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    accent-color: #5ac8fa;
+}
+
+.cart-item-image-container {
+    width: 140px;
+    height: 100%;
+    min-height: 160px;
+    flex-shrink: 0;
+    align-self: stretch;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg-glass-light);
+    position: relative;
+}
+
+.cart-item-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cart-item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 200px; /* Минимальная ширина для отображения 30 символов */
+    padding-right: 120px; /* Отступ для кнопок количества */
+    flex-grow: 1;
+    max-width: calc(100% - 140px); /* Ширина минус изображение и отступы */
+    overflow: visible; /* Разрешаем переполнение для многострочного текста */
+}
+
+.cart-item-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.cart-item-description {
+    font-size: 11px;
+    color: var(--text-hint);
+    line-height: 1.4;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    opacity: 0.85;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    min-height: 36px !important; /* Минимальная высота для 2 строк (13px * 1.4 * 2 ≈ 36px) */
+    height: auto !important;
+    width: 140px !important; /* Ширина для примерно 17 символов в первой строке при шрифте 13px */
+    max-width: 140px !important;
+    box-sizing: border-box !important;
+}
+
+.cart-item-description:empty {
+    display: none !important;
+}
+
+.cart-item-quantity-controls {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 2px 8px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    z-index: 5;
+}
+
+.cart-quantity-btn {
+    width: 36px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+}
+
+.cart-quantity-btn:hover {
+    background: transparent;
+    transform: scale(1.05);
+    opacity: 0.8;
+}
+
+.cart-quantity-btn:active {
+    transform: scale(0.95);
+}
+
+.cart-quantity-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 24px;
+    text-align: center;
+}
+
+.cart-item-price-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+    margin-bottom: 8px;
+}
+
+.cart-item-old-price {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-hint);
+    text-decoration: line-through;
+    opacity: 0.7;
+    line-height: 1.2;
+}
+
+.cart-item-total-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: #4caf50;
+    line-height: 1.2;
+}
+
+/* Кнопка избранного на фото товара в корзине */
+.cart-item-favorite-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 12;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.cart-item-favorite-btn:hover {
+    background: rgba(0, 0, 0, 0.75);
+    transform: scale(1.1);
+}
+
+.cart-item-favorite-btn:active {
+    transform: scale(0.95);
+}
+
+.cart-item-favorite-btn .cart-favorite-heart {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: #ffffff;
+    stroke-width: 2;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cart-item-favorite-btn.favorite-active .cart-favorite-heart {
+    fill: #ff3b30;
+    stroke: #ff3b30;
+    filter: drop-shadow(0 0 4px rgba(255, 59, 48, 0.6));
+}
+
+/* Футер корзины (закреплен внизу) */
+.cart-new-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    border-top: 1px solid var(--border-glass);
+    padding: 12px 16px; /* Уменьшен padding сверху и снизу */
+    padding-bottom: max(12px, calc(12px + var(--tg-safe-area-inset-bottom, 0px)));
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Уменьшен gap */
+    box-shadow: 0 -8px 32px var(--shadow-glass);
+    opacity: 0.95; /* Добавлена прозрачность для фона */
+}
+
+.cart-checkout-btn {
+    width: 100%;
+    padding: 12px 16px; /* Уменьшен padding для меньшей высоты кнопки */
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.75) 0%, rgba(90, 200, 250, 0.55) 100%); /* Увеличена прозрачность */
+    border: 1px solid rgba(90, 200, 250, 0.4); /* Увеличена прозрачность границы */
+    border-radius: 16px;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(90, 200, 250, 0.25); /* Увеличена прозрачность тени */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.cart-checkout-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: #ffffff;
+    opacity: 0.9;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cart-checkout-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #ffffff;
+    opacity: 0.8;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cart-checkout-price {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cart-checkout-old-price {
+    font-size: 12px;
+    font-weight: 500;
+    color: #ffffff;
+    text-decoration: line-through;
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cart-checkout-btn:hover {
+    background: linear-gradient(135deg, rgba(90, 200, 250, 0.85) 0%, rgba(90, 200, 250, 0.65) 100%); /* Увеличена прозрачность */
+    box-shadow: 0 6px 24px rgba(90, 200, 250, 0.3); /* Увеличена прозрачность тени */
+    transform: translateY(-2px);
+}
+
+.cart-checkout-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Отступ для контента корзины, чтобы футер не перекрывал */
+#cart-page-new .cart-page-content {
+    padding-bottom: 100px; /* Уменьшен отступ, так как summary имеет свой margin-bottom */
+    max-width: 100%;
+    padding-left: 0; /* Убрали padding-left, так как меню имеет свой padding */
+    padding-right: 0; /* Убрали padding-right, так как меню имеет свой padding */
 }

@@ -497,6 +497,54 @@ def update_for_sale(
     }
 
 
+def update_sale_enabled(
+    product_id: int,
+    sale_enabled_update: schemas.SaleEnabledUpdate,
+    user_id: int,
+    db: Session
+):
+    """
+    Обновление статуса 'продажа' для товара (без уведомлений)
+    
+    Args:
+        product_id: ID товара для обновления
+        sale_enabled_update: Данные для обновления статуса "продажа"
+        user_id: ID пользователя (владельца магазина)
+        db: Сессия базы данных
+        
+    Returns:
+        Словарь с результатом обновления
+        
+    Raises:
+        HTTPException: Если товар не найден
+    """
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Обновляем статус 'продажа'
+    db_product.is_sale_enabled = bool(sale_enabled_update.is_sale_enabled)
+    db.flush()
+    
+    # Синхронизируем обновление товара во все боты
+    sync_product_to_all_bots(db_product, db, action="update")
+    
+    db.commit()
+    db.refresh(db_product)
+    
+    # Отладочный вывод
+    print(f"DEBUG: update_sale_enabled - product_id={product_id}, user_id={user_id}, is_sale_enabled={sale_enabled_update.is_sale_enabled}, saved={db_product.is_sale_enabled}")
+    
+    return {
+        "id": db_product.id,
+        "is_sale_enabled": bool(db_product.is_sale_enabled),  # Явное преобразование в bool
+        "message": "Статус 'продажа' обновлен"
+    }
+
+
 def update_quantity_show_enabled(
     product_id: int,
     quantity_show_enabled_update: schemas.QuantityShowEnabledUpdate,

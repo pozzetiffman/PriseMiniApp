@@ -335,7 +335,7 @@ async def get_context(
     else:
         print(f"ℹ️ Context bot_id not set: bot_id={bot_id}, bot_owner_user_id={bot_owner_user_id}")
     
-    print(f"📦 Returning context: viewer_id={viewer_id}, shop_owner_id={shop_owner_id}, role={role}, bot_id={context_bot_id}")
+    print(f"✅ [CONTEXT] Returning context: viewer_id={viewer_id}, shop_owner_id={shop_owner_id}, role={role}, bot_id={context_bot_id}")
     
     return {
         "viewer_id": viewer_id,

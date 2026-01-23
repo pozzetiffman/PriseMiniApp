@@ -27,6 +27,7 @@ let cancelReservationCallback = null; // Функция для отмены ре
 let showPurchaseModalCallback = null; // Функция для показа модального окна продажи
 let showReservationModalCallback = null; // Функция для показа модального окна резервации
 let showOrderModalCallback = null; // Функция для показа модального окна заказа
+let showSaleOrderModalCallback = null; // Функция для показа модального окна заказа на покупку
 // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 // let showModalImageCallback = null; // Функция для показа изображения в модальном окне
@@ -98,6 +99,7 @@ export function initProductModalDependencies(dependencies) {
     showPurchaseModalCallback = dependencies.showPurchaseModal;
     showReservationModalCallback = dependencies.showReservationModal;
     showOrderModalCallback = dependencies.showOrderModal;
+    showSaleOrderModalCallback = dependencies.showSaleOrderModal;
     
     if (!modalState) {
         console.error('[PRODUCT MODAL] ❌ modalState is null!');
@@ -1287,12 +1289,19 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
         isMadeToOrder: isMadeToOrder
     });
     
-    // Проверяем, является ли товар для продажи (is_for_sale)
+    // Проверяем, является ли товар для продажи (is_for_sale) - когда нам продают товар
     const isForSale = prod.is_for_sale === true || 
                      prod.is_for_sale === 1 || 
                      prod.is_for_sale === '1' ||
                      prod.is_for_sale === 'true' ||
                      String(prod.is_for_sale).toLowerCase() === 'true';
+    
+    // Проверяем, включена ли продажа товара клиентам (is_sale_enabled) - когда мы продаем товар
+    const isSaleEnabled = prod.is_sale_enabled === true || 
+                         prod.is_sale_enabled === 1 || 
+                         prod.is_sale_enabled === '1' ||
+                         prod.is_sale_enabled === 'true' ||
+                         String(prod.is_sale_enabled).toLowerCase() === 'true';
     
     // Для товаров с is_for_sale показываем кнопку "Продать" вместо резервации/заказа
     if (isForSale && appContext.role === 'client') {
@@ -1306,6 +1315,25 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
             }
         };
         productPageReservationButton.appendChild(sellBtn);
+    } else if (isSaleEnabled && appContext.role === 'client') {
+        // Для товаров с is_sale_enabled показываем кнопку "Купить"
+        const buyBtn = document.createElement('button');
+        buyBtn.className = 'reserve-btn';
+        buyBtn.style.background = 'rgba(90, 200, 250, 0.95)';
+        buyBtn.textContent = '🛒 Купить';
+        buyBtn.onclick = () => {
+            console.log('🛒 [BUY BUTTON] Clicked on buy button for product:', prod.id, prod.name);
+            console.log('🛒 [BUY BUTTON] showSaleOrderModalCallback:', showSaleOrderModalCallback);
+            // Показываем форму оформления заказа для покупки
+            if (showSaleOrderModalCallback) {
+                console.log('🛒 [BUY BUTTON] Calling showSaleOrderModalCallback...');
+                showSaleOrderModalCallback(prod);
+            } else {
+                console.error('❌ [BUY BUTTON] showSaleOrderModalCallback is not set!');
+                alert('❌ Ошибка: функция оформления заказа не инициализирована');
+            }
+        };
+        productPageReservationButton.appendChild(buyBtn);
     } else {
         // Показываем кнопку резервации, если:
         // - Нет активной резервации ИЛИ

@@ -4,17 +4,18 @@
 // ========== REFACTORING STEP 3.1, 3.2: dateUtils.js ==========
 // ========== REFACTORING STEP 4.1, 4.2, 4.3: cartHistory.js ==========
 // НОВЫЙ КОД (используется сейчас)
-import { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory } from './cart/cartHistory.js';
-export { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory };
+import { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory, loadSaleOrdersHistory } from './cart/cartHistory.js';
+export { loadOrdersHistory, loadPurchasesHistory, loadReservationsHistory, loadSaleOrdersHistory };
 // ========== END REFACTORING STEP 4.1, 4.2, 4.3 ==========
 // ========== REFACTORING STEP 5.1, 5.2, 5.3: cartActive.js ==========
 // НОВЫЙ КОД (используется сейчас)
-    import { loadCart as loadCartFromModule, loadOrders as loadOrdersFromModule, loadPurchases as loadPurchasesFromModule } from './cart/cartActive.js';
+    import { loadCart as loadCartFromModule, loadOrders as loadOrdersFromModule, loadPurchases as loadPurchasesFromModule, loadSaleOrders as loadSaleOrdersFromModule } from './cart/cartActive.js';
 // Используем функции внутри модуля
 const loadCart = loadCartFromModule;
 const loadOrders = loadOrdersFromModule;
 const loadPurchases = loadPurchasesFromModule;
-export { loadCart, loadOrders, loadPurchases };
+const loadSaleOrders = loadSaleOrdersFromModule;
+export { loadCart, loadOrders, loadPurchases, loadSaleOrders };
 // ========== END REFACTORING STEP 5.1, 5.2, 5.3 ==========
 // ========== REFACTORING STEP 6.1, 6.2, 6.3: cartTabs.js ==========
 // НОВЫЙ КОД (используется сейчас)

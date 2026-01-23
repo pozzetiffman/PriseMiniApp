@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from .db import database, models
 from .db.schema_check import log_schema_status
-from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots, purchases, debug, favorites, clients
+from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots, purchases, debug, favorites, clients, sale_orders, cart
 
 # Проверяем целостность схемы БД перед созданием таблиц
 log_schema_status()
@@ -53,6 +53,9 @@ else:
 # Middleware для добавления заголовков к статическим файлам и API endpoints
 @app.middleware("http")
 async def add_ngrok_headers(request, call_next):
+    # Логируем все входящие запросы
+    if request.url.path.startswith("/api/"):
+        print(f"📡 [REQUEST] {request.method} {request.url.path} - {request.url.query}")
     response = await call_next(request)
     # Добавляем заголовки для статических файлов, WebApp и API endpoints изображений
     if (request.url.path.startswith("/static/") or 
@@ -90,9 +93,11 @@ app.include_router(reservations.router)
 app.include_router(shop_settings.router)
 app.include_router(shop_visits.router)
 app.include_router(orders.router)
+app.include_router(sale_orders.router)
 app.include_router(bots.router)
 app.include_router(purchases.router)
 app.include_router(favorites.router)
+app.include_router(cart.router)
 app.include_router(clients.router)
 app.include_router(debug.router)
 

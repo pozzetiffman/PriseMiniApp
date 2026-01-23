@@ -12,7 +12,8 @@ import {
     updateProductMadeToOrderAPI,
     updateProductNameDescriptionAPI,
     updateProductQuantityAPI,
-    updateProductQuantityShowEnabledAPI
+    updateProductQuantityShowEnabledAPI,
+    updateProductSaleEnabledAPI
 } from './api.js';
 
 // Зависимости, которые будут переданы из app.js
@@ -84,6 +85,7 @@ export function showEditProductModal(prod) {
     const editQuantityFromInput = document.getElementById('edit-quantity-from');
     const editQuantityUnitInput = document.getElementById('edit-quantity-unit');
     const forSaleFields = document.getElementById('for-sale-fields');
+    const editSaleEnabledInput = document.getElementById('edit-sale-enabled');
     
     // Проверяем is_for_sale
     const isForSale = prod.is_for_sale === true || 
@@ -280,6 +282,16 @@ export function showEditProductModal(prod) {
         // Используем уже определенную переменную isMadeToOrder
         if (editMadeToOrderInput) {
             editMadeToOrderInput.checked = isMadeToOrder;
+        }
+        
+        // Устанавливаем тумблер "Продажа"
+        if (editSaleEnabledInput) {
+            const isSaleEnabled = prod.is_sale_enabled === true || 
+                                 prod.is_sale_enabled === 1 || 
+                                 prod.is_sale_enabled === '1' ||
+                                 prod.is_sale_enabled === 'true' ||
+                                 String(prod.is_sale_enabled).toLowerCase() === 'true';
+            editSaleEnabledInput.checked = isSaleEnabled;
         }
         
         // Делаем тумблер "Показ количества" неактивным, если включен "Под заказ"
@@ -537,6 +549,13 @@ export async function saveProductEdit(productId) {
             console.log(`💾 Saving made-to-order: productId=${productId}, isMadeToOrder=${newMadeToOrder}`);
             const madeToOrderResult = await updateProductMadeToOrderAPI(productId, appContext.shop_owner_id, newMadeToOrder);
             console.log(`✅ Made-to-order saved:`, madeToOrderResult);
+            
+            // Обновляем статус 'продажа' (без уведомлений)
+            const editSaleEnabledInput = document.getElementById('edit-sale-enabled');
+            const newSaleEnabled = editSaleEnabledInput ? editSaleEnabledInput.checked : false;
+            console.log(`💾 Saving sale-enabled: productId=${productId}, isSaleEnabled=${newSaleEnabled}`);
+            const saleEnabledResult = await updateProductSaleEnabledAPI(productId, appContext.shop_owner_id, newSaleEnabled);
+            console.log(`✅ Sale-enabled saved:`, saleEnabledResult);
         }
         
         // Закрываем модальное окно редактирования

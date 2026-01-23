@@ -3,11 +3,11 @@ from datetime import datetime
 from typing import Optional
 
 class ReservationBase(BaseModel):
-    product_id: int
+    product_id: Optional[int] = None  # Может быть None, если товар удален
     reserved_until: datetime
 
 class ReservationCreate(ReservationBase):
-    pass
+    product_id: int  # При создании product_id обязателен
 
 class Reservation(ReservationBase):
     id: int

@@ -6,17 +6,22 @@
 /**
  * Показ уведомления пользователю
  * @param {string} message - Текст уведомления
+ * @param {string} type - Тип уведомления ('success' или 'error')
  */
-export function showNotification(message) {
+export function showNotification(message, type = 'success') {
     // Создаем временное уведомление
     const notification = document.createElement('div');
     notification.className = 'admin-notification';
     notification.textContent = message;
+    
+    // Определяем цвет фона в зависимости от типа
+    const backgroundColor = type === 'error' ? '#f44336' : '#4CAF50';
+    
     notification.style.cssText = `
         position: fixed;
-        top: 20px;
+        top: 100px;
         right: 20px;
-        background: #4CAF50;
+        background: ${backgroundColor};
         color: white;
         padding: 15px 20px;
         border-radius: 8px;
