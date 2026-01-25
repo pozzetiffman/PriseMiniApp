@@ -13,6 +13,7 @@ import { API_BASE } from '../api.js';
 import { showProductModal } from './products_modal.js'; // Импортируем из нового модуля
 // ========== END REFACTORING STEP 3.1 ==========
 // favorites.js - необязательный модуль, используется через динамический импорт
+import { createImageSlider } from '../utils/imageSlider.js';
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
 import { isMobileDevice } from '../utils/products_utils.js';
 
@@ -169,7 +170,7 @@ export async function renderProducts(products) {
             reservedBadge.textContent = '🔒 Резерв';
         }
         
-        // Изображение
+        // Контейнер для слайдера изображений
         const imageDiv = document.createElement('div');
         imageDiv.className = 'product-image';
         // КРИТИЧНО: position: relative для позиционирования сердечка внутри imageDiv
@@ -494,28 +495,26 @@ export async function renderProducts(products) {
         // Приоритет: 1) Покупка, 2) Под заказ, 3) Количество
         if (isForSale) {
             quantityBadge = document.createElement('div');
-            quantityBadge.className = 'product-quantity-badge';
+            quantityBadge.className = 'product-quantity-text';
             // Формируем текст с количеством от и единицей измерения
-            let badgeText = 'Покупка';
+            let badgeText = 'покупка';
             const quantityFrom = prod.quantity_from !== null && prod.quantity_from !== undefined ? prod.quantity_from : null;
             const quantityUnit = prod.quantity_unit || 'шт';
             if (quantityFrom !== null && quantityFrom !== undefined) {
-                badgeText = `От ${quantityFrom} ${quantityUnit}`;
+                badgeText = `от ${quantityFrom} ${quantityUnit}`;
             } else {
-                badgeText = 'Покупка';
+                badgeText = 'покупка';
             }
             quantityBadge.textContent = badgeText;
-            quantityBadge.style.background = 'rgba(255, 149, 0, 0.95)'; // Оранжевый для покупки
-            quantityBadge.style.color = '#ffffff';
+            quantityBadge.style.color = 'rgba(255, 149, 0, 0.95)'; // Оранжевый для покупки
         } else if (isMadeToOrder) {
             quantityBadge = document.createElement('div');
-            quantityBadge.className = 'product-quantity-badge';
-            quantityBadge.textContent = 'Под заказ';
-            quantityBadge.style.background = 'rgba(90, 200, 250, 0.95)'; // Синий для под заказ
-            quantityBadge.style.color = '#ffffff';
+            quantityBadge.className = 'product-quantity-text';
+            quantityBadge.textContent = 'под заказ';
+            quantityBadge.style.color = 'rgba(90, 200, 250, 0.95)'; // Синий для под заказ
         } else if (prod.quantity !== undefined && prod.quantity !== null) {
             quantityBadge = document.createElement('div');
-            quantityBadge.className = 'product-quantity-badge';
+            quantityBadge.className = 'product-quantity-text';
             const quantity = prod.quantity;
             const quantityUnit = prod.quantity_unit || 'шт';
             if (quantity > 0) {
@@ -526,30 +525,27 @@ export async function renderProducts(products) {
                 // Если quantity_enabled включен, показываем количество с учетом резерваций
                 if (quantityEnabled) {
                     if (activeReservationsCount > 0) {
-                        // Если есть резервации, показываем "Доступно: X из Y единица"
-                        quantityBadge.textContent = `Доступно: ${availableCount} из ${quantity} ${quantityUnit}`;
+                        // Если есть резервации, показываем "доступно: X из Y единица"
+                        quantityBadge.textContent = `доступно: ${availableCount} из ${quantity} ${quantityUnit}`;
                     } else {
-                        // Если резерваций нет, показываем просто "В наличии: Y единица"
-                        quantityBadge.textContent = `В наличии: ${quantity} ${quantityUnit}`;
+                        // Если резерваций нет, показываем просто "в наличии: Y единица"
+                        quantityBadge.textContent = `в наличии: ${quantity} ${quantityUnit}`;
                     }
                 } else {
-                    // Если quantity_enabled выключен, показываем просто "В наличии"
-                    quantityBadge.textContent = 'В наличии';
+                    // Если quantity_enabled выключен, показываем просто "в наличии"
+                    quantityBadge.textContent = 'в наличии';
                 }
-                quantityBadge.style.background = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
-                quantityBadge.style.color = '#ffffff';
+                quantityBadge.style.color = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
             } else {
-                quantityBadge.textContent = 'Нет в наличии';
-                quantityBadge.style.background = 'rgba(255, 59, 48, 0.95)'; // Красный для отсутствия
-                quantityBadge.style.color = '#ffffff';
+                quantityBadge.textContent = 'нет в наличии';
+                quantityBadge.style.color = 'rgba(255, 59, 48, 0.95)'; // Красный для отсутствия
             }
         } else if (!quantityEnabled) {
-            // Если quantity_enabled выключен и quantity не указан, показываем просто "В наличии"
+            // Если quantity_enabled выключен и quantity не указан, показываем просто "в наличии"
             quantityBadge = document.createElement('div');
-            quantityBadge.className = 'product-quantity-badge';
-            quantityBadge.textContent = 'В наличии';
-            quantityBadge.style.background = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
-            quantityBadge.style.color = '#ffffff';
+            quantityBadge.className = 'product-quantity-text';
+            quantityBadge.textContent = 'в наличии';
+            quantityBadge.style.color = 'rgba(52, 199, 89, 0.95)'; // Зеленый для наличия
         }
         
         // КРИТИЧЕСКИ ВАЖНО: Добавляем imageDiv в card ПЕРЕД созданием img
@@ -571,15 +567,37 @@ export async function renderProducts(products) {
             console.log(`[IMG DEBUG] Product ${prod.id}: card added to productsGrid, in DOM: ${productsGridElement.contains(card)}`);
         }
         
-        if (fullImg) {
-            // Показываем placeholder во время загрузки
-            imageDiv.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-            const loadingPlaceholder = document.createElement('div');
-            loadingPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 24px;';
-            loadingPlaceholder.textContent = '⏳';
-            imageDiv.appendChild(loadingPlaceholder);
+        // Используем все изображения для слайдера
+        const imagesToShow = fullImages.length > 0 ? fullImages : (fullImg ? [fullImg] : []);
+        
+        // Сохраняем ссылку на индикаторы для добавления в карточку
+        let indicatorsContainer = null;
+        
+        if (imagesToShow.length > 0) {
+            // Определяем, мобильное устройство или десктоп
+            const isMobile = isMobileDevice();
             
-            // Добавляем badge скидки ПЕРЕД загрузкой (чтобы он был поверх)
+            // Создаем слайдер - он автоматически создаст структуру внутри imageDiv
+            const slider = createImageSlider(imageDiv, imagesToShow, {
+                isMobile: isMobile,
+                onImageLoad: (img, index) => {
+                    if (prod.id && index === 0) {
+                        console.log(`[IMG DEBUG] Product ${prod.id}: Image ${index} loaded`);
+                    }
+                },
+                onImageError: (img, index) => {
+                    if (prod.id) {
+                        console.error(`[IMG DEBUG] Product ${prod.id}: Image ${index} load error`);
+                    }
+                }
+            });
+            
+            // Сохраняем ссылку на индикаторы
+            if (slider && slider.indicatorsContainer) {
+                indicatorsContainer = slider.indicatorsContainer;
+            }
+            
+            // Добавляем badge скидки (чтобы он был поверх)
             if (discountBadge) {
                 discountBadge.style.zIndex = '10';
                 discountBadge.style.position = 'absolute';
@@ -613,201 +631,6 @@ export async function renderProducts(products) {
             // Добавляем badge резервации в нижней части фото
             if (reservedBadge) {
                 imageDiv.appendChild(reservedBadge);
-            }
-            
-            // Функция для показа ошибки
-            const showError = () => {
-                if (prod.id) {
-                    console.error(`[IMG DEBUG] Product ${prod.id}: IMAGE LOAD ERROR`);
-                }
-                imageDiv.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-                const errorPlaceholder = document.createElement('div');
-                errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 24px;';
-                errorPlaceholder.textContent = '📷';
-                imageDiv.innerHTML = '';
-                imageDiv.appendChild(errorPlaceholder);
-                if (discountBadge) {
-                    imageDiv.appendChild(discountBadge);
-                }
-                if (hiddenBadge) {
-                    imageDiv.appendChild(hiddenBadge);
-                }
-                if (hotOfferBadge) {
-                    imageDiv.appendChild(hotOfferBadge);
-                }
-                if (reservedBadge) {
-                    imageDiv.appendChild(reservedBadge);
-                }
-                    // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
-                    if (favoriteButton) {
-                        imageDiv.appendChild(favoriteButton);
-                    }
-                    // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
-                    if (cartButton) {
-                        imageDiv.appendChild(cartButton);
-                    }
-                };
-            
-            // Определяем, мобильное устройство или десктоп
-            const isMobile = isMobileDevice();
-            
-            if (isMobile) {
-                // На мобильных устройствах используем fetch + blob URL для обхода блокировки Telegram WebView
-                // Telegram WebView может блокировать прямые запросы к ngrok доменам через <img src>
-                // Но fetch запросы работают, поэтому мы загружаем через fetch и создаем blob URL
-                fetch(fullImg, {
-                    headers: {
-                        'ngrok-skip-browser-warning': '69420'
-                    }
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.blob();
-                })
-                .then(blob => {
-                    // Создаем blob URL для обхода блокировки ngrok доменов
-                    const blobUrl = URL.createObjectURL(blob);
-                    
-                    if (prod.id) {
-                        console.log(`[IMG DEBUG] Product ${prod.id}: Image loaded via fetch, blob URL created (mobile)`);
-                    }
-                    
-                    // Создаем img элемент и устанавливаем blob URL
-                    const img = document.createElement('img');
-                    img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block;';
-                    img.alt = prod.name;
-                    
-                    img.onload = function() {
-                        // Изображение загружено успешно
-                        if (prod.id) {
-                            console.log(`[IMG DEBUG] Product ${prod.id}: IMAGE LOADED SUCCESSFULLY via blob URL (mobile)`);
-                        }
-                        // Удаляем placeholder
-                        if (loadingPlaceholder.parentNode) {
-                            loadingPlaceholder.remove();
-                        }
-                    };
-                    
-                    img.onerror = function() {
-                        // Ошибка загрузки изображения
-                        if (prod.id) {
-                            console.error(`[IMG DEBUG] Product ${prod.id}: IMAGE LOAD ERROR - blob URL failed (mobile)`);
-                        }
-                        URL.revokeObjectURL(blobUrl); // Освобождаем память
-                        showError();
-                    };
-                    
-                    // Заменяем placeholder на изображение
-                    imageDiv.innerHTML = '';
-                    imageDiv.appendChild(img);
-                    if (discountBadge) {
-                        imageDiv.appendChild(discountBadge);
-                    }
-                    if (hiddenBadge) {
-                        imageDiv.appendChild(hiddenBadge);
-                    }
-                    if (hotOfferBadge) {
-                        imageDiv.appendChild(hotOfferBadge);
-                    }
-                    if (reservedBadge) {
-                        imageDiv.appendChild(reservedBadge);
-                    }
-                    // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
-                    if (favoriteButton) {
-                        imageDiv.appendChild(favoriteButton);
-                    }
-                    // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
-                    if (cartButton) {
-                        imageDiv.appendChild(cartButton);
-                    }
-                    
-                    // Устанавливаем blob URL
-                    img.src = blobUrl;
-                })
-                .catch(error => {
-                    if (prod.id) {
-                        console.error(`[IMG DEBUG] Product ${prod.id}: Fetch error (mobile):`, error);
-                        console.error(`[IMG DEBUG] Product ${prod.id}: Failed URL: "${fullImg}"`);
-                    }
-                    showError();
-                });
-            } else {
-                // На десктопе используем прямые URL (более надежно и быстрее)
-                const img = document.createElement('img');
-                img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block;';
-                img.alt = prod.name;
-                
-                img.onload = function() {
-                    // Изображение загружено успешно
-                    if (prod.id) {
-                        console.log(`[IMG DEBUG] Product ${prod.id}: IMAGE LOADED SUCCESSFULLY via direct URL (desktop)`);
-                    }
-                    // Удаляем placeholder
-                    if (loadingPlaceholder.parentNode) {
-                        loadingPlaceholder.remove();
-                    }
-                };
-                
-                img.onerror = function() {
-                    // Ошибка загрузки изображения - пробуем через fetch как fallback
-                    if (prod.id) {
-                        console.warn(`[IMG DEBUG] Product ${prod.id}: Direct URL failed, trying fetch fallback (desktop)`);
-                    }
-                    // Fallback: пробуем через fetch
-                    fetch(fullImg, {
-                        headers: {
-                            'ngrok-skip-browser-warning': '69420'
-                        }
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.blob();
-                    })
-                    .then(blob => {
-                        const blobUrl = URL.createObjectURL(blob);
-                        img.src = blobUrl;
-                        if (prod.id) {
-                            console.log(`[IMG DEBUG] Product ${prod.id}: Image loaded via fetch fallback (desktop)`);
-                        }
-                    })
-                    .catch(error => {
-                        if (prod.id) {
-                            console.error(`[IMG DEBUG] Product ${prod.id}: Fetch fallback also failed:`, error);
-                        }
-                        showError();
-                    });
-                };
-                
-                // Заменяем placeholder на изображение
-                imageDiv.innerHTML = '';
-                imageDiv.appendChild(img);
-                if (discountBadge) {
-                    imageDiv.appendChild(discountBadge);
-                }
-                if (hiddenBadge) {
-                    imageDiv.appendChild(hiddenBadge);
-                }
-                if (hotOfferBadge) {
-                    imageDiv.appendChild(hotOfferBadge);
-                }
-                if (reservedBadge) {
-                    imageDiv.appendChild(reservedBadge);
-                }
-                // Добавляем кнопку избранного на фото (правый нижний угол) - только для клиентов
-                if (favoriteButton) {
-                    imageDiv.appendChild(favoriteButton);
-                }
-                // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
-                if (cartButton) {
-                    imageDiv.appendChild(cartButton);
-                }
-                
-                // Устанавливаем прямой URL
-                img.src = fullImg;
             }
         } else {
             // ДИАГНОСТИКА: fullImg пустой
@@ -855,20 +678,30 @@ export async function renderProducts(products) {
             }
         }
         
+        // Добавляем индикаторы под фото (если есть несколько изображений)
+        if (indicatorsContainer && imagesToShow.length > 1) {
+            card.appendChild(indicatorsContainer);
+        }
+        
         // Название
         const nameDiv = document.createElement('div');
         nameDiv.className = 'product-name';
         nameDiv.textContent = prod.name;
         
-        // Цена - определяем что показывать
-        const priceContainer = document.createElement('div');
-        priceContainer.className = 'product-price-container';
-        const priceSpan = document.createElement('span');
-        priceSpan.className = 'product-price';
+        // Описание товара (ограничено до 50 символов)
+        let descriptionDiv = null;
+        if (prod.description) {
+            descriptionDiv = document.createElement('div');
+            descriptionDiv.className = 'product-description';
+            let descriptionText = prod.description.trim();
+            if (descriptionText.length > 50) {
+                descriptionText = descriptionText.substring(0, 50) + '...';
+            }
+            descriptionDiv.textContent = descriptionText;
+        }
         
         // Используем функцию из priceUtils.js для форматирования цены
         const priceDisplay = getProductPriceDisplay(prod);
-        priceSpan.textContent = priceDisplay;
         
         // Старая цена при скидке (только для обычных товаров)
         const isForSaleCard = prod.is_for_sale === true || 
@@ -877,18 +710,82 @@ export async function renderProducts(products) {
                          prod.is_for_sale === 'true' ||
                          String(prod.is_for_sale).toLowerCase() === 'true';
         
-        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
-            const oldPriceSpan = document.createElement('span');
-            oldPriceSpan.className = 'old-price';
-            oldPriceSpan.textContent = `${prod.price} ₽`;
-            priceContainer.appendChild(oldPriceSpan);
+        // Добавляем элементы в правильном порядке: название, описание, старая цена, цена по карте, цена наличными
+        card.appendChild(nameDiv);
+        
+        // Добавляем описание после названия, если оно есть
+        if (descriptionDiv) {
+            card.appendChild(descriptionDiv);
         }
         
-        priceContainer.appendChild(priceSpan);
-        card.appendChild(nameDiv);
-        card.appendChild(priceContainer);
+        // Старая цена (зачеркнутая серая) - если есть скидка
+        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
+            const oldPriceDiv = document.createElement('div');
+            oldPriceDiv.className = 'old-price-container';
+            const oldPriceSpan = document.createElement('span');
+            oldPriceSpan.className = 'old-price';
+            // Форматируем старую цену с пробелами между тысячами
+            oldPriceSpan.textContent = `${Number(prod.price).toLocaleString('ru-RU')}₽`;
+            oldPriceDiv.appendChild(oldPriceSpan);
+            card.appendChild(oldPriceDiv);
+        }
         
-        // Количество товара под ценой
+        // Цена по карте (со скидкой) - если есть скидка
+        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
+            const cardPriceDiv = document.createElement('div');
+            cardPriceDiv.className = 'product-price-container';
+            const priceSpan = document.createElement('span');
+            priceSpan.className = 'product-price';
+            priceSpan.textContent = priceDisplay;
+            
+            // Добавляем иконку карточки красного цвета рядом с ценой по карте
+            const cardIcon = document.createElement('span');
+            cardIcon.className = 'product-card-icon';
+            cardIcon.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="5" width="20" height="14" rx="2" stroke="#E35E45" stroke-width="2"/>
+                    <path d="M2 10H22" stroke="#E35E45" stroke-width="2"/>
+                    <path d="M6 15H10" stroke="#E35E45" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            `;
+            priceSpan.appendChild(cardIcon);
+            cardPriceDiv.appendChild(priceSpan);
+            card.appendChild(cardPriceDiv);
+        } else {
+            // Если нет скидки, просто добавляем обычную цену
+            const priceDiv = document.createElement('div');
+            priceDiv.className = 'product-price-container';
+            const priceSpan = document.createElement('span');
+            priceSpan.className = 'product-price';
+            priceSpan.textContent = priceDisplay;
+            priceDiv.appendChild(priceSpan);
+            card.appendChild(priceDiv);
+        }
+        
+        // Цена наличными (без скидки) - если есть скидка
+        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
+            const cashPriceDiv = document.createElement('div');
+            cashPriceDiv.className = 'product-cash-price-container';
+            const cashPriceSpan = document.createElement('span');
+            cashPriceSpan.className = 'product-cash-price';
+            // Форматируем цену наличными с пробелами между тысячами
+            cashPriceSpan.textContent = `${Number(prod.price).toLocaleString('ru-RU')}₽`;
+            
+            // Добавляем иконку наличных зеленого цвета рядом с ценой наличными
+            const cashIcon = document.createElement('span');
+            cashIcon.className = 'product-cash-icon';
+            cashIcon.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="5" width="20" height="14" rx="2" stroke="#00A82E" stroke-width="2"/>
+                    <circle cx="12" cy="12" r="3" stroke="#00A82E" stroke-width="2"/>
+                </svg>
+            `;
+            cashPriceSpan.appendChild(cashIcon);
+            cashPriceDiv.appendChild(cashPriceSpan);
+            card.appendChild(cashPriceDiv);
+        }
+        
+        // Количество товара под ценой (текст без блока)
         if (quantityBadge) {
             // Убираем абсолютное позиционирование, так как теперь это обычный блок
             quantityBadge.style.position = 'static';
@@ -940,43 +837,97 @@ export async function renderProducts(products) {
         nameDivList.className = 'product-name-list';
         nameDivList.textContent = prod.name;
         
-        // Контейнер для цены и статуса в режиме списка
-        const listPriceStatusContainer = document.createElement('div');
-        listPriceStatusContainer.className = 'product-list-price-status';
-        
-        // Цена в режиме списка
-        const listPriceContainer = document.createElement('div');
-        listPriceContainer.className = 'product-list-price';
-        
-        // Старая цена при скидке (только для обычных товаров)
-        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
-            const oldPriceSpanList = document.createElement('span');
-            oldPriceSpanList.className = 'old-price';
-            oldPriceSpanList.textContent = `${prod.price} ₽`;
-            listPriceContainer.appendChild(oldPriceSpanList);
+        // Описание для режима списка (если есть)
+        let descriptionDivList = null;
+        if (prod.description) {
+            descriptionDivList = document.createElement('div');
+            descriptionDivList.className = 'product-description-list';
+            let descriptionText = prod.description.trim();
+            if (descriptionText.length > 50) {
+                descriptionText = descriptionText.substring(0, 50) + '...';
+            }
+            descriptionDivList.textContent = descriptionText;
         }
         
-        const priceSpanList = document.createElement('span');
-        priceSpanList.className = 'product-price';
-        priceSpanList.textContent = priceDisplay;
-        listPriceContainer.appendChild(priceSpanList);
+        // Контейнер для цен и правой части (корзина + статус) в режиме списка
+        const listPricesRightContainer = document.createElement('div');
+        listPricesRightContainer.className = 'product-list-prices-right-container';
         
-        listPriceStatusContainer.appendChild(listPriceContainer);
+        // Контейнер для цен в режиме списка (каждая цена на отдельной строке) - левая часть
+        const listPricesContainer = document.createElement('div');
+        listPricesContainer.className = 'product-list-prices';
         
-        // Статус товара справа в режиме списка
+        // Старая цена (зачеркнутая серая) - если есть скидка, на отдельной строке
+        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
+            const oldPriceDivList = document.createElement('div');
+            oldPriceDivList.className = 'product-list-old-price';
+            oldPriceDivList.textContent = `${Number(prod.price).toLocaleString('ru-RU')}₽`;
+            listPricesContainer.appendChild(oldPriceDivList);
+        }
+        
+        // Цена по карте (со скидкой) - если есть скидка, на отдельной строке
+        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
+            const cardPriceDivList = document.createElement('div');
+            cardPriceDivList.className = 'product-list-card-price';
+            cardPriceDivList.textContent = priceDisplay;
+            
+            // Добавляем иконку карточки красного цвета рядом с ценой по карте
+            const cardIconList = document.createElement('span');
+            cardIconList.className = 'product-card-icon';
+            cardIconList.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="5" width="20" height="14" rx="2" stroke="#E35E45" stroke-width="2"/>
+                    <path d="M2 10H22" stroke="#E35E45" stroke-width="2"/>
+                    <path d="M6 15H10" stroke="#E35E45" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            `;
+            cardPriceDivList.appendChild(cardIconList);
+            listPricesContainer.appendChild(cardPriceDivList);
+        } else {
+            // Если нет скидки, просто добавляем обычную цену на отдельной строке
+            const priceDivList = document.createElement('div');
+            priceDivList.className = 'product-list-price-single';
+            priceDivList.textContent = priceDisplay;
+            listPricesContainer.appendChild(priceDivList);
+        }
+        
+        // Цена наличными (без скидки) - если есть скидка, на отдельной строке
+        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
+            const cashPriceDivList = document.createElement('div');
+            cashPriceDivList.className = 'product-list-cash-price';
+            cashPriceDivList.textContent = `${Number(prod.price).toLocaleString('ru-RU')}₽`;
+            
+            // Добавляем иконку наличных зеленого цвета рядом с ценой наличными
+            const cashIconList = document.createElement('span');
+            cashIconList.className = 'product-cash-icon';
+            cashIconList.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="5" width="20" height="14" rx="2" stroke="#00A82E" stroke-width="2"/>
+                    <circle cx="12" cy="12" r="3" stroke="#00A82E" stroke-width="2"/>
+                </svg>
+            `;
+            cashPriceDivList.appendChild(cashIconList);
+            listPricesContainer.appendChild(cashPriceDivList);
+        }
+        
+        // Правая часть: контейнер для корзины и статуса
+        const rightSideContainer = document.createElement('div');
+        rightSideContainer.className = 'product-list-right-side';
+        
+        // Статус товара в правой части (мелкий, с цветом как в режиме сетки)
+        let statusBadgeList = null;
         if (quantityBadge) {
-            // Создаем новый статус для списка, копируя только текст и стили
-            const statusBadgeList = document.createElement('div');
+            statusBadgeList = document.createElement('div');
             statusBadgeList.className = 'product-quantity-badge-list';
             statusBadgeList.textContent = quantityBadge.textContent;
-            // Копируем цвет фона и текста из оригинального бейджа
-            statusBadgeList.style.background = quantityBadge.style.background || 'rgba(52, 199, 89, 0.95)';
-            statusBadgeList.style.color = quantityBadge.style.color || '#ffffff';
-            statusBadgeList.style.display = 'inline-block';
-            statusBadgeList.style.position = 'static';
-            statusBadgeList.style.margin = '0';
-            listPriceStatusContainer.appendChild(statusBadgeList);
+            // Используем тот же цвет, что и в режиме сетки (из quantityBadge.style.color)
+            statusBadgeList.style.color = quantityBadge.style.color || 'rgba(52, 199, 89, 0.95)';
+            rightSideContainer.appendChild(statusBadgeList);
         }
+        
+        // Добавляем левую часть (цены) и правую часть (статус) в общий контейнер
+        listPricesRightContainer.appendChild(listPricesContainer);
+        listPricesRightContainer.appendChild(rightSideContainer);
         
         // Создаем кнопку избранного для режима списка (правый верхний угол карточки) - только для клиентов
         let favoriteButtonList = null;
@@ -1107,7 +1058,56 @@ export async function renderProducts(products) {
         // Вставляем элементы для режима списка в начало карточки
         card.insertBefore(topBadgesContainer, card.firstChild);
         card.insertBefore(nameDivList, topBadgesContainer.nextSibling);
-        card.appendChild(listPriceStatusContainer);
+        // Добавляем описание после названия, если оно есть
+        if (descriptionDivList) {
+            card.insertBefore(descriptionDivList, nameDivList.nextSibling);
+        }
+        card.appendChild(listPricesRightContainer);
+        
+        // Создаем кнопку корзины для режима списка (над статусом в правой части) - только для клиентов
+        let cartButtonList = null;
+        if (isClient) {
+            cartButtonList = document.createElement('button');
+            cartButtonList.className = 'cart-button-card cart-button-list';
+            cartButtonList.setAttribute('aria-label', 'Добавить в корзину');
+            cartButtonList.dataset.productId = prod.id;
+            
+            // SVG иконка корзины
+            cartButtonList.innerHTML = `
+                <svg viewBox="0 0 24 24" class="cart-icon" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
+                </svg>
+            `;
+            
+            // Обработчик клика на кнопку корзины в режиме списка
+            cartButtonList.addEventListener('click', async (e) => {
+                e.stopPropagation(); // Предотвращаем открытие модального окна товара
+                e.preventDefault(); // Предотвращаем стандартное поведение
+                
+                try {
+                    // Импортируем функцию добавления в корзину
+                    const { addProductToCart } = await import('../cart/cartNew.js');
+                    await addProductToCart(prod, 1);
+                    
+                    // Визуальная обратная связь
+                    cartButtonList.style.transform = 'scale(0.9)';
+                    setTimeout(() => {
+                        cartButtonList.style.transform = 'scale(1)';
+                    }, 200);
+                } catch (error) {
+                    console.error('❌ Error adding to cart:', error);
+                    console.error('❌ Error details:', {
+                        message: error.message,
+                        stack: error.stack,
+                        name: error.name
+                    });
+                    alert('Ошибка при добавлении товара в корзину: ' + (error.message || 'Неизвестная ошибка'));
+                }
+            });
+            
+            // Добавляем кнопку корзины в правую часть (над статусом)
+            rightSideContainer.insertBefore(cartButtonList, rightSideContainer.firstChild);
+        }
         
         // Добавляем кнопку избранного в правый верхний угол карточки (для режима списка) - только для клиентов
         if (favoriteButtonList) {

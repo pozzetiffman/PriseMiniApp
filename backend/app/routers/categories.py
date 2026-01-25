@@ -237,6 +237,8 @@ def get_categories(
     flat: bool = Query(False, description="Вернуть все категории в плоском виде (включая подкатегории)"),
     db: Session = Depends(database.get_db)
 ):
+    import time
+    request_start = time.time()
     print(f"📂 [CATEGORIES API] get_categories called: user_id={user_id}, bot_id={bot_id}, flat={flat}")
     query = db.query(models.Category).filter(models.Category.user_id == user_id)
     # Если bot_id указан - фильтруем по bot_id (независимый магазин бота)
@@ -276,6 +278,12 @@ def get_categories(
         print(f"📂 [CATEGORIES API] Returning {len(main_categories)} main categories with hierarchy")
         for main_cat in main_categories:
             print(f"   - {main_cat.name} (id={main_cat.id}): {len(main_cat.subcategories)} subcategories")
+        
+        total_time = time.time() - request_start
+        print(f"⏱️ [CATEGORIES API] Total request time: {total_time:.3f}s")
+        if total_time > 1.0:
+            print(f"⚠️ [CATEGORIES API] WARNING: Request took {total_time:.3f}s - this is slow!")
+        
         return main_categories
 
 @router.post("/", response_model=schemas.Category)

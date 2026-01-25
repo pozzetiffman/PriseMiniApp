@@ -22,7 +22,8 @@ export function getProductPriceDisplay(prod) {
             if (prod.price_fixed != null && prod.price_fixed !== '' && prod.price_fixed !== undefined) {
                 const fixedPrice = Number(prod.price_fixed);
                 if (!isNaN(fixedPrice) && isFinite(fixedPrice) && fixedPrice > 0) {
-                    return `${fixedPrice}р`;
+                    // Форматируем цену с пробелами между тысячами
+                    return `${fixedPrice.toLocaleString('ru-RU')}₽`;
                 }
             }
             // Если фиксированная цена не указана или равна 0, возвращаем "Цена по запросу"
@@ -51,11 +52,11 @@ export function getProductPriceDisplay(prod) {
             
             // Если есть оба значения (включая 0), показываем диапазон "от X до Y р"
             if (priceFrom != null && priceTo != null) {
-                return `от ${priceFrom} до ${priceTo} р`;
+                return `от ${priceFrom.toLocaleString('ru-RU')} до ${priceTo.toLocaleString('ru-RU')} ₽`;
             } else if (priceFrom != null) {
-                return `от ${priceFrom} р`;
+                return `от ${priceFrom.toLocaleString('ru-RU')} ₽`;
             } else if (priceTo != null) {
-                return `до ${priceTo} р`;
+                return `до ${priceTo.toLocaleString('ru-RU')} ₽`;
             }
             // Если нет цены в диапазоне, возвращаем "Цена по запросу"
             return 'Цена по запросу';
@@ -71,7 +72,8 @@ export function getProductPriceDisplay(prod) {
                 const finalPrice = prod.discount > 0 
                     ? Math.round(basePrice * (1 - prod.discount / 100)) 
                     : basePrice;
-                return `${finalPrice} ₽`;
+                // Форматируем цену с пробелами между тысячами, как в корзине
+                return `${finalPrice.toLocaleString('ru-RU')}₽`;
             }
         }
         // Если обычная цена не указана или равна 0, возвращаем "Цена по запросу"

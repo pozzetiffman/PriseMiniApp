@@ -15,6 +15,7 @@ import os
 import requests
 import re
 import json
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -99,7 +100,7 @@ def calculate_session_time(visits: list, session_timeout_minutes: int = 30) -> i
     Время сессии ограничено максимумом (например, 2 часа), чтобы не учитывать очень длинные сессии.
     
     Args:
-        visits: Список посещений, отсортированный по времени
+        visits: Список посещений (может быть список объектов ShopVisit, кортежей (visitor_id, product_id, visited_at), или datetime)
         session_timeout_minutes: Максимальное время между посещениями для одной сессии (по умолчанию 30 минут)
     
     Returns:
@@ -112,8 +113,21 @@ def calculate_session_time(visits: list, session_timeout_minutes: int = 30) -> i
         # Если только одно посещение, считаем минимальное время (например, 1 минута)
         return 60
     
+    # Извлекаем datetime из разных форматов данных
+    def get_visit_time(visit):
+        if isinstance(visit, models.ShopVisit):
+            return visit.visited_at
+        elif isinstance(visit, tuple) and len(visit) >= 3:
+            # Кортеж (visitor_id, product_id, visited_at)
+            return visit[2]
+        elif isinstance(visit, datetime):
+            return visit
+        else:
+            # Пытаемся получить атрибут visited_at
+            return getattr(visit, 'visited_at', visit)
+    
     # Сортируем посещения по времени
-    sorted_visits = sorted(visits, key=lambda x: x.visited_at if isinstance(x, models.ShopVisit) else x)
+    sorted_visits = sorted(visits, key=lambda x: get_visit_time(x))
     
     total_time = 0
     session_start = None
@@ -121,7 +135,7 @@ def calculate_session_time(visits: list, session_timeout_minutes: int = 30) -> i
     max_session_duration = timedelta(hours=2)  # Максимальная длительность одной сессии
     
     for i, visit in enumerate(sorted_visits):
-        visit_time = visit.visited_at if isinstance(visit, models.ShopVisit) else visit
+        visit_time = get_visit_time(visit)
         
         if session_start is None:
             # Начало новой сессии
@@ -216,6 +230,9 @@ async def get_clients_list(
     Получить список всех клиентов (уникальных посетителей) магазина.
     Только для владельца магазина.
     """
+    import time
+    request_start = time.time()
+    
     if not x_telegram_init_data:
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
@@ -230,7 +247,10 @@ async def get_clients_list(
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
+    print(f"👥 [CLIENTS] Loading clients for shop_owner_id={shop_owner_id}")
+    
     # Получаем всех уникальных посетителей магазина
+    db_start = time.time()
     visitors = db.query(
         models.ShopVisit.visitor_id,
         func.count(models.ShopVisit.id).label('total_visits'),
@@ -241,125 +261,187 @@ async def get_clients_list(
     ).group_by(
         models.ShopVisit.visitor_id
     ).all()
+    db_time = time.time() - db_start
+    print(f"⏱️ [CLIENTS] Visitors query took {db_time:.3f}s, found {len(visitors)} clients")
     
     # Получаем токен бота для запросов username
     bot_token = get_bot_token_for_user(shop_owner_id, db)
     
-    clients = []
-    for visitor_id, total_visits, first_visit, last_visit in visitors:
-        # Подсчитываем просмотры товаров и посещения магазина
-        product_views = db.query(func.count(models.ShopVisit.id)).filter(
-            and_(
-                models.ShopVisit.shop_owner_id == shop_owner_id,
-                models.ShopVisit.visitor_id == visitor_id,
-                models.ShopVisit.product_id.isnot(None)
-            )
-        ).scalar() or 0
-        
-        shop_visits = db.query(func.count(models.ShopVisit.id)).filter(
-            and_(
-                models.ShopVisit.shop_owner_id == shop_owner_id,
-                models.ShopVisit.visitor_id == visitor_id,
-                models.ShopVisit.product_id.is_(None)
-            )
-        ).scalar() or 0
-        
-        # Вычисляем время активных сессий
-        # Получаем все посещения клиента для вычисления времени сессий
-        all_visits = db.query(models.ShopVisit).filter(
-            and_(
-                models.ShopVisit.shop_owner_id == shop_owner_id,
-                models.ShopVisit.visitor_id == visitor_id
-            )
-        ).order_by(models.ShopVisit.visited_at).all()
-        
-        total_time_seconds = calculate_session_time(all_visits) if all_visits else 0
-        
-        # Получаем username пользователя из Telegram
-        username = get_user_username_from_telegram(visitor_id, bot_token) if bot_token else None
-        
-        # Подсчитываем активные сделки
-        now = datetime.utcnow()
-        
-        # Активные резервации
-        active_reservations_count = db.query(func.count(models.Reservation.id)).filter(
-            and_(
-                models.Reservation.user_id == shop_owner_id,
-                models.Reservation.reserved_by_user_id == visitor_id,
-                models.Reservation.is_active == True,
-                models.Reservation.reserved_until > now
-            )
-        ).scalar() or 0
-        
-        # Активные заказы
-        active_orders_count = db.query(func.count(models.Order.id)).filter(
-            and_(
-                models.Order.user_id == shop_owner_id,
-                models.Order.ordered_by_user_id == visitor_id,
-                models.Order.is_completed == False,
-                models.Order.is_cancelled == False
-            )
-        ).scalar() or 0
-        
-        # Активные покупки
-        active_purchases_count = db.query(func.count(models.Purchase.id)).filter(
-            and_(
-                models.Purchase.user_id == shop_owner_id,
-                models.Purchase.purchased_by_user_id == visitor_id,
-                models.Purchase.is_completed == False,
-                models.Purchase.is_cancelled == False
-            )
-        ).scalar() or 0
-        
-        active_deals_count = active_reservations_count + active_orders_count + active_purchases_count
-        
-        # Подсчитываем общее количество заказов, резерваций, покупок и избранного
-        total_orders_count = db.query(func.count(models.Order.id)).filter(
-            and_(
-                models.Order.user_id == shop_owner_id,
-                models.Order.ordered_by_user_id == visitor_id
-            )
-        ).scalar() or 0
-        
-        total_reservations_count = db.query(func.count(models.Reservation.id)).filter(
-            and_(
-                models.Reservation.user_id == shop_owner_id,
-                models.Reservation.reserved_by_user_id == visitor_id
-            )
-        ).scalar() or 0
-        
-        total_purchases_count = db.query(func.count(models.Purchase.id)).filter(
-            and_(
-                models.Purchase.user_id == shop_owner_id,
-                models.Purchase.purchased_by_user_id == visitor_id
-            )
-        ).scalar() or 0
-        
-        total_favorites_count = db.query(func.count(models.Favorite.id)).filter(
-            and_(
-                models.Favorite.shop_owner_id == shop_owner_id,
-                models.Favorite.user_id == visitor_id
-            )
-        ).scalar() or 0
-        
-        # Получаем контактную информацию из последнего заказа или покупки
-        # Сначала проверяем заказы (более приоритетны)
+    # ОПТИМИЗАЦИЯ: Предзагружаем все данные для всех клиентов одним запросом
+    visitor_ids = [v[0] for v in visitors]
+    if not visitor_ids:
+        print(f"👥 [CLIENTS] No visitors found")
+        return []
+    
+    # Предзагружаем все посещения для всех клиентов
+    db_start = time.time()
+    all_visits_data = db.query(
+        models.ShopVisit.visitor_id,
+        models.ShopVisit.product_id,
+        models.ShopVisit.visited_at
+    ).filter(
+        models.ShopVisit.shop_owner_id == shop_owner_id,
+        models.ShopVisit.visitor_id.in_(visitor_ids)
+    ).order_by(models.ShopVisit.visited_at).all()
+    db_time = time.time() - db_start
+    print(f"⏱️ [CLIENTS] All visits query took {db_time:.3f}s, found {len(all_visits_data)} visits")
+    
+    # Группируем посещения по visitor_id
+    visits_by_visitor = {}
+    for visit in all_visits_data:
+        visitor_id = visit[0]
+        if visitor_id not in visits_by_visitor:
+            visits_by_visitor[visitor_id] = []
+        visits_by_visitor[visitor_id].append(visit)
+    
+    # Предзагружаем все счетчики для всех клиентов одним запросом
+    now = datetime.utcnow()
+    
+    # Активные резервации для всех клиентов
+    db_start = time.time()
+    active_reservations = db.query(
+        models.Reservation.reserved_by_user_id,
+        func.count(models.Reservation.id).label('count')
+    ).filter(
+        and_(
+            models.Reservation.user_id == shop_owner_id,
+            models.Reservation.reserved_by_user_id.in_(visitor_ids),
+            models.Reservation.is_active == True,
+            models.Reservation.reserved_until > now
+        )
+    ).group_by(models.Reservation.reserved_by_user_id).all()
+    active_reservations_dict = {r[0]: r[1] for r in active_reservations}
+    
+    # Активные заказы для всех клиентов
+    active_orders = db.query(
+        models.Order.ordered_by_user_id,
+        func.count(models.Order.id).label('count')
+    ).filter(
+        and_(
+            models.Order.user_id == shop_owner_id,
+            models.Order.ordered_by_user_id.in_(visitor_ids),
+            models.Order.is_completed == False,
+            models.Order.is_cancelled == False
+        )
+    ).group_by(models.Order.ordered_by_user_id).all()
+    active_orders_dict = {o[0]: o[1] for o in active_orders}
+    
+    # Активные покупки для всех клиентов
+    active_purchases = db.query(
+        models.Purchase.purchased_by_user_id,
+        func.count(models.Purchase.id).label('count')
+    ).filter(
+        and_(
+            models.Purchase.user_id == shop_owner_id,
+            models.Purchase.purchased_by_user_id.in_(visitor_ids),
+            models.Purchase.is_completed == False,
+            models.Purchase.is_cancelled == False
+        )
+    ).group_by(models.Purchase.purchased_by_user_id).all()
+    active_purchases_dict = {p[0]: p[1] for p in active_purchases}
+    
+    # Общие счетчики для всех клиентов
+    total_orders = db.query(
+        models.Order.ordered_by_user_id,
+        func.count(models.Order.id).label('count')
+    ).filter(
+        and_(
+            models.Order.user_id == shop_owner_id,
+            models.Order.ordered_by_user_id.in_(visitor_ids)
+        )
+    ).group_by(models.Order.ordered_by_user_id).all()
+    total_orders_dict = {o[0]: o[1] for o in total_orders}
+    
+    total_reservations = db.query(
+        models.Reservation.reserved_by_user_id,
+        func.count(models.Reservation.id).label('count')
+    ).filter(
+        and_(
+            models.Reservation.user_id == shop_owner_id,
+            models.Reservation.reserved_by_user_id.in_(visitor_ids)
+        )
+    ).group_by(models.Reservation.reserved_by_user_id).all()
+    total_reservations_dict = {r[0]: r[1] for r in total_reservations}
+    
+    total_purchases = db.query(
+        models.Purchase.purchased_by_user_id,
+        func.count(models.Purchase.id).label('count')
+    ).filter(
+        and_(
+            models.Purchase.user_id == shop_owner_id,
+            models.Purchase.purchased_by_user_id.in_(visitor_ids)
+        )
+    ).group_by(models.Purchase.purchased_by_user_id).all()
+    total_purchases_dict = {p[0]: p[1] for p in total_purchases}
+    
+    total_favorites = db.query(
+        models.Favorite.user_id,
+        func.count(models.Favorite.id).label('count')
+    ).filter(
+        and_(
+            models.Favorite.shop_owner_id == shop_owner_id,
+            models.Favorite.user_id.in_(visitor_ids)
+        )
+    ).group_by(models.Favorite.user_id).all()
+    total_favorites_dict = {f[0]: f[1] for f in total_favorites}
+    
+    # Последние заказы для всех клиентов
+    # ОПТИМИЗАЦИЯ: Используем подзапрос для получения последнего заказа каждого клиента
+    last_orders_dict = {}
+    for visitor_id in visitor_ids:
         last_order = db.query(models.Order).filter(
             and_(
                 models.Order.user_id == shop_owner_id,
                 models.Order.ordered_by_user_id == visitor_id
             )
         ).order_by(desc(models.Order.created_at)).first()
+        if last_order:
+            last_orders_dict[visitor_id] = last_order
+    
+    # Последние покупки для всех клиентов (только для тех, у кого нет заказов)
+    clients_without_orders = [vid for vid in visitor_ids if vid not in last_orders_dict]
+    last_purchases_dict = {}
+    for visitor_id in clients_without_orders:
+        last_purchase = db.query(models.Purchase).filter(
+            and_(
+                models.Purchase.user_id == shop_owner_id,
+                models.Purchase.purchased_by_user_id == visitor_id
+            )
+        ).order_by(desc(models.Purchase.created_at)).first()
+        if last_purchase:
+            last_purchases_dict[visitor_id] = last_purchase
+    
+    db_time = time.time() - db_start
+    print(f"⏱️ [CLIENTS] Aggregated queries took {db_time:.3f}s")
+    
+    clients = []
+    for visitor_id, total_visits, first_visit, last_visit in visitors:
+        # ОПТИМИЗАЦИЯ: Используем предзагруженные данные вместо отдельных запросов
+        # Подсчитываем просмотры товаров и посещения магазина из предзагруженных данных
+        visitor_visits = visits_by_visitor.get(visitor_id, [])
+        product_views = sum(1 for v in visitor_visits if v[1] is not None)
+        shop_visits = sum(1 for v in visitor_visits if v[1] is None)
         
-        # Если нет заказа, проверяем покупки
-        last_purchase = None
-        if not last_order:
-            last_purchase = db.query(models.Purchase).filter(
-                and_(
-                    models.Purchase.user_id == shop_owner_id,
-                    models.Purchase.purchased_by_user_id == visitor_id
-                )
-            ).order_by(desc(models.Purchase.created_at)).first()
+        # Вычисляем время активных сессий из предзагруженных данных
+        total_time_seconds = calculate_session_time(visitor_visits) if visitor_visits else 0
+        
+        # Получаем username пользователя из Telegram
+        username = get_user_username_from_telegram(visitor_id, bot_token) if bot_token else None
+        
+        # Используем предзагруженные счетчики
+        active_reservations_count = active_reservations_dict.get(visitor_id, 0)
+        active_orders_count = active_orders_dict.get(visitor_id, 0)
+        active_purchases_count = active_purchases_dict.get(visitor_id, 0)
+        active_deals_count = active_reservations_count + active_orders_count + active_purchases_count
+        
+        total_orders_count = total_orders_dict.get(visitor_id, 0)
+        total_reservations_count = total_reservations_dict.get(visitor_id, 0)
+        total_purchases_count = total_purchases_dict.get(visitor_id, 0)
+        total_favorites_count = total_favorites_dict.get(visitor_id, 0)
+        
+        # Используем предзагруженные последние заказы/покупки
+        last_order = last_orders_dict.get(visitor_id)
+        last_purchase = last_purchases_dict.get(visitor_id) if not last_order else None
         
         # Извлекаем контактную информацию
         client_first_name = None
@@ -413,6 +495,11 @@ async def get_clients_list(
     
     # Сортируем по последнему посещению (новые сначала)
     clients.sort(key=lambda x: x.last_visit if x.last_visit else datetime.min, reverse=True)
+    
+    total_time = time.time() - request_start
+    print(f"⏱️ [CLIENTS] Total request time: {total_time:.3f}s, returned {len(clients)} clients")
+    if total_time > 2.0:
+        print(f"⚠️ [CLIENTS] WARNING: Request took {total_time:.3f}s - this is slow!")
     
     return clients
 

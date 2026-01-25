@@ -9,12 +9,21 @@ from .db.schema_check import log_schema_status
 from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots, purchases, debug, favorites, clients, sale_orders, cart
 
 # Проверяем целостность схемы БД перед созданием таблиц
+import time
+app_start = time.time()
+print(f"🚀 [APP START] Starting application initialization...")
 log_schema_status()
 
 # Создаем таблицы базы данных
+print(f"🚀 [APP START] Creating database tables...")
+db_init_start = time.time()
 models.Base.metadata.create_all(bind=database.engine)
+db_init_time = time.time() - db_init_start
+print(f"⏱️ [APP START] Database tables created in {db_init_time:.3f}s")
 
 app = FastAPI(title="PriseMiniApp API")
+app_init_time = time.time() - app_start
+print(f"⏱️ [APP START] FastAPI app created in {app_init_time:.3f}s")
 
 # Подключаем статику для изображений
 if not os.path.exists("static/uploads"):
@@ -53,27 +62,101 @@ else:
 # Middleware для добавления заголовков к статическим файлам и API endpoints
 @app.middleware("http")
 async def add_ngrok_headers(request, call_next):
-    # Логируем все входящие запросы
+    import time
+    request_start = time.time()
+    
+    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем ВСЕ запросы ДО обработки
+    # Это поможет понять, почему GET запросы не доходят до сервера
     if request.url.path.startswith("/api/"):
         print(f"📡 [REQUEST] {request.method} {request.url.path} - {request.url.query}")
-    response = await call_next(request)
-    # Добавляем заголовки для статических файлов, WebApp и API endpoints изображений
-    if (request.url.path.startswith("/static/") or 
-        request.url.path.startswith("/css/") or 
-        request.url.path.startswith("/js/") or 
-        request.url.path.startswith("/assets/") or
-        request.url.path.startswith("/api/images/") or  # Проксирование изображений через API
-        request.url.path == "/" or
-        request.url.path.endswith(('.html', '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.webp'))):
-        response.headers["ngrok-skip-browser-warning"] = "69420"
-        # Добавляем CORS заголовки
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        # Кэширование для изображений
-        if request.url.path.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) or request.url.path.startswith("/api/images/"):
-            response.headers["Cache-Control"] = "public, max-age=31536000"
-    return response
+        # Для /api/context логируем ВСЕ методы (включая OPTIONS)
+        if request.url.path == "/api/context":
+            headers = dict(request.headers)
+            print(f"🔍 [CONTEXT REQUEST] {request.method} /api/context received")
+            print(f"🔍 [CONTEXT REQUEST] Headers: {list(headers.keys())}")
+            print(f"🔍 [CONTEXT REQUEST] Has X-Telegram-Init-Data: {'X-Telegram-Init-Data' in headers}")
+            if 'X-Telegram-Init-Data' in headers:
+                init_data = headers['X-Telegram-Init-Data']
+                print(f"🔍 [CONTEXT REQUEST] InitData length: {len(init_data)}")
+            print(f"🔍 [CONTEXT REQUEST] Client: {request.client.host if request.client else 'unknown'}")
+            print(f"🔍 [CONTEXT REQUEST] Full URL: {request.url}")
+        # Для /api/context логируем заголовки
+        if request.url.path == "/api/context" and request.method == "GET":
+            headers = dict(request.headers)
+            print(f"🔍 [CONTEXT REQUEST] GET /api/context received")
+            print(f"🔍 [CONTEXT REQUEST] Headers: {list(headers.keys())}")
+            print(f"🔍 [CONTEXT REQUEST] Has X-Telegram-Init-Data: {'X-Telegram-Init-Data' in headers}")
+            if 'X-Telegram-Init-Data' in headers:
+                init_data = headers['X-Telegram-Init-Data']
+                print(f"🔍 [CONTEXT REQUEST] InitData length: {len(init_data)}")
+            print(f"🔍 [CONTEXT REQUEST] Client: {request.client.host if request.client else 'unknown'}")
+        # Для /api/products/ логируем детально
+        elif request.url.path.startswith("/api/products") and request.method == "GET":
+            headers = dict(request.headers)
+            print(f"🔍 [PRODUCTS REQUEST] GET {request.url.path} received")
+            print(f"🔍 [PRODUCTS REQUEST] Query: {request.url.query}")
+            print(f"🔍 [PRODUCTS REQUEST] Headers: {list(headers.keys())}")
+            print(f"🔍 [PRODUCTS REQUEST] Has X-Telegram-Init-Data: {'X-Telegram-Init-Data' in headers}")
+            print(f"🔍 [PRODUCTS REQUEST] Client: {request.client.host if request.client else 'unknown'}")
+        # Для /api/categories/ логируем детально
+        elif request.url.path.startswith("/api/categories") and request.method == "GET":
+            headers = dict(request.headers)
+            print(f"🔍 [CATEGORIES REQUEST] GET {request.url.path} received")
+            print(f"🔍 [CATEGORIES REQUEST] Query: {request.url.query}")
+            print(f"🔍 [CATEGORIES REQUEST] Headers: {list(headers.keys())}")
+            print(f"🔍 [CATEGORIES REQUEST] Has X-Telegram-Init-Data: {'X-Telegram-Init-Data' in headers}")
+            print(f"🔍 [CATEGORIES REQUEST] Client: {request.client.host if request.client else 'unknown'}")
+    
+    try:
+        # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем время ДО вызова call_next
+        # Это поможет понять, не блокируется ли запрос до middleware
+        if request.url.path == "/api/context" and request.method == "GET":
+            print(f"🔍 [CONTEXT REQUEST] About to call_next, elapsed: {time.time() - request_start:.3f}s")
+        
+        response = await call_next(request)
+        request_time = time.time() - request_start
+        
+        # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем время ПОСЛЕ вызова call_next
+        if request.url.path == "/api/context" and request.method == "GET":
+            print(f"🔍 [CONTEXT REQUEST] call_next completed, elapsed: {request_time:.3f}s")
+        
+        # Логируем медленные запросы
+        if request.url.path.startswith("/api/"):
+            if request_time > 2.0:
+                print(f"⚠️ [REQUEST] Slow request: {request.method} {request.url.path} took {request_time:.3f}s")
+            elif request.url.path == "/api/context":
+                print(f"⏱️ [CONTEXT REQUEST] Total time: {request_time:.3f}s")
+        
+        # Добавляем заголовки для статических файлов, WebApp и API endpoints изображений
+        if (request.url.path.startswith("/static/") or 
+            request.url.path.startswith("/css/") or 
+            request.url.path.startswith("/js/") or 
+            request.url.path.startswith("/assets/") or
+            request.url.path.startswith("/api/images/") or  # Проксирование изображений через API
+            request.url.path == "/" or
+            request.url.path.endswith(('.html', '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.webp'))):
+            response.headers["ngrok-skip-browser-warning"] = "69420"
+            # Добавляем CORS заголовки
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            # Кэширование для изображений
+            if request.url.path.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) or request.url.path.startswith("/api/images/"):
+                response.headers["Cache-Control"] = "public, max-age=31536000"
+        
+        # Для всех API endpoints добавляем CORS заголовки
+        if request.url.path.startswith("/api/"):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            response.headers["Access-Control-Expose-Headers"] = "*"
+            response.headers["ngrok-skip-browser-warning"] = "69420"
+        
+        return response
+    except Exception as e:
+        request_time = time.time() - request_start
+        print(f"❌ [REQUEST] Error in {request.method} {request.url.path} after {request_time:.3f}s: {str(e)}")
+        raise
 
 # Настройка CORS
 app.add_middleware(
@@ -82,10 +165,16 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # Подключаем роутеры
+router_start = time.time()
+print(f"🚀 [APP START] Including routers...")
 app.include_router(context.router)
+router_time = time.time() - router_start
+print(f"⏱️ [APP START] Routers included in {router_time:.3f}s")
 app.include_router(categories.router)
 app.include_router(products.router)
 app.include_router(channels.router)
@@ -183,5 +272,9 @@ async def proxy_image(filename: str):
         headers={
             "Cache-Control": "public, max-age=31536000",
             "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Expose-Headers": "*",
+            "ngrok-skip-browser-warning": "69420",
         }
     )
