@@ -121,6 +121,17 @@ body::before {
     z-index: 0;
 }
 
+/* Исправления для body когда открыт bottom sheet - предотвращает серый фон при прокрутке */
+body.bottom-sheet-open {
+    background-attachment: scroll !important;
+    overscroll-behavior: contain !important;
+    overscroll-behavior-y: contain !important;
+}
+
+body.bottom-sheet-open::before {
+    position: absolute !important; /* Изменено с fixed на absolute для предотвращения проблем при прокрутке */
+}
+
 /* Глобальные стили для кнопок - убираем синий фон и белую рамку Telegram */
 button {
     -webkit-tap-highlight-color: transparent;
@@ -144,11 +155,12 @@ header {
     -webkit-backdrop-filter: var(--blur-large);
     border-top: 1px solid var(--border-glass);
     border-bottom: none;
-    position: fixed;
+    position: fixed !important;
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 300;
+    z-index: 10010 !important; /* СЛОЙ 1: Самый высокий - меню всегда поверх всего */
+    pointer-events: auto !important; /* Меню всегда должно быть кликабельным */
     box-shadow: 0 -8px 32px var(--shadow-glass),
                 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     min-height: 64px;
@@ -1118,6 +1130,8 @@ button.cart-button.cart-has-items #cart-count,
     grid-template-columns: repeat(2, 1fr);
     row-gap: 36px;
     column-gap: 12px;
+    position: relative;
+    z-index: 0; /* СЛОЙ 3: Самый низкий - карточки товаров под всем */
     padding: 4px;
     max-width: 100%;
     box-sizing: border-box;
@@ -2135,7 +2149,7 @@ button.cart-button.cart-has-items #cart-count,
     z-index: 1000;
     /* Фон под общий стиль проекта - градиент как в body */
     background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 50%, #1c1c1e 100%);
-    background-attachment: fixed;
+    background-attachment: scroll; /* Изменено с fixed на scroll для предотвращения проблем при прокрутке */
     overflow-y: auto;
     overflow-x: hidden;
     /* Запрещаем горизонтальный скролл */
@@ -2149,14 +2163,13 @@ button.cart-button.cart-has-items #cart-count,
     /* Скрываем scrollbar */
     scrollbar-width: none;
     -ms-overflow-style: none;
-    /* Плавная прокрутка с bounce эффектом */
+    /* Плавная прокрутка */
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
-    /* Разрешаем вертикальный bounce, запрещаем горизонтальный */
-    overscroll-behavior-y: auto;
+    /* Предотвращаем bounce-эффект и серый фон при прокрутке */
+    overscroll-behavior: contain; /* Предотвращает прокрутку родительского элемента и серый фон */
+    overscroll-behavior-y: contain;
     overscroll-behavior-x: none;
-    overscroll-behavior-block: auto;
-    overscroll-behavior-inline: none;
     /* Дополнительная защита от горизонтального скролла */
     touch-action: pan-y;
     /* Плавность прокрутки для iOS */
@@ -2166,7 +2179,7 @@ button.cart-button.cart-has-items #cart-count,
 /* Декоративный фон для страницы товара (как в body::before) */
 .product-page::before {
     content: '';
-    position: fixed;
+    position: absolute; /* Изменено с fixed на absolute - не перекрывает контент */
     top: 0;
     left: 0;
     right: 0;
@@ -2175,7 +2188,7 @@ button.cart-button.cart-has-items #cart-count,
         radial-gradient(circle at 20% 50%, rgba(90, 200, 250, 0.05) 0%, transparent 50%),
         radial-gradient(circle at 80% 80%, rgba(90, 200, 250, 0.03) 0%, transparent 50%);
     pointer-events: none;
-    z-index: 0;
+    z-index: 0; /* Фон должен быть ниже контента */
 }
 
 .product-page::-webkit-scrollbar {
@@ -2194,6 +2207,155 @@ button.cart-button.cart-has-items #cart-count,
     padding: 8px 16px;
     padding-top: calc(8px + var(--tg-safe-area-inset-top, 0px));
     margin-bottom: 4px;
+}
+
+/* Верхнее меню страницы товара (аналогично корзине и избранному) */
+.product-new-top-menu {
+    display: none; /* По умолчанию скрыто */
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    /* Увеличено padding-top на 8px для удлинения меню вверх */
+    padding-top: calc(20px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); /* Отступ от системных кнопок Telegram + 8px */
+    padding-right: calc(16px + env(safe-area-inset-right, 0px)); /* Отступ справа для системных кнопок */
+    padding-left: calc(16px + env(safe-area-inset-left, 0px)); /* Отступ слева для системных кнопок */
+    margin: 0;
+    background: transparent; /* Убрали фон с меню */
+    backdrop-filter: none; /* Убрали blur */
+    -webkit-backdrop-filter: none; /* Убрали blur */
+    border-bottom: none; /* Убрали границу */
+    position: fixed; /* Фиксированное позиционирование - остается на месте при прокрутке */
+    /* Смещено top на -8px для компенсации увеличения padding-top, чтобы визуальное положение не изменилось */
+    top: -4px; /* Опускаем меню на 4px вниз, компенсируя увеличение padding-top */
+    left: 0;
+    right: 0;
+    z-index: 400; /* Такой же z-index как у футера */
+    /* Увеличено min-height на 8px для удлинения меню вверх */
+    min-height: 64px; /* Было 56px, стало 64px (+8px) */
+    box-shadow: none; /* Убрали тень */
+    width: 100%;
+    box-sizing: border-box;
+    /* Плавная анимация для всех свойств */
+    transition: background 0.3s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease, border-bottom 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Показываем меню только когда страница товара видна */
+#product-page[style*="display: block"] .product-new-top-menu,
+#product-page[style*="display:flex"] .product-new-top-menu {
+    display: flex;
+}
+
+/* Фон меню при прокрутке вниз */
+.product-new-top-menu.scrolled {
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-bottom: 1px solid var(--border-glass);
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+.product-top-menu-close {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-glass); /* Добавили фон под кнопку */
+    backdrop-filter: var(--blur-medium); /* Добавили blur */
+    -webkit-backdrop-filter: var(--blur-medium); /* Добавили blur */
+    border: 1px solid var(--border-glass); /* Добавили границу */
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px var(--shadow-light); /* Добавили тень */
+}
+
+.product-top-menu-close:hover {
+    background: var(--bg-glass-light);
+}
+
+.product-top-menu-close:active {
+    transform: scale(0.95);
+    background: var(--bg-glass-light);
+}
+
+.product-top-menu-title-container {
+    position: absolute; /* Абсолютное позиционирование для центрирования */
+    left: 50%;
+    transform: translateX(-50%); /* Центрирование по горизонтали */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    pointer-events: none; /* Чтобы не мешало кликам */
+    z-index: 1;
+}
+
+.product-top-menu-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.product-top-menu-favorite {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-glass); /* Добавили фон под кнопку */
+    backdrop-filter: var(--blur-medium); /* Добавили blur */
+    -webkit-backdrop-filter: var(--blur-medium); /* Добавили blur */
+    border: 1px solid var(--border-glass); /* Добавили границу */
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    padding: 0;
+    box-shadow: 0 2px 8px var(--shadow-light); /* Добавили тень */
+}
+
+.product-top-menu-favorite:hover {
+    background: var(--bg-glass-light);
+}
+
+.product-top-menu-favorite:active {
+    transform: scale(0.95);
+    background: var(--bg-glass-light);
+}
+
+.product-top-menu-favorite-icon {
+    width: 24px;
+    height: 24px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.product-top-menu-favorite-path {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.5);
+    stroke-width: 1.5;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Состояние активного избранного (заполненное сердце) */
+.product-top-menu-favorite.favorite-active .product-top-menu-favorite-path {
+    fill: #ff3b30;
+    stroke: none;
+    stroke-width: 0;
+    filter: drop-shadow(0 0 6px rgba(255, 59, 48, 0.6));
+}
+
+.product-top-menu-favorite:hover .product-top-menu-favorite-path {
+    stroke: rgba(255, 255, 255, 0.8);
+}
+
+.product-top-menu-favorite.favorite-active:hover .product-top-menu-favorite-path {
+    filter: drop-shadow(0 0 8px rgba(255, 59, 48, 0.8));
 }
 
 .product-page-back {
@@ -2232,35 +2394,45 @@ button.cart-button.cart-has-items #cart-count,
 }
 
 .product-page-content {
-    padding: 12px 16px;
-    padding-top: 8px;
-    padding-bottom: calc(20px + var(--tg-safe-area-inset-bottom, 0px));
+    padding: 0 16px 20px 16px;
+    /* Отступ сверху только для safe-area - контент начинается сразу под меню, как в корзине */
+    padding-top: calc(56px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 4px);
+    padding-bottom: calc(140px + var(--tg-safe-area-inset-bottom, 0px)); /* Отступ для постоянно видимого bottom sheet */
     max-width: 600px;
     width: 100%;
     box-sizing: border-box;
     margin: 0 auto;
     position: relative;
-    z-index: 1;
+    z-index: 2; /* Выше фона (z-index: 0) и ::before (z-index: 0) */
     /* Запрещаем горизонтальный скролл */
     overflow-x: hidden;
     min-width: 0;
     /* Плавная прокрутка */
     scroll-behavior: smooth;
     -webkit-scroll-behavior: smooth;
+    /* Убираем серый фон - явно указываем прозрачность */
+    background: transparent;
 }
 
 .product-page-image {
-    width: 100%;
-    max-width: 100%;
-    aspect-ratio: 3/4;
-    border-radius: 16px;
+    width: 100vw; /* На весь экран по ширине */
+    max-width: 100vw; /* На весь экран */
+    aspect-ratio: 3/3.4; /* Уменьшено на 15% по высоте (было 3/4, стало 3/3.4) */
+    border-radius: 0 0 20px 20px; /* Скругление только снизу */
     overflow: hidden;
     margin-bottom: 20px;
-    background: var(--bg-secondary);
+    margin-top: calc(-56px - var(--tg-safe-area-inset-top, 0px) - var(--tg-content-safe-area-inset-top, 0px) - 4px); /* Поднимаем фото сразу под меню с небольшим отступом */
+    margin-left: calc(-16px - env(safe-area-inset-left, 0px)); /* Компенсируем padding контента */
+    margin-right: calc(-16px - env(safe-area-inset-right, 0px)); /* Компенсируем padding контента */
+    background: transparent; /* Прозрачный фон - убираем серый */
     position: relative;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--border-glass);
+    box-shadow: none; /* Тень будет на слайдах */
+    border: none;
     box-sizing: border-box;
+    /* Учитываем safe-area Telegram */
+    padding-top: 0;
+    padding-bottom: var(--tg-safe-area-inset-bottom, 0);
+    z-index: 3; /* Выше контента (z-index: 2) */
 }
 
 .product-page-image img {
@@ -2270,6 +2442,166 @@ button.cart-button.cart-has-items #cart-count,
     object-fit: cover;
     display: block;
     box-sizing: border-box;
+}
+
+/* ========== СЛАЙДЕР ФОТО ТОВАРА (как в Яндекс Маркете) ========== */
+.product-slider-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    border-radius: 0 0 20px 20px; /* ТОЛЬКО снизу - фото приклеено к верху */
+    overflow: visible; /* Изменено с hidden на visible - чтобы слайды были видны */
+    /* Учитываем safe-area Telegram */
+    padding-top: 0;
+    padding-bottom: var(--tg-safe-area-inset-bottom, 0);
+    padding-left: 0; /* Убираем padding - он в slider */
+    padding-right: 0;
+    z-index: 1; /* Выше фона */
+}
+
+.product-slider {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+    /* Запрет выделения текста */
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    /* НЕ блокируем вертикальный overscroll - позволяем скроллить страницу */
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto; /* Разрешаем вертикальный скролл */
+    /* Плавная прокрутка с инерцией */
+    scroll-behavior: smooth;
+    -webkit-scroll-behavior: smooth;
+    /* Запрет контекстного меню на длинное нажатие */
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    /* Убираем padding - слайдер на весь экран */
+    padding-left: 0;
+    padding-right: 0;
+    /* НЕ используем touch-action: none - позволяем нативные жесты */
+}
+
+.product-slider::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+}
+
+.product-slider-track {
+    display: flex !important; /* Принудительно flex - важно для слайдера */
+    width: auto;
+    min-width: 100%;
+    height: 100%;
+    gap: 4px !important; /* Минимальный gap между слайдами (как тонкая линия) */
+    /* Позволяем видеть часть следующего изображения */
+    flex-direction: row; /* Явно указываем направление */
+    align-items: stretch; /* Растягиваем слайды по высоте */
+}
+
+/* Центрирование когда только одно фото */
+.product-slider-track:has(.product-slider-slide:only-child),
+.product-slider-track.single-slide {
+    justify-content: center; /* Центрируем единственный слайд */
+}
+
+.product-slider-slide {
+    flex: 0 0 92%; /* 92% ширины - виден кусочек следующего */
+    width: 92%;
+    min-width: 92%;
+    height: 100%;
+    scroll-snap-align: center; /* Snap в ЦЕНТР, а не в край */
+    scroll-snap-stop: always;
+    position: relative;
+    /* Запрет выделения */
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    /* Запрет drag изображения */
+    pointer-events: auto;
+    box-sizing: border-box;
+    /* Убираем padding - минимальный отступ только через gap */
+    padding: 0;
+}
+
+/* Когда только одно фото - делаем его 100% ширины и центрируем */
+.product-slider-slide:only-child {
+    flex: 0 0 100%; /* 100% ширины для единственного фото */
+    width: 100%;
+    min-width: 100%;
+}
+
+.product-slider-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    /* Запрет drag изображения */
+    pointer-events: none;
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+    /* Тень для ощущения карточки */
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+/* Индикатор текущего слайда (мягкие капли как в Яндекс Маркете) */
+.product-slider-indicator {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    padding: 0; /* Убираем padding - точки без фона */
+    background: transparent; /* Прозрачный фон */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    border: none;
+}
+
+.product-slider-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 6px; /* Мягкие капли, не круглые */
+    background: rgba(255, 255, 255, 0.4); /* Полупрозрачные */
+    transition: all 0.25s ease; /* Плавный переход */
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.product-slider-dot.active {
+    width: 14px; /* Чуть шире активная */
+    height: 6px;
+    border-radius: 6px;
+    background: #fff; /* Полностью белая активная */
+    box-shadow: none; /* Убираем тень */
+}
+
+/* Placeholder для загрузки */
+.product-slider-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+    color: var(--text-hint);
+    font-size: 48px;
+    position: relative;
 }
 
 .product-page-hot-offer-control {
@@ -2975,7 +3307,7 @@ button.cart-button.cart-has-items #cart-count,
     inset: 0;
     z-index: 1000;
     background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 50%, #1c1c1e 100%);
-    background-attachment: fixed;
+    background-attachment: scroll; /* Изменено с fixed на scroll для предотвращения проблем при прокрутке */
     overflow-y: auto;
     overflow-x: hidden;
     max-width: 100vw;
@@ -2988,17 +3320,16 @@ button.cart-button.cart-has-items #cart-count,
     -ms-overflow-style: none;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: auto;
+    overscroll-behavior: contain; /* Предотвращает прокрутку родительского элемента и серый фон */
+    overscroll-behavior-y: contain;
     overscroll-behavior-x: none;
-    overscroll-behavior-block: auto;
-    overscroll-behavior-inline: none;
     touch-action: pan-y;
     -webkit-scroll-behavior: smooth;
 }
 
 .favorites-page::before {
     content: '';
-    position: fixed;
+    position: absolute; /* Изменено с fixed на absolute для предотвращения проблем при прокрутке */
     top: 0;
     left: 0;
     right: 0;
@@ -3026,6 +3357,102 @@ button.cart-button.cart-has-items #cart-count,
     padding: 8px 16px;
     padding-top: calc(8px + var(--tg-safe-area-inset-top, 0px));
     margin-bottom: 4px;
+}
+
+/* Верхнее меню избранного (аналогично корзине) */
+.favorites-new-top-menu {
+    display: none; /* По умолчанию скрыто */
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    padding-top: calc(12px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); /* Отступ от системных кнопок Telegram */
+    padding-right: calc(16px + env(safe-area-inset-right, 0px)); /* Отступ справа для системных кнопок */
+    padding-left: calc(16px + env(safe-area-inset-left, 0px)); /* Отступ слева для системных кнопок */
+    margin: 0;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-bottom: 1px solid var(--border-glass);
+    position: fixed; /* Фиксированное позиционирование - остается на месте при прокрутке */
+    top: 0; /* Фиксируется вверху */
+    left: 0;
+    right: 0;
+    z-index: 400; /* Такой же z-index как у футера */
+    min-height: 56px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Показываем меню только когда страница избранного видна */
+#favorites-page[style*="display: block"] .favorites-new-top-menu,
+#favorites-page[style*="display:flex"] .favorites-new-top-menu {
+    display: flex;
+}
+
+.favorites-top-menu-close {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+}
+
+.favorites-top-menu-close:hover {
+    background: var(--bg-glass-light);
+}
+
+.favorites-top-menu-close:active {
+    transform: scale(0.95);
+    background: var(--bg-glass-light);
+}
+
+.favorites-top-menu-title-container {
+    position: absolute; /* Абсолютное позиционирование для центрирования */
+    left: 50%;
+    transform: translateX(-50%); /* Центрирование по горизонтали */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px; /* Отступ между счетчиком и заголовком */
+    pointer-events: none; /* Чтобы не мешало кликам */
+    z-index: 1;
+}
+
+.favorites-top-menu-count {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-hint, #999);
+    opacity: 0.7;
+    line-height: 1;
+    white-space: nowrap;
+    margin-bottom: 0;
+}
+
+.favorites-top-menu-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+.favorites-top-menu-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
 .favorites-page-back {
@@ -3064,7 +3491,7 @@ button.cart-button.cart-has-items #cart-count,
 
 .favorites-page-content {
     padding: 12px 16px;
-    padding-top: 8px;
+    padding-top: calc(56px + 8px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); /* Отступ сверху для верхнего меню */
     padding-bottom: calc(20px + var(--tg-safe-area-inset-bottom, 0px));
     max-width: 600px;
     width: 100%;
@@ -3744,7 +4171,20 @@ button.cart-button.cart-has-items #cart-count,
 #favorites-products-grid.products-grid-view .product-list-prices,
 #favorites-products-grid.products-grid-view .product-quantity-badge-list,
 #favorites-products-grid.products-grid-view .cart-button-list,
-#favorites-products-grid.products-grid-view .favorite-button-list {
+#favorites-products-grid.products-grid-view .favorite-button-list,
+#favorites-items.products-grid-view .product-top-badges-list,
+#favorites-items.products-grid-view .product-name-list,
+#favorites-items.products-grid-view .product-description-list,
+#favorites-items.products-grid-view .product-list-prices,
+#favorites-items.products-grid-view .product-list-prices-right-container,
+#favorites-items.products-grid-view .product-list-right-side,
+#favorites-items.products-grid-view .product-quantity-badge-list,
+#favorites-items.products-grid-view .cart-button-list,
+#favorites-items.products-grid-view .favorite-button-list,
+#favorites-items.products-grid-view .product-list-old-price,
+#favorites-items.products-grid-view .product-list-card-price,
+#favorites-items.products-grid-view .product-list-cash-price,
+#favorites-items.products-grid-view .product-list-price-single {
     display: none !important;
 }
 
@@ -3826,7 +4266,8 @@ html, body {
     /* Плавная прокрутка */
     scroll-behavior: smooth;
     touch-action: pan-y;
-    z-index: 1;
+    /* КРИТИЧНО: НЕТ z-index, чтобы НЕ создавать stacking context для fixed элементов */
+    /* z-index: 1; - УБРАНО */
     /* Safe-area ТОЛЬКО здесь для главной страницы */
     padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
     -webkit-overflow-scrolling: touch;
@@ -5903,35 +6344,93 @@ main {
     left: 8px;
     width: 36px;
     height: 36px;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.4) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: none !important;
+    padding: 0;
+    margin: 0;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     z-index: 12;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .cart-button-card:hover {
-    background: rgba(0, 0, 0, 0.85);
-    transform: scale(1.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
 
 .cart-button-card:active {
     transform: scale(0.95);
 }
 
+.cart-button-card:focus,
+.cart-button-card:focus-visible {
+    outline: none !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
 .cart-button-card .cart-icon {
-    width: 18px;
-    height: 18px;
-    stroke: #ffffff;
+    width: 20px;
+    height: 20px;
+    stroke: rgba(255, 255, 255, 0.95);
     fill: none;
+    transition: all 0.15s ease;
+    display: block;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.cart-button-card .cart-icon-outline {
+    stroke: rgba(255, 255, 255, 0.95);
+    fill: none;
+    transition: all 0.15s ease;
+}
+
+/* Бейдж с количеством товаров в корзине */
+.cart-button-card .cart-icon-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: #4caf50;
+    color: #ffffff;
+    border-radius: 9px;
+    font-size: 10px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-shadow: 0 2px 6px rgba(76, 175, 80, 0.6);
+    border: 2px solid rgba(0, 0, 0, 0.3);
+    z-index: 13;
+    transition: all 0.15s ease;
+}
+
+/* Состояние: товар в корзине - показываем бейдж с количеством */
+.cart-button-card.cart-active .cart-icon-outline {
+    stroke: rgba(255, 255, 255, 0.95);
+}
+
+.cart-button-card.cart-active .cart-icon-badge {
+    display: flex;
+    opacity: 1;
+    transform: scale(1);
+}
+
+.cart-button-card:hover .cart-icon {
+    transform: scale(1.1);
 }
 
 /* Панель управления корзиной */
@@ -6490,4 +6989,378 @@ main {
     max-width: 100%;
     padding-left: 0; /* Убрали padding-left, так как меню имеет свой padding */
     padding-right: 0; /* Убрали padding-right, так как меню имеет свой padding */
+}
+
+/* ========== BOTTOM SHEET ДЛЯ ДОБАВЛЕНИЯ В КОРЗИНУ ========== */
+/* ВАЖНО: Порядок слоев:
+   СЛОЙ 1 (меню): z-index: 10010 - САМЫЙ ВЫСОКИЙ, всегда поверх всего
+   СЛОЙ 2 (bottom sheet): z-index: 5000 - СРЕДНИЙ, поверх карточек и других элементов, но под меню
+   СЛОЙ 3 (карточки): z-index: 0 - САМЫЙ НИЗКИЙ, под всем
+   
+   РЕГУЛИРОВКА ВЫСОТЫ:
+   Для легкой регулировки высоты bottom sheet используйте CSS переменные:
+   - --menu-height: высота меню (по умолчанию 64px)
+   - --bottom-sheet-offset: отступ bottom sheet от меню (по умолчанию 16px для страницы товара)
+   - --bottom-sheet-padding: внутренний отступ снизу (по умолчанию 16px)
+   - --body-bottom-offset: отступ body снизу (по умолчанию 14px для страницы товара)
+   - --actions-bottom-offset: отступ кнопок снизу (по умолчанию 14px для страницы товара)
+   
+   Пример изменения высоты:
+   .product-page-bottom-sheet .cart-bottom-sheet-content {
+       --menu-height: 80px; /* Увеличиваем высоту меню */
+       --bottom-sheet-offset: 20px; /* Увеличиваем отступ от меню */
+   }
+*/
+.cart-bottom-sheet {
+    /* КРИТИЧНО: НЕТ transform, НЕТ filter, НЕТ opacity < 1 - чтобы НЕ создавать stacking context */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0; /* Полный размер экрана */
+    z-index: 5000 !important; /* СЛОЙ 2: Высокий - выше карточек (0) и других элементов, но ниже меню (10010) */
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    pointer-events: none; /* Контейнер не блокирует клики - клики проходят к элементам под ним */
+    /* ВАЖНО: transform, filter, opacity, will-change - НЕЛЬЗЯ здесь! */
+}
+
+.cart-bottom-sheet[style*="display: flex"],
+.cart-bottom-sheet[style*="display:flex"],
+.cart-bottom-sheet[style*="z-index"] {
+    pointer-events: none; /* Контейнер остается прозрачным для кликов */
+    z-index: 5000 !important; /* СЛОЙ 2: Всегда остается 5000, НИКОГДА не выше меню (10010) */
+}
+
+.cart-bottom-sheet-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: transparent;
+    opacity: 0;
+    pointer-events: none; /* Backdrop не должен перехватывать клики */
+}
+
+.cart-bottom-sheet-content {
+    /* КРИТИЧНО: position: absolute для правильного позиционирования */
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    /* Используем CSS переменные для легкой регулировки высоты меню */
+    --menu-height: 64px; /* Высота меню по умолчанию */
+    --bottom-sheet-padding: 16px; /* Отступ снизу для легкой регулировки */
+    max-height: calc(80vh - var(--menu-height) - var(--bottom-sheet-padding) - var(--tg-safe-area-inset-bottom, 0px)); /* Учитываем высоту меню */
+    background: var(--bg-glass);
+    /* ВАЖНО: backdrop-filter создает stacking context, но это нормально для дочернего элемента */
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+    /* transform создает stacking context для ЭТОГО элемента, но НЕ для родителя */
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    touch-action: pan-y;
+    cursor: grab;
+    padding-bottom: calc(var(--menu-height) + var(--bottom-sheet-padding) + var(--tg-safe-area-inset-bottom, 0px)); /* Padding снизу, чтобы контент не перекрывался меню */
+    margin-bottom: 0;
+    pointer-events: auto; /* Контент bottom sheet должен быть кликабельным */
+    /* z-index не нужен, так как мы в одном stacking context с родителем */
+}
+
+/* Убрали псевдоэлемент, так как bottom sheet больше не должен заходить под меню */
+
+.cart-bottom-sheet-content:active {
+    cursor: grabbing;
+}
+
+.cart-bottom-sheet[style*="display: flex"] .cart-bottom-sheet-content,
+.cart-bottom-sheet[style*="display:flex"] .cart-bottom-sheet-content {
+    transform: translateY(0);
+}
+
+/* Bottom sheet для страницы товара - показывается только для клиентов через JavaScript */
+.product-page-bottom-sheet {
+    display: none; /* По умолчанию скрыт, показывается только для клиентов через JS */
+    pointer-events: auto; /* Разрешаем взаимодействие */
+    z-index: 5000 !important; /* Выше контента, но ниже меню */
+    position: fixed; /* Фиксированное позиционирование внутри product-page */
+    bottom: 0; /* Внизу страницы */
+    left: 0;
+    right: 0;
+}
+
+/* Показываем bottom sheet только когда он явно установлен в flex через JavaScript (для клиентов) */
+.product-page-bottom-sheet[style*="display: flex"],
+.product-page-bottom-sheet[style*="display:flex"] {
+    display: flex !important;
+}
+
+.product-page-bottom-sheet .cart-bottom-sheet-content {
+    transform: translateY(0) !important; /* Всегда видимый, не скрывается */
+    /* Используем CSS переменную для легкой регулировки высоты меню */
+    --menu-height: 64px; /* Высота меню по умолчанию */
+    /* Уменьшено на 20px для опускания фона ближе к меню: было 16px, стало -4px */
+    --bottom-sheet-offset: -30px; /* Отступ от меню для легкой регулировки */
+    max-height: calc(80vh - var(--menu-height) - 16px - var(--tg-safe-area-inset-bottom, 0px)); /* Используем фиксированное значение для max-height */
+    /* Позиционируем выше меню с учетом отступа (меньше offset = ближе к меню) */
+    bottom: calc(var(--menu-height) + var(--bottom-sheet-offset)) !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end; /* Выравниваем контент внизу */
+}
+
+/* Скрываем backdrop на странице товара, так как bottom sheet постоянно видимый */
+.product-page-bottom-sheet .cart-bottom-sheet-backdrop {
+    display: none;
+}
+
+/* Скрываем handle (разделитель) на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-handle {
+    display: none;
+}
+
+/* Скрываем header с фото и названием на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-header {
+    display: none;
+}
+
+/* Уменьшаем размер кнопок на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-action-btn {
+    min-height: 40px;
+    height: 40px;
+    font-size: 14px;
+    padding: 0 16px;
+}
+
+/* Уменьшаем размер кнопок количества на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-quantity-controls {
+    height: 40px;
+}
+
+.product-page-bottom-sheet .cart-bottom-sheet-quantity-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+}
+
+/* Убираем лишний padding из body, так как header скрыт */
+.product-page-bottom-sheet .cart-bottom-sheet-body {
+    padding-top: 12px;
+    padding-bottom: 0;
+    margin-top: auto; /* Прижимаем body к низу */
+    /* Используем CSS переменную для легкой регулировки отступа снизу */
+    /* Уменьшено на 26px для приближения к меню: было 14px, стало -12px */
+    --body-bottom-offset: -30px; /* Отступ снизу для легкой регулировки */
+    margin-bottom: var(--body-bottom-offset) !important;
+}
+
+.cart-bottom-sheet-handle {
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    margin: 8px auto 12px;
+    cursor: grab;
+    touch-action: none;
+}
+
+.cart-bottom-sheet-handle:active {
+    cursor: grabbing;
+}
+
+.cart-bottom-sheet-header {
+    padding: 0 16px 12px;
+    border-bottom: 1px solid var(--border-glass);
+}
+
+.cart-bottom-sheet-product {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.cart-bottom-sheet-product-image {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
+    border: 1px solid var(--border-glass);
+}
+
+.cart-bottom-sheet-product-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.cart-bottom-sheet-product-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.3;
+}
+
+.cart-bottom-sheet-product-price {
+    display: none;
+}
+
+.cart-bottom-sheet-body {
+    padding: 12px 16px;
+}
+
+.cart-bottom-sheet-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    /* Убрано justify-content: space-between для равномерного распределения */
+}
+
+/* Опускаем кнопки на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-actions-row {
+    /* Используем CSS переменную для легкой регулировки отступа снизу */
+    /* Уменьшено на 26px для приближения к меню: было 14px, стало -12px */
+    --actions-bottom-offset: -12px; /* Отступ снизу для легкой регулировки */
+    margin-bottom: var(--actions-bottom-offset) !important;
+}
+
+.cart-bottom-sheet-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex: 1; /* Занимает 50% ширины */
+    min-width: 0;
+}
+
+.cart-bottom-sheet-quantity-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-secondary);
+    border-radius: 16px; /* Более скругленные углы, как у кнопок */
+    padding: 4px;
+    border: 1px solid var(--border-glass);
+    flex: 1; /* Занимает 50% ширины, равную кнопкам действий */
+    justify-content: space-between; /* Кнопки +/- по краям, инпут в центре */
+    min-width: 0;
+    height: 44px; /* Одинаковая высота с основными кнопками */
+}
+
+.cart-bottom-sheet-quantity-btn {
+    width: 44px; /* Увеличено для соответствия высоте основных кнопок */
+    height: 44px; /* Одинаковая высота с основными кнопками */
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 600;
+    border-radius: 16px; /* Более скругленные углы, как у основных кнопок */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0; /* Кнопки +/- не сжимаются */
+}
+
+.cart-bottom-sheet-quantity-btn:active {
+    background: var(--bg-glass);
+    transform: scale(0.95);
+}
+
+.cart-bottom-sheet-quantity-input {
+    min-width: 24px;
+    flex: 1; /* Инпут занимает оставшееся пространство между кнопками */
+    text-align: center;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 700;
+    padding: 0;
+    -moz-appearance: textfield;
+    pointer-events: none;
+}
+
+.cart-bottom-sheet-quantity-input::-webkit-outer-spin-button,
+.cart-bottom-sheet-quantity-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.cart-bottom-sheet-action-btn {
+    flex: 1; /* Кнопки занимают одинаковую ширину */
+    padding: 10px 16px;
+    border: none;
+    border-radius: 16px; /* Более скругленные углы */
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    height: 44px; /* Фиксированная высота, больше чем было */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    min-width: 0; /* Позволяет тексту обрезаться при необходимости */
+}
+
+.cart-bottom-sheet-action-btn.primary {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.7) 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.cart-bottom-sheet-action-btn.primary:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.cart-bottom-sheet-action-btn.secondary {
+    background: var(--bg-glass);
+    color: var(--text-primary);
+    border: 1px solid var(--border-glass);
+}
+
+.cart-bottom-sheet-action-btn.secondary:active {
+    transform: scale(0.98);
+    background: var(--bg-secondary);
+}
+
+/* Анимация появления */
+@keyframes slideUpBottomSheet {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideDownBottomSheet {
+    from {
+        transform: translateY(0);
+    }
+    to {
+        transform: translateY(100%);
+    }
 }

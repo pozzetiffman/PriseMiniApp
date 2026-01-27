@@ -12,22 +12,6 @@
 </head>
 <body>
     <div id="app">
-        <header>
-            <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-start;">
-                <button id="profile-button" class="profile-button" style="display: none;">👤</button>
-                <button id="settings-button" class="settings-button" style="display: none;">⚙️</button>
-                <button id="admin-button" class="admin-button" style="display: none;">📊</button>
-            </div>
-            <h1 id="user-name">Загрузка...</h1>
-            <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
-                <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
-                <button id="favorites-button" class="favorites-button" style="display: none;">
-                    <svg viewBox="0 0 24 24" class="heart-icon-menu" xmlns="http://www.w3.org/2000/svg">
-                        <path class="heart-path-menu" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                    </svg>
-                </button>
-            </div>
-        </header>
         <main id="main-content">
             <div id="categories-nav" class="scroll-x">
                 <!-- Категории будут здесь -->
@@ -44,8 +28,19 @@
         
         <!-- Страница товара (отдельная страница вместо модального окна) -->
         <div id="product-page" class="product-page" style="display: none;">
-            <div class="product-page-header">
-                <button id="product-page-back" class="product-page-back">← Назад</button>
+            <!-- Верхнее меню страницы товара (фиксированное, как в корзине и избранном) -->
+            <div class="product-new-top-menu">
+                <button id="product-page-close" class="product-top-menu-close" aria-label="Закрыть">←</button>
+                <div class="product-top-menu-title-container">
+                    <!-- Заголовок не нужен, оставляем пустым для центрирования -->
+                </div>
+                <div class="product-top-menu-right">
+                    <button id="product-top-menu-favorite" class="product-top-menu-favorite" aria-label="Добавить в избранное" style="display: none;">
+                        <svg viewBox="0 0 24 24" class="product-top-menu-favorite-icon" xmlns="http://www.w3.org/2000/svg">
+                            <path class="product-top-menu-favorite-path" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="product-page-content">
                 <div id="product-page-image" class="product-page-image"></div>
@@ -57,6 +52,39 @@
                 <div id="product-page-quantity" class="product-page-quantity" style="display: none;"></div>
                 <div id="product-page-reservation-status" class="product-page-reservation-status"></div>
                 <div id="product-page-reservation-button" class="product-page-reservation-button"></div>
+            </div>
+            <!-- Bottom sheet для страницы товара (показывается только для клиентов через JavaScript) -->
+            <div id="product-page-bottom-sheet" class="cart-bottom-sheet product-page-bottom-sheet" style="display: none;">
+                <div class="cart-bottom-sheet-backdrop"></div>
+                <div class="cart-bottom-sheet-content">
+                    <div class="cart-bottom-sheet-handle"></div>
+                    <div class="cart-bottom-sheet-header">
+                        <div class="cart-bottom-sheet-product">
+                            <div class="cart-bottom-sheet-product-image"></div>
+                            <div class="cart-bottom-sheet-product-info">
+                                <div class="cart-bottom-sheet-product-name"></div>
+                                <div class="cart-bottom-sheet-product-price"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cart-bottom-sheet-body">
+                        <div class="cart-bottom-sheet-actions-row">
+                            <div class="cart-bottom-sheet-actions">
+                                <button class="cart-bottom-sheet-action-btn primary" id="product-page-bottom-sheet-primary-btn">
+                                    Купить сейчас
+                                </button>
+                                <button class="cart-bottom-sheet-action-btn secondary" id="product-page-bottom-sheet-secondary-btn" style="display: none;">
+                                    Продать сейчас
+                                </button>
+                            </div>
+                            <div class="cart-bottom-sheet-quantity-controls">
+                                <button class="cart-bottom-sheet-quantity-btn minus" aria-label="Уменьшить">−</button>
+                                <input type="number" class="cart-bottom-sheet-quantity-input" min="1" value="1" readonly>
+                                <button class="cart-bottom-sheet-quantity-btn plus" aria-label="Увеличить">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -161,11 +189,18 @@
         
         <!-- Страница избранного -->
         <div id="favorites-page" class="favorites-page" style="display: none;">
-            <div class="favorites-page-header">
-                <button id="favorites-page-back" class="favorites-page-back">← Назад</button>
+            <!-- Верхнее меню избранного (фиксированное, как в корзине) -->
+            <div class="favorites-new-top-menu">
+                <button id="favorites-page-close" class="favorites-top-menu-close" aria-label="Закрыть">←</button>
+                <div class="favorites-top-menu-title-container">
+                    <span id="favorites-top-menu-count" class="favorites-top-menu-count">0 товаров</span>
+                    <h2 class="favorites-top-menu-title">Избранное</h2>
+                </div>
+                <div class="favorites-top-menu-right">
+                    <!-- Правая часть пустая, но оставляем для симметрии -->
+                </div>
             </div>
             <div class="favorites-page-content">
-                <h2 class="favorites-page-title">❤️ Мне нравится</h2>
                 <div id="favorites-items" class="favorites-items">
                     <!-- Избранные товары будут здесь -->
                 </div>
@@ -1119,6 +1154,58 @@
             </div>
         </div>
     </div>
+    
+    <!-- СЛОЙ 2: Bottom Sheet (z-index: 100) - поверх карточек, но под меню -->
+    <div id="cart-bottom-sheet" class="cart-bottom-sheet" style="display: none;">
+        <div class="cart-bottom-sheet-backdrop"></div>
+        <div class="cart-bottom-sheet-content">
+            <div class="cart-bottom-sheet-handle"></div>
+            <div class="cart-bottom-sheet-header">
+                <div class="cart-bottom-sheet-product">
+                    <div class="cart-bottom-sheet-product-image"></div>
+                    <div class="cart-bottom-sheet-product-info">
+                        <div class="cart-bottom-sheet-product-name"></div>
+                        <div class="cart-bottom-sheet-product-price"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="cart-bottom-sheet-body">
+                <div class="cart-bottom-sheet-actions-row">
+                    <div class="cart-bottom-sheet-actions">
+                        <button class="cart-bottom-sheet-action-btn primary" id="cart-bottom-sheet-primary-btn">
+                            Купить сейчас
+                        </button>
+                        <button class="cart-bottom-sheet-action-btn secondary" id="cart-bottom-sheet-secondary-btn" style="display: none;">
+                            Продать сейчас
+                        </button>
+                    </div>
+                    <div class="cart-bottom-sheet-quantity-controls">
+                        <button class="cart-bottom-sheet-quantity-btn minus" aria-label="Уменьшить">−</button>
+                        <input type="number" class="cart-bottom-sheet-quantity-input" min="1" value="1" readonly>
+                        <button class="cart-bottom-sheet-quantity-btn plus" aria-label="Увеличить">+</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- СЛОЙ 1: Меню (z-index: 10010) - САМЫЙ ВЫСОКИЙ, всегда поверх всего -->
+    <header>
+        <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-start;">
+            <button id="profile-button" class="profile-button" style="display: none;">👤</button>
+            <button id="settings-button" class="settings-button" style="display: none;">⚙️</button>
+            <button id="admin-button" class="admin-button" style="display: none;">📊</button>
+        </div>
+        <h1 id="user-name">Загрузка...</h1>
+        <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
+            <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
+            <button id="favorites-button" class="favorites-button" style="display: none;">
+                <svg viewBox="0 0 24 24" class="heart-icon-menu" xmlns="http://www.w3.org/2000/svg">
+                    <path class="heart-path-menu" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+            </button>
+        </div>
+    </header>
     
     <script type="module" src="js/app.js"></script>
 </body>

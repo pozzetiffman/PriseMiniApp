@@ -113,8 +113,339 @@ export function initProductModalDependencies(dependencies) {
     // ========== END REFACTORING STEP 2.1-2.2 ==========
 }
 
-// Функция для отображения изображения на странице товара (объявляем ПЕРЕД showProductModal для hoisting)
-function showProductPageImage(index) {
+// ========== СЛАЙДЕР ФОТО ТОВАРА (как в Яндекс Маркете) ==========
+// Инициализация слайдера с поддержкой touch/drag и snap
+function initProductSlider(sliderElement, images, currentIndex = 0) {
+    if (!sliderElement || !images || images.length === 0) return;
+    
+    const slider = sliderElement.querySelector('.product-slider');
+    if (!slider) return;
+    
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let scrollLeft = 0;
+    let velocity = 0;
+    let lastX = 0;
+    let lastTime = 0;
+    let animationFrame = null;
+    let isHorizontalSwipe = false; // Флаг для определения горизонтального свайпа
+    let snapTimeout = null; // Таймер для debounce snap
+    
+    // Функция для получения ширины одного слайда (92% от контейнера + gap 4px)
+    function getSlideWidth() {
+        const containerWidth = slider.getBoundingClientRect().width || slider.offsetWidth || slider.clientWidth;
+        // 92% от ширины контейнера (без учета padding)
+        const slideWidthPercent = containerWidth * 0.92;
+        // Gap 4px добавляется между слайдами
+        return slideWidthPercent + 4;
+    }
+    
+    // Функция для получения ширины слайда без gap (для вычисления позиции)
+    function getSlideWidthWithoutGap() {
+        const containerWidth = slider.getBoundingClientRect().width || slider.offsetWidth || slider.clientWidth;
+        return containerWidth * 0.92;
+    }
+    
+    let slideWidth = getSlideWidth();
+    const totalSlides = images.length;
+    
+    // Функция для получения текущего индекса слайда
+    function getCurrentSlideIndex() {
+        const scrollPosition = slider.scrollLeft;
+        // Padding убран - слайдер на весь экран
+        return Math.round(scrollPosition / slideWidth);
+    }
+    
+    // Обработчик изменения размера окна для пересчета ширины слайда
+    const handleResize = () => {
+        const newWidth = getSlideWidth();
+        if (newWidth !== slideWidth && slideWidth > 0) {
+            // Пересчитываем позицию скролла при изменении размера
+            const currentIndex = getCurrentSlideIndex();
+            slideWidth = newWidth;
+            slider.scrollLeft = 16 + (currentIndex * slideWidth);
+        }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    // Сохраняем обработчик для последующего удаления
+    slider.dataset.resizeHandler = 'true';
+    
+    // Функция для обновления индикатора
+    function updateIndicator(index) {
+        const indicator = sliderElement.querySelector('.product-slider-indicator');
+        if (!indicator) return;
+        
+        const dots = indicator.querySelectorAll('.product-slider-dot');
+        dots.forEach((dot, i) => {
+            if (i === index) {
+                dot.classList.add('active');
+            } else {
+                dot.classList.remove('active');
+            }
+        });
+    }
+    
+    // Функция для snap к ближайшему слайду с ограничением на 1 слайд
+    function snapToNearestSlide() {
+        const scrollPosition = slider.scrollLeft;
+        // Padding убран - слайдер на весь экран
+        
+        // Получаем текущий индекс
+        const currentIndex = getCurrentSlideIndex();
+        
+        // Находим ближайший слайд
+        let nearestIndex = Math.round(scrollPosition / slideWidth);
+        nearestIndex = Math.max(0, Math.min(nearestIndex, totalSlides - 1));
+        
+        // ОГРАНИЧЕНИЕ: максимум 1 слайд за раз (запрет пропуска)
+        const delta = nearestIndex - currentIndex;
+        if (Math.abs(delta) > 1) {
+            // Если пытаемся перепрыгнуть больше чем на 1 слайд, ограничиваем
+            nearestIndex = currentIndex + (delta > 0 ? 1 : -1);
+            nearestIndex = Math.max(0, Math.min(nearestIndex, totalSlides - 1));
+        }
+        
+        // Вычисляем позицию (center snap работает через CSS)
+        const targetScroll = nearestIndex * slideWidth;
+        
+        // Плавная прокрутка к целевому слайду
+        slider.scrollTo({
+            left: targetScroll,
+            behavior: 'smooth'
+        });
+        
+        // Обновляем индекс в состоянии
+        if (modalState) {
+            modalState.currentImageIndex = nearestIndex;
+        }
+        
+        updateIndicator(nearestIndex);
+    }
+    
+    // Debounce для snap через scroll event (улучшенный)
+    function scheduleSnap() {
+        clearTimeout(snapTimeout);
+        snapTimeout = setTimeout(() => {
+            if (!isDragging) {
+                snapToNearestSlide();
+            }
+        }, 100); // Увеличена задержка до 100ms для более плавной парковки
+    }
+    
+    // Touch события БЕЗ блокировки вертикального скролла
+    slider.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        scrollLeft = slider.scrollLeft;
+        velocity = 0;
+        lastX = e.touches[0].clientX;
+        lastTime = Date.now();
+        isHorizontalSwipe = false; // Сбрасываем флаг
+        
+        // Отменяем плавную прокрутку для мгновенного отклика
+        slider.style.scrollBehavior = 'auto';
+    }, { passive: true });
+    
+    slider.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        
+        const currentX = e.touches[0].clientX;
+        const currentY = e.touches[0].clientY;
+        const dx = Math.abs(currentX - startX);
+        const dy = Math.abs(currentY - startY);
+        
+        // Определяем направление свайпа (порог увеличен для лучшего определения)
+        if (dx > dy && dx > 15) {
+            // Горизонтальный свайп - НЕ блокируем вертикальный скролл, только управляем горизонтальным
+            isHorizontalSwipe = true;
+            // НЕ вызываем preventDefault - позволяем вертикальному скроллу работать
+            
+            const x = currentX - slider.getBoundingClientRect().left;
+            const walk = (x - (startX - slider.getBoundingClientRect().left));
+            const newScrollLeft = scrollLeft - walk;
+            
+            // Ограничиваем скролл границами (padding убран)
+            const maxScroll = slideWidth * (totalSlides - 1);
+            slider.scrollLeft = Math.max(0, Math.min(newScrollLeft, maxScroll));
+            
+            // Вычисляем скорость для инерции
+            const now = Date.now();
+            const timeDelta = now - lastTime;
+            if (timeDelta > 0) {
+                const distance = currentX - lastX;
+                velocity = distance / timeDelta;
+            }
+            lastX = currentX;
+            lastTime = now;
+        } else if (dy > dx && dy > 15) {
+            // Вертикальный свайп - не трогаем слайдер, позволяем скроллить страницу
+            isHorizontalSwipe = false;
+        }
+    }, { passive: true }); // passive: true - не блокируем нативные события
+    
+    slider.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        
+        // Восстанавливаем плавную прокрутку
+        slider.style.scrollBehavior = 'smooth';
+        
+        // Применяем инерцию только если был горизонтальный свайп
+        if (isHorizontalSwipe) {
+            const threshold = 30; // Уменьшен порог для более чувствительного определения
+            const currentIndex = getCurrentSlideIndex();
+            const scrollPosition = slider.scrollLeft;
+            const slidePosition = currentIndex * slideWidth;
+            const distance = scrollPosition - slidePosition;
+            
+            // ОГРАНИЧЕНИЕ: максимум 1 слайд за жест
+            // Если скорость высокая или расстояние большое - перелистываем на 1 слайд
+            if (Math.abs(velocity) > 0.3 || Math.abs(distance) > threshold) {
+                if (velocity > 0.2 && currentIndex > 0) {
+                    // Свайп влево - предыдущий слайд (максимум 1)
+                    const targetScroll = (currentIndex - 1) * slideWidth;
+                    slider.scrollTo({
+                        left: targetScroll,
+                        behavior: 'smooth'
+                    });
+                    if (modalState) modalState.currentImageIndex = currentIndex - 1;
+                    updateIndicator(currentIndex - 1);
+                } else if (velocity < -0.2 && currentIndex < totalSlides - 1) {
+                    // Свайп вправо - следующий слайд (максимум 1)
+                    const targetScroll = (currentIndex + 1) * slideWidth;
+                    slider.scrollTo({
+                        left: targetScroll,
+                        behavior: 'smooth'
+                    });
+                    if (modalState) modalState.currentImageIndex = currentIndex + 1;
+                    updateIndicator(currentIndex + 1);
+                } else {
+                    // Возвращаемся к ближайшему слайду через debounce
+                    scheduleSnap();
+                }
+            } else {
+                // Медленный свайп - возвращаемся к текущему слайду через debounce
+                scheduleSnap();
+            }
+        }
+        
+        velocity = 0;
+        isHorizontalSwipe = false;
+    }, { passive: true });
+    
+    // Mouse события (для десктопа)
+    slider.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startX = e.pageX - slider.offsetLeft;
+        scrollLeft = slider.scrollLeft;
+        velocity = 0;
+        lastX = e.pageX;
+        lastTime = Date.now();
+        slider.style.scrollBehavior = 'auto';
+        slider.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    
+    slider.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        
+        const x = e.pageX - slider.offsetLeft;
+        const walk = (x - startX);
+        const newScrollLeft = scrollLeft - walk;
+        
+        const maxScroll = slideWidth * (totalSlides - 1);
+        slider.scrollLeft = Math.max(0, Math.min(newScrollLeft, maxScroll));
+        
+        const now = Date.now();
+        const timeDelta = now - lastTime;
+        if (timeDelta > 0) {
+            const distance = e.pageX - lastX;
+            velocity = distance / timeDelta;
+        }
+        lastX = e.pageX;
+        lastTime = now;
+    });
+    
+    slider.addEventListener('mouseleave', () => {
+        if (isDragging) {
+            isDragging = false;
+            slider.style.scrollBehavior = 'smooth';
+            slider.style.cursor = 'grab';
+            scheduleSnap();
+        }
+    });
+    
+    slider.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            slider.style.scrollBehavior = 'smooth';
+            slider.style.cursor = 'grab';
+            
+            const threshold = 50;
+            const currentIndex = getCurrentSlideIndex();
+            const scrollPosition = slider.scrollLeft;
+            const slidePosition = currentIndex * slideWidth;
+            const distance = scrollPosition - slidePosition;
+            
+            if (Math.abs(velocity) > 0.5 || Math.abs(distance) > threshold) {
+                if (velocity > 0.3 && currentIndex > 0) {
+                    const targetScroll = (currentIndex - 1) * slideWidth;
+                    slider.scrollTo({
+                        left: targetScroll,
+                        behavior: 'smooth'
+                    });
+                    if (modalState) modalState.currentImageIndex = currentIndex - 1;
+                    updateIndicator(currentIndex - 1);
+                } else if (velocity < -0.3 && currentIndex < totalSlides - 1) {
+                    const targetScroll = (currentIndex + 1) * slideWidth;
+                    slider.scrollTo({
+                        left: targetScroll,
+                        behavior: 'smooth'
+                    });
+                    if (modalState) modalState.currentImageIndex = currentIndex + 1;
+                    updateIndicator(currentIndex + 1);
+                } else {
+                    scheduleSnap();
+                }
+            } else {
+                scheduleSnap();
+            }
+            
+            velocity = 0;
+        }
+    });
+    
+    // Обработчик события scroll для обновления индикатора и debounce snap
+    slider.addEventListener('scroll', () => {
+        if (!isDragging) {
+            const index = getCurrentSlideIndex();
+            if (modalState) modalState.currentImageIndex = index;
+            updateIndicator(index);
+            // Debounce snap для "мягкой парковки"
+            scheduleSnap();
+        }
+    }, { passive: true });
+    
+    // Устанавливаем начальную позицию (padding убран)
+    slider.scrollLeft = currentIndex * slideWidth;
+    updateIndicator(currentIndex);
+    
+    // Очистка обработчиков при удалении слайдера
+    const originalRemove = slider.remove;
+    slider.remove = function() {
+        window.removeEventListener('resize', handleResize);
+        clearTimeout(snapTimeout);
+        if (originalRemove) originalRemove.call(this);
+    };
+}
+
+// Функция для отображения слайдера изображений на странице товара
+function showProductPageImage(index = 0) {
     if (!modalState) {
         console.error('❌ [PRODUCT PAGE IMG] Modal state not initialized!');
         return;
@@ -170,548 +501,290 @@ function showProductPageImage(index) {
     modalState.currentImageLoadId++;
     const loadId = modalState.currentImageLoadId;
     
-    // Очищаем предыдущий blob URL если был
-    const oldBlobUrl = productPageImage.dataset.blobUrl;
-    if (oldBlobUrl) {
-        URL.revokeObjectURL(oldBlobUrl);
-        delete productPageImage.dataset.blobUrl;
-    }
-    
-    // Сохраняем кнопку избранного перед очисткой (ищем в productPageImage и во всех его дочерних элементах)
-    let favoriteButton = productPageImage.querySelector('.favorite-button-product-page');
-    // Если не нашли в productPageImage, ищем в document (кнопка может быть в другом месте)
-    if (!favoriteButton) {
-        favoriteButton = document.querySelector('.favorite-button-product-page');
-    }
-    
-    console.log('[PRODUCT PAGE IMG] Favorite button found before clear:', !!favoriteButton);
+    // Очищаем предыдущие blob URL если были
+    const oldBlobUrls = productPageImage.dataset.blobUrls ? JSON.parse(productPageImage.dataset.blobUrls) : [];
+    oldBlobUrls.forEach(url => {
+        if (url) URL.revokeObjectURL(url);
+    });
+    delete productPageImage.dataset.blobUrls;
     
     // Очищаем содержимое полностью
     productPageImage.innerHTML = '';
     
-    // Восстанавливаем кнопку избранного после очистки (если она была)
-    if (favoriteButton) {
-        productPageImage.appendChild(favoriteButton);
-        console.log('[PRODUCT PAGE IMG] Favorite button restored after clear');
-    } else {
-        console.warn('[PRODUCT PAGE IMG] Favorite button not found, cannot restore');
-    }
-    
-        // Если товар без фото, показываем placeholder и выходим
-        if (modalState.currentImages.length === 0) {
-            productPageImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-            const placeholderDiv = document.createElement('div');
-            placeholderDiv.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
-            placeholderDiv.innerHTML = '📷';
-            productPageImage.appendChild(placeholderDiv);
-            
-            // Добавляем badge скрытого товара (слева вверху, только для админа)
-            const hiddenBadge = createHiddenBadge();
-            if (hiddenBadge) {
-                placeholderDiv.appendChild(hiddenBadge);
-            }
-            
-            // Добавляем значок горящего предложения, если товар горящий
-            if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-                const hotOfferBadge = document.createElement('div');
-                hotOfferBadge.className = 'hot-offer-badge';
-                hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-                hotOfferBadge.style.position = 'absolute';
-                hotOfferBadge.style.top = '12px';
-                hotOfferBadge.style.right = '12px';
-                hotOfferBadge.style.left = 'auto';
-                hotOfferBadge.innerHTML = `
-                    <span class="fire-wrap" aria-hidden="true">
-                        <span class="fire-back">🔥</span>
-                        <span class="fire-front">🔥</span>
-                        <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
-                        <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
-                    </span>
-                `;
-                placeholderDiv.appendChild(hotOfferBadge);
-            }
-            
-            // Добавляем кнопку избранного на placeholder (правый нижний угол) - только для клиентов
-            // favoriteButton уже сохранена выше, используем её
-            if (favoriteButton && placeholderDiv) {
-                placeholderDiv.appendChild(favoriteButton);
-            }
-            
-            return;
+    // Если товар без фото, показываем placeholder и выходим
+    if (modalState.currentImages.length === 0) {
+        productPageImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+        const placeholderDiv = document.createElement('div');
+        placeholderDiv.className = 'product-slider-placeholder';
+        placeholderDiv.innerHTML = '📷';
+        productPageImage.appendChild(placeholderDiv);
+        
+        const hiddenBadge = createHiddenBadge();
+        if (hiddenBadge) {
+            placeholderDiv.appendChild(hiddenBadge);
         }
-    
-    if (index < 0 || index >= modalState.currentImages.length) {
-        console.warn(`[PRODUCT PAGE IMG] Invalid index: ${index}, currentImages.length=${modalState.currentImages.length}, productId=${modalState.currentProduct?.id || 'unknown'}`);
+        
+        if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+            const hotOfferBadge = document.createElement('div');
+            hotOfferBadge.className = 'hot-offer-badge';
+            hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+            hotOfferBadge.style.position = 'absolute';
+            hotOfferBadge.style.top = '12px';
+            hotOfferBadge.style.right = '12px';
+            hotOfferBadge.innerHTML = `
+                <span class="fire-wrap" aria-hidden="true">
+                    <span class="fire-back">🔥</span>
+                    <span class="fire-front">🔥</span>
+                    <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                    <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+                </span>
+            `;
+            placeholderDiv.appendChild(hotOfferBadge);
+        }
         return;
     }
     
-    modalState.currentImageIndex = index;
-    const fullImg = modalState.currentImages[index];
+    // Валидация индекса
+    const validIndex = Math.max(0, Math.min(index, modalState.currentImages.length - 1));
+    modalState.currentImageIndex = validIndex;
     
-    console.log(`[PRODUCT PAGE IMG] Loading image: index=${index}, productId=${modalState.currentProduct?.id || 'unknown'}, totalImages=${modalState.currentImages.length}`);
+    console.log(`[PRODUCT SLIDER] Creating slider: index=${validIndex}, totalImages=${modalState.currentImages.length}, productId=${modalState.currentProduct?.id || 'unknown'}`);
+    console.log(`[PRODUCT SLIDER] modalState.currentImages:`, modalState.currentImages);
     
-    const imageContainer = document.createElement('div');
-    imageContainer.className = 'product-page-image-container';
-    imageContainer.dataset.loadId = loadId;
-    imageContainer.style.cssText = 'position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;';
-    imageContainer.innerHTML = '<div style="color: var(--tg-theme-hint-color); font-size: 48px;">⏳</div>';
-    productPageImage.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-    productPageImage.appendChild(imageContainer);
-    
-    // Добавляем кнопку избранного в контейнер изображения сразу после создания (если она есть)
-    if (favoriteButton) {
-        // Удаляем кнопку из productPageImage, если она там есть
-        if (favoriteButton.parentNode === productPageImage) {
-            productPageImage.removeChild(favoriteButton);
-        }
-        // Добавляем кнопку в imageContainer
-        imageContainer.appendChild(favoriteButton);
-        console.log('[PRODUCT PAGE IMG] Favorite button added to imageContainer');
+    // Проверяем, что есть изображения для слайдера
+    if (!modalState.currentImages || modalState.currentImages.length === 0) {
+        console.error('[PRODUCT SLIDER] No images to create slider!');
+        console.error('[PRODUCT SLIDER] modalState:', modalState);
+        console.error('[PRODUCT SLIDER] productPageImage:', productPageImage);
+        return;
     }
+    
+    // Создаем структуру слайдера
+    const sliderContainer = document.createElement('div');
+    sliderContainer.className = 'product-slider-container';
+    sliderContainer.style.cssText = 'position: relative; width: 100%; height: 100%;';
+    
+    const slider = document.createElement('div');
+    slider.className = 'product-slider';
+    slider.style.cursor = 'grab';
+    
+    const sliderTrack = document.createElement('div');
+    sliderTrack.className = 'product-slider-track';
+    // Явно устанавливаем display: flex для track
+    sliderTrack.style.display = 'flex';
+    sliderTrack.style.flexDirection = 'row';
+    
+    // Массив для хранения blob URL (для очистки)
+    const blobUrls = [];
     
     // Определяем, мобильное устройство или десктоп
     const isMobile = isMobileDevice();
     
-    if (isMobile) {
-        // На мобильных устройствах используем fetch + blob URL
-        fetch(fullImg, {
-            headers: {
-                'ngrok-skip-browser-warning': '69420'
-            }
-        })
-        .then(response => {
-            if (loadId !== modalState.currentImageLoadId) {
-                return null;
-            }
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.blob();
-        })
-        .then(blob => {
-            if (!blob || loadId !== modalState.currentImageLoadId) {
-                return;
-            }
-            
-            const blobUrl = URL.createObjectURL(blob);
-            productPageImage.dataset.blobUrl = blobUrl;
-            
-            const img = document.createElement('img');
-            img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 16px; display: block;';
-            img.alt = modalState.currentProduct ? modalState.currentProduct.name : 'Product';
-            
-            img.onload = () => {
-                if (loadId !== modalState.currentImageLoadId) {
-                    URL.revokeObjectURL(blobUrl);
-                    return;
-                }
-                
-                // Сохраняем кнопку избранного перед очисткой контейнера
-                const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
-                
-                imageContainer.innerHTML = '';
-                imageContainer.appendChild(img);
-                productPageImage.style.backgroundColor = 'transparent';
-                
-                // Добавляем badge скрытого товара (слева вверху, только для админа)
-                const hiddenBadge = createHiddenBadge();
-                if (hiddenBadge) {
-                    imageContainer.appendChild(hiddenBadge);
-                }
-                
-                // Добавляем значок горящего предложения, если товар горящий
-                if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-                    const hotOfferBadge = document.createElement('div');
-                    hotOfferBadge.className = 'hot-offer-badge';
-                    hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-                    hotOfferBadge.style.position = 'absolute';
-                    hotOfferBadge.style.top = '12px';
-                    hotOfferBadge.style.right = '12px';
-                    hotOfferBadge.style.left = 'auto';
-                    hotOfferBadge.innerHTML = `
-                        <span class="fire-wrap" aria-hidden="true">
-                            <span class="fire-back">🔥</span>
-                            <span class="fire-front">🔥</span>
-                            <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
-                            <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
-                        </span>
-                    `;
-                    imageContainer.appendChild(hotOfferBadge);
-                }
-                
-                // Восстанавливаем кнопку избранного после очистки контейнера
-                if (savedFavoriteButton) {
-                    imageContainer.appendChild(savedFavoriteButton);
-                } else if (favoriteButton) {
-                    // Если кнопка не была в контейнере, добавляем её
-                    imageContainer.appendChild(favoriteButton);
-                }
-                
-                // Добавляем навигацию по фото, если их больше одного
-                if (modalState.currentImages.length > 1) {
-                    updateProductPageImageNavigation();
-                }
-            };
-            
-            img.onerror = () => {
-                if (loadId !== modalState.currentImageLoadId) {
-                    return;
-                }
-                console.error(`[PRODUCT PAGE IMG] Image load error (mobile): loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, url="${fullImg.substring(0, 100)}..."`);
-                URL.revokeObjectURL(blobUrl);
-                delete productPageImage.dataset.blobUrl;
-                
-                // Сохраняем кнопку избранного перед очисткой контейнера
-                const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
-                
-                const errorPlaceholder = document.createElement('div');
-                errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
-                errorPlaceholder.textContent = '📷';
-                imageContainer.innerHTML = '';
-                imageContainer.appendChild(errorPlaceholder);
-                
-                // Добавляем badge скрытого товара (слева вверху, только для админа)
-                const hiddenBadge = createHiddenBadge();
-                if (hiddenBadge) {
-                    errorPlaceholder.appendChild(hiddenBadge);
-                }
-                
-                // Добавляем значок горящего предложения, если товар горящий
-                if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-                    const hotOfferBadge = document.createElement('div');
-                    hotOfferBadge.className = 'hot-offer-badge';
-                    hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-                    hotOfferBadge.style.position = 'absolute';
-                    hotOfferBadge.style.top = '12px';
-                    hotOfferBadge.style.right = '12px';
-                    hotOfferBadge.style.left = 'auto';
-                    hotOfferBadge.innerHTML = `
-                        <span class="fire-wrap" aria-hidden="true">
-                            <span class="fire-back">🔥</span>
-                            <span class="fire-front">🔥</span>
-                            <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
-                            <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
-                        </span>
-                    `;
-                    errorPlaceholder.appendChild(hotOfferBadge);
-                }
-                
-                // Восстанавливаем кнопку избранного после очистки контейнера
-                if (savedFavoriteButton) {
-                    errorPlaceholder.appendChild(savedFavoriteButton);
-                } else if (favoriteButton) {
-                    errorPlaceholder.appendChild(favoriteButton);
-                }
-            };
-            
-            img.src = blobUrl;
-        })
-        .catch(error => {
-            if (loadId !== modalState.currentImageLoadId) {
-                return;
-            }
-            console.error(`[PRODUCT PAGE IMG] Fetch error (mobile): loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, error=${error.message}, url="${fullImg.substring(0, 100)}..."`);
-            
-            // Сохраняем кнопку избранного перед очисткой контейнера
-            const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
-            
-            const errorPlaceholder = document.createElement('div');
-            errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
-            errorPlaceholder.textContent = '📷';
-            imageContainer.innerHTML = '';
-            imageContainer.appendChild(errorPlaceholder);
-            
-            // Добавляем badge скрытого товара (слева вверху, только для админа)
-            const hiddenBadge = createHiddenBadge();
-            if (hiddenBadge) {
-                errorPlaceholder.appendChild(hiddenBadge);
-            }
-            
-            // Добавляем значок горящего предложения, если товар горящий
-            if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-                const hotOfferBadge = document.createElement('div');
-                hotOfferBadge.className = 'product-page-hot-offer-badge';
-                hotOfferBadge.innerHTML = '🔥';
-                hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-                errorPlaceholder.appendChild(hotOfferBadge);
-            }
-            
-            // Восстанавливаем кнопку избранного после очистки контейнера
-            if (savedFavoriteButton) {
-                errorPlaceholder.appendChild(savedFavoriteButton);
-            } else if (favoriteButton) {
-                errorPlaceholder.appendChild(favoriteButton);
-            }
-        });
-    } else {
-        // На десктопе используем прямые URL
-        const img = document.createElement('img');
-        img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 16px; display: block;';
-        img.alt = modalState.currentProduct ? modalState.currentProduct.name : 'Product';
+    // Создаем слайды для всех изображений
+    modalState.currentImages.forEach((imageUrl, imgIndex) => {
+        const slide = document.createElement('div');
+        slide.className = 'product-slider-slide';
+        slide.dataset.index = imgIndex;
         
-        img.onload = () => {
-            if (loadId !== modalState.currentImageLoadId) {
-                return;
-            }
-            
-            // Сохраняем кнопку избранного перед очисткой контейнера
-            const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
-            
-            imageContainer.innerHTML = '';
-            imageContainer.appendChild(img);
-            productPageImage.style.backgroundColor = 'transparent';
-            
-            // Добавляем badge скрытого товара (слева вверху, только для админа)
-            const hiddenBadge = createHiddenBadge();
-            if (hiddenBadge) {
-                imageContainer.appendChild(hiddenBadge);
-            }
-            
-            // Добавляем значок горящего предложения, если товар горящий
-            if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-                const hotOfferBadge = document.createElement('div');
-                hotOfferBadge.className = 'product-page-hot-offer-badge';
-                hotOfferBadge.innerHTML = '🔥';
-                hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-                imageContainer.appendChild(hotOfferBadge);
-            }
-            
-            // Восстанавливаем кнопку избранного после очистки контейнера
-            if (savedFavoriteButton) {
-                imageContainer.appendChild(savedFavoriteButton);
-            } else if (favoriteButton) {
-                // Если кнопка не была в контейнере, добавляем её
-                imageContainer.appendChild(favoriteButton);
-            }
-            
-            // Добавляем навигацию по фото, если их больше одного
-            if (modalState.currentImages.length > 1) {
-                updateProductPageImageNavigation();
+        // Placeholder для загрузки
+        const placeholder = document.createElement('div');
+        placeholder.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--text-hint); font-size: 48px;';
+        placeholder.innerHTML = '⏳';
+        slide.appendChild(placeholder);
+        
+        // Загружаем изображение
+        const loadImage = (url) => {
+            if (isMobile) {
+                // На мобильных устройствах используем fetch + blob URL
+                fetch(url, {
+                    headers: {
+                        'ngrok-skip-browser-warning': '69420'
+                    }
+                })
+                .then(response => {
+                    if (loadId !== modalState.currentImageLoadId) {
+                        return null;
+                    }
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    if (!blob || loadId !== modalState.currentImageLoadId) {
+                        return;
+                    }
+                    
+                    const blobUrl = URL.createObjectURL(blob);
+                    blobUrls.push(blobUrl);
+                    
+                    const img = document.createElement('img');
+                    img.src = blobUrl;
+                    img.alt = modalState.currentProduct ? modalState.currentProduct.name : 'Product';
+                    
+                    img.onload = () => {
+                        if (loadId !== modalState.currentImageLoadId) {
+                            URL.revokeObjectURL(blobUrl);
+                            return;
+                        }
+                        slide.innerHTML = '';
+                        slide.appendChild(img);
+                    };
+                    
+                    img.onerror = () => {
+                        if (loadId !== modalState.currentImageLoadId) {
+                            URL.revokeObjectURL(blobUrl);
+                            return;
+                        }
+                        slide.innerHTML = '';
+                        const errorPlaceholder = document.createElement('div');
+                        errorPlaceholder.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--text-hint); font-size: 48px;';
+                        errorPlaceholder.textContent = '📷';
+                        slide.appendChild(errorPlaceholder);
+                    };
+                })
+                .catch(error => {
+                    if (loadId !== modalState.currentImageLoadId) {
+                        return;
+                    }
+                    console.error(`[PRODUCT SLIDER] Image load error: ${error.message}`);
+                    slide.innerHTML = '';
+                    const errorPlaceholder = document.createElement('div');
+                    errorPlaceholder.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--text-hint); font-size: 48px;';
+                    errorPlaceholder.textContent = '📷';
+                    slide.appendChild(errorPlaceholder);
+                });
+            } else {
+                // На десктопе используем прямые URL
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = modalState.currentProduct ? modalState.currentProduct.name : 'Product';
+                
+                img.onload = () => {
+                    if (loadId !== modalState.currentImageLoadId) {
+                        return;
+                    }
+                    slide.innerHTML = '';
+                    slide.appendChild(img);
+                };
+                
+                img.onerror = () => {
+                    if (loadId !== modalState.currentImageLoadId) {
+                        return;
+                    }
+                    // Fallback через fetch
+                    fetch(url, {
+                        headers: {
+                            'ngrok-skip-browser-warning': '69420'
+                        }
+                    })
+                    .then(response => {
+                        if (loadId !== modalState.currentImageLoadId) {
+                            return null;
+                        }
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        if (!blob || loadId !== modalState.currentImageLoadId) {
+                            return;
+                        }
+                        const blobUrl = URL.createObjectURL(blob);
+                        blobUrls.push(blobUrl);
+                        img.src = blobUrl;
+                    })
+                    .catch(error => {
+                        if (loadId !== modalState.currentImageLoadId) {
+                            return;
+                        }
+                        slide.innerHTML = '';
+                        const errorPlaceholder = document.createElement('div');
+                        errorPlaceholder.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); color: var(--text-hint); font-size: 48px;';
+                        errorPlaceholder.textContent = '📷';
+                        slide.appendChild(errorPlaceholder);
+                    });
+                };
             }
         };
         
-        img.onerror = () => {
-            if (loadId !== modalState.currentImageLoadId) {
-                return;
-            }
-            // Fallback: пробуем через fetch
-            fetch(fullImg, {
-                headers: {
-                    'ngrok-skip-browser-warning': '69420'
-                }
-            })
-            .then(response => {
-                if (loadId !== modalState.currentImageLoadId) {
-                    return null;
-                }
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                if (!blob || loadId !== modalState.currentImageLoadId) {
-                    return;
-                }
-                const blobUrl = URL.createObjectURL(blob);
-                productPageImage.dataset.blobUrl = blobUrl;
-                img.src = blobUrl;
-            })
-            .catch(error => {
-                if (loadId !== modalState.currentImageLoadId) {
-                    return;
-                }
-                console.error(`[PRODUCT PAGE IMG] Fetch fallback also failed: loadId=${loadId}, productId=${modalState.currentProduct?.id || 'unknown'}, error=${error.message}`);
-                
-                // Сохраняем кнопку избранного перед очисткой контейнера
-                const savedFavoriteButton = imageContainer.querySelector('.favorite-button-product-page');
-                
-                const errorPlaceholder = document.createElement('div');
-                errorPlaceholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; color: var(--tg-theme-hint-color); font-size: 48px; position: relative; width: 100%;';
-                errorPlaceholder.textContent = '📷';
-                imageContainer.innerHTML = '';
-                imageContainer.appendChild(errorPlaceholder);
-                
-                // Добавляем badge скрытого товара (слева вверху, только для админа)
-                const hiddenBadge = createHiddenBadge();
-                if (hiddenBadge) {
-                    errorPlaceholder.appendChild(hiddenBadge);
-                }
-                
-                // Добавляем значок горящего предложения, если товар горящий
-                if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-                    const hotOfferBadge = document.createElement('div');
-                    hotOfferBadge.className = 'hot-offer-badge';
-                    hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-                    hotOfferBadge.style.position = 'absolute';
-                    hotOfferBadge.style.top = '12px';
-                    hotOfferBadge.style.right = '12px';
-                    hotOfferBadge.style.left = 'auto';
-                    hotOfferBadge.innerHTML = `
-                        <span class="fire-wrap" aria-hidden="true">
-                            <span class="fire-back">🔥</span>
-                            <span class="fire-front">🔥</span>
-                            <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
-                            <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
-                        </span>
-                    `;
-                    errorPlaceholder.appendChild(hotOfferBadge);
-                }
-                
-                // Восстанавливаем кнопку избранного после очистки контейнера
-                if (savedFavoriteButton) {
-                    errorPlaceholder.appendChild(savedFavoriteButton);
-                } else if (favoriteButton) {
-                    errorPlaceholder.appendChild(favoriteButton);
-                }
-            });
-        };
-        
-        img.src = fullImg;
+        loadImage(imageUrl);
+        sliderTrack.appendChild(slide);
+    });
+    
+    // Проверяем, что слайды созданы
+    console.log(`[PRODUCT SLIDER] Created ${sliderTrack.children.length} slides`);
+    if (sliderTrack.children.length === 0) {
+        console.error('[PRODUCT SLIDER] No slides created!');
+        return;
     }
+    
+    // Если только одно фото - центрируем его
+    if (sliderTrack.children.length === 1) {
+        sliderTrack.classList.add('single-slide');
+        sliderTrack.style.justifyContent = 'center';
+    }
+    
+    // Сохраняем blob URLs для очистки
+    productPageImage.dataset.blobUrls = JSON.stringify(blobUrls);
+    
+    slider.appendChild(sliderTrack);
+    sliderContainer.appendChild(slider);
+    
+    // Добавляем badge скрытого товара (слева вверху, только для админа)
+    const hiddenBadge = createHiddenBadge();
+    if (hiddenBadge) {
+        sliderContainer.appendChild(hiddenBadge);
+    }
+    
+    // Добавляем значок горящего предложения, если товар горящий
+    if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
+        const hotOfferBadge = document.createElement('div');
+        hotOfferBadge.className = 'hot-offer-badge';
+        hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
+        hotOfferBadge.style.position = 'absolute';
+        hotOfferBadge.style.top = '12px';
+        hotOfferBadge.style.right = '12px';
+        hotOfferBadge.style.zIndex = '12';
+        hotOfferBadge.innerHTML = `
+            <span class="fire-wrap" aria-hidden="true">
+                <span class="fire-back">🔥</span>
+                <span class="fire-front">🔥</span>
+                <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
+                <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
+            </span>
+        `;
+        sliderContainer.appendChild(hotOfferBadge);
+    }
+    
+    // Добавляем индикатор точек (только если больше одного изображения)
+    if (modalState.currentImages.length > 1) {
+        const indicator = document.createElement('div');
+        indicator.className = 'product-slider-indicator';
+        
+        modalState.currentImages.forEach((_, dotIndex) => {
+            const dot = document.createElement('div');
+            dot.className = 'product-slider-dot';
+            if (dotIndex === validIndex) {
+                dot.classList.add('active');
+            }
+            indicator.appendChild(dot);
+        });
+        
+        sliderContainer.appendChild(indicator);
+    }
+    
+    productPageImage.appendChild(sliderContainer);
+    productPageImage.style.backgroundColor = 'transparent';
+    
+    // Инициализируем слайдер после добавления в DOM
+    setTimeout(() => {
+        initProductSlider(sliderContainer, modalState.currentImages, validIndex);
+    }, 0);
 }
 
-// Функция для обновления навигации по фото на странице товара (объявляем ПЕРЕД showProductModal для hoisting)
-function updateProductPageImageNavigation() {
-    if (!modalState) {
-        return;
-    }
-    
-    const productPageImage = document.getElementById('product-page-image');
-    if (!productPageImage) {
-        return;
-    }
-    
-    const imageContainer = productPageImage.querySelector('.product-page-image-container');
-    if (!imageContainer) {
-        return;
-    }
-    
-    // Удаляем старые кнопки навигации
-    const oldNav = productPageImage.querySelector('.product-page-image-navigation');
-    if (oldNav) {
-        oldNav.remove();
-    }
-    
-    // Создаем контейнер для навигации
-    const navContainer = document.createElement('div');
-    navContainer.className = 'product-page-image-navigation';
-    navContainer.style.cssText = `
-        position: absolute;
-        bottom: 12px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        z-index: 100;
-        padding: 6px;
-    `;
-    
-    // Кнопка "Назад"
-    if (modalState.currentImageIndex > 0) {
-        const prevBtn = document.createElement('button');
-        prevBtn.innerHTML = '‹';
-        prevBtn.style.cssText = `
-            background: linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: rgba(255, 255, 255, 0.95);
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            font-size: 18px;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
-                        0 0 0 1px rgba(255, 255, 255, 0.1) inset,
-                        0 2px 8px rgba(90, 200, 250, 0.2);
-        `;
-        prevBtn.onclick = (e) => {
-            e.stopPropagation();
-            showProductPageImage(modalState.currentImageIndex - 1);
-        };
-        navContainer.appendChild(prevBtn);
-    }
-    
-    // Индикатор фото
-    const indicator = document.createElement('div');
-    indicator.textContent = `${modalState.currentImageIndex + 1}/${modalState.currentImages.length}`;
-    indicator.style.cssText = `
-        background: linear-gradient(135deg, rgba(58, 58, 60, 0.6) 0%, rgba(44, 44, 46, 0.5) 100%);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        color: rgba(255, 255, 255, 0.95);
-        padding: 6px 14px;
-        border-radius: 16px;
-        font-size: 13px;
-        font-weight: 600;
-    `;
-    navContainer.appendChild(indicator);
-    
-    // Кнопка "Вперед"
-    if (modalState.currentImageIndex < modalState.currentImages.length - 1) {
-        const nextBtn = document.createElement('button');
-        nextBtn.innerHTML = '›';
-        nextBtn.style.cssText = `
-            background: linear-gradient(135deg, rgba(90, 200, 250, 0.2) 0%, rgba(90, 200, 250, 0.1) 100%);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: rgba(255, 255, 255, 0.95);
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            font-size: 18px;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 
-                        0 0 0 1px rgba(255, 255, 255, 0.1) inset,
-                        0 2px 8px rgba(90, 200, 250, 0.2);
-        `;
-        nextBtn.onclick = (e) => {
-            e.stopPropagation();
-            showProductPageImage(modalState.currentImageIndex + 1);
-        };
-        navContainer.appendChild(nextBtn);
-    }
-    
-    imageContainer.appendChild(navContainer);
-    
-    // Добавляем обработчики свайпов для мобильных устройств
-    let touchStartX = 0;
-    let touchEndX = 0;
-    
-    productPageImage.ontouchstart = (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-    };
-    
-    productPageImage.ontouchend = (e) => {
-        touchEndX = e.changedTouches[0].screenX;
-        const swipeThreshold = 50;
-        const diff = touchStartX - touchEndX;
-        
-        if (Math.abs(diff) > swipeThreshold) {
-            if (diff > 0 && modalState.currentImageIndex < modalState.currentImages.length - 1) {
-                showProductPageImage(modalState.currentImageIndex + 1);
-            } else if (diff < 0 && modalState.currentImageIndex > 0) {
-                showProductPageImage(modalState.currentImageIndex - 1);
-            }
-        }
-    };
-}
+// Старая функция навигации удалена - теперь используется слайдер с встроенной навигацией
 
 // Функция для обновления значка горящего предложения на странице товара
 function updateHotOfferBadgeOnProductPage(isHotOffer) {
@@ -820,6 +893,15 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
         return;
     }
     
+    console.log('[PRODUCT PAGE] showProductModal called:', {
+        productId: prod?.id,
+        productName: prod?.name,
+        fullImages: fullImages,
+        fullImagesLength: fullImages?.length,
+        images_urls: prod?.images_urls,
+        image_url: prod?.image_url
+    });
+    
     // Получаем элементы страницы товара
     const productPage = document.getElementById('product-page');
     const mainContent = document.getElementById('main-content');
@@ -860,11 +942,41 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     // Сбрасываем ID загрузки при открытии нового товара
     modalState.currentImageLoadId = 0;
     
+    // Формируем fullImages если они не переданы
+    let imagesToUse = fullImages;
+    if (!imagesToUse || imagesToUse.length === 0) {
+        // Fallback: формируем из prod.images_urls или prod.image_url
+        let imagesList = [];
+        if (prod.images_urls && Array.isArray(prod.images_urls) && prod.images_urls.length > 0) {
+            imagesList = prod.images_urls;
+        } else if (prod.image_url) {
+            imagesList = [prod.image_url];
+        }
+        
+        // Преобразуем в полные URL (синхронно)
+        const API_BASE = window.API_BASE || '';
+        imagesToUse = imagesList.map(imgUrl => {
+            if (!imgUrl) return '';
+            if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) {
+                return imgUrl;
+            }
+            if (imgUrl.startsWith('/')) {
+                return API_BASE + imgUrl;
+            }
+            return API_BASE + '/' + imgUrl;
+        }).filter(url => url !== '');
+        
+        console.log('[PRODUCT PAGE] fullImages not provided, generated from prod:', imagesToUse);
+    }
+    
     modalState.currentProduct = prod;
-    modalState.currentImages = fullImages || [];
+    modalState.currentImages = imagesToUse || [];
     modalState.currentImageIndex = 0;
     
     console.log(`[PRODUCT PAGE] State updated: currentImages.length=${modalState.currentImages.length}, currentImageLoadId=${modalState.currentImageLoadId}, productId=${prod.id}`);
+    console.log(`[PRODUCT PAGE] fullImages:`, fullImages);
+    console.log(`[PRODUCT PAGE] imagesToUse:`, imagesToUse);
+    console.log(`[PRODUCT PAGE] modalState.currentImages:`, modalState.currentImages);
     
     // Активируем блокировку горизонтального скролла
     enableHorizontalScrollBlock();
@@ -876,6 +988,73 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     if (favoritesPage) favoritesPage.style.display = 'none';
     if (cartPage) cartPage.style.display = 'none';
     productPage.style.display = 'block';
+    
+    // Сбрасываем позицию скролла при открытии новой карточки товара
+    // Используем несколько способов для надежности
+    const resetScroll = () => {
+        productPage.scrollTop = 0;
+        if (productPage.scrollTo) {
+            productPage.scrollTo(0, 0);
+        }
+        if (window.scrollTo) {
+            window.scrollTo(0, 0);
+        }
+        // Также сбрасываем через scrollIntoView
+        const firstElement = productPage.firstElementChild;
+        if (firstElement && firstElement.scrollIntoView) {
+            firstElement.scrollIntoView({ behavior: 'instant', block: 'start' });
+        }
+    };
+    
+    // Сбрасываем сразу
+    resetScroll();
+    
+    // Сбрасываем после небольшой задержки (когда DOM обновится)
+    setTimeout(resetScroll, 0);
+    
+    // Сбрасываем через requestAnimationFrame (после рендеринга)
+    requestAnimationFrame(() => {
+        resetScroll();
+        // И еще раз после следующего кадра для надежности
+        requestAnimationFrame(resetScroll);
+    });
+    
+    // Обработчик скролла для появления фона меню
+    const productTopMenu = document.querySelector('.product-new-top-menu');
+    let scrollHandler = null;
+    
+    if (productTopMenu) {
+        scrollHandler = () => {
+            // Проверяем скролл страницы товара (она имеет overflow-y: auto)
+            const scrollTop = productPage.scrollTop || 0;
+            if (scrollTop > 20) {
+                productTopMenu.classList.add('scrolled');
+            } else {
+                productTopMenu.classList.remove('scrolled');
+            }
+        };
+        
+        // Добавляем обработчик скролла на страницу товара
+        productPage.addEventListener('scroll', scrollHandler, { passive: true });
+        // Проверяем начальное состояние (после сброса скролла)
+        // Используем setTimeout, чтобы убедиться, что скролл сброшен
+        setTimeout(() => {
+            scrollHandler();
+        }, 0);
+    }
+    
+    // Сохраняем обработчик для удаления при закрытии
+    window.productPageScrollHandler = scrollHandler;
+    
+    // Настраиваем кнопку закрытия в верхнем меню
+    const productPageClose = document.getElementById('product-page-close');
+    if (productPageClose) {
+        productPageClose.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeProductPage();
+        };
+    }
     
     // Получаем актуальный appContext
     const appContext = appContextGetter ? appContextGetter() : null;
@@ -1385,29 +1564,27 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
         isClient: appContext?.role === 'client'
     });
     
-    if (productPageImage && appContext && appContext.role === 'client') {
-        // Удаляем старую кнопку избранного, если она есть
-        const oldFavoriteButton = productPageImage.querySelector('.favorite-button-product-page');
+    // Настраиваем кнопку избранного в верхнем меню (для клиентов)
+    const productTopMenuFavorite = document.getElementById('product-top-menu-favorite');
+    if (productTopMenuFavorite && appContext && appContext.role === 'client') {
+        // Показываем кнопку избранного в меню
+        productTopMenuFavorite.style.display = 'flex';
+        productTopMenuFavorite.dataset.productId = prod.id;
+        productTopMenuFavorite.setAttribute('aria-label', 'Добавить в избранное');
+        
+        // Удаляем старую кнопку избранного из изображения, если она есть
+        const oldFavoriteButton = productPageImage ? productPageImage.querySelector('.favorite-button-product-page') : null;
         if (oldFavoriteButton) {
             oldFavoriteButton.remove();
         }
         
-        // Создаем кнопку избранного
-        const favoriteButton = document.createElement('button');
-        favoriteButton.className = 'favorite-button-card favorite-button-product-page';
-        favoriteButton.setAttribute('aria-label', 'Добавить в избранное');
-        favoriteButton.dataset.productId = prod.id;
-        console.log('[PRODUCT PAGE] Favorite button created for product:', prod.id);
-        
-        // SVG иконка сердца - симметричная форма
-        favoriteButton.innerHTML = `
-            <svg viewBox="0 0 24 24" class="favorite-heart" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-            </svg>
-        `;
+        // Используем кнопку из меню как основную
+        const favoriteButton = productTopMenuFavorite;
+        console.log('[PRODUCT PAGE] Favorite button in top menu for product:', prod.id);
         
         // Функция обновления состояния кнопки избранного
         function updateFavoriteButtonState(button, favorite) {
+            if (!button) return;
             if (favorite) {
                 button.classList.add('favorite-active');
             } else {
@@ -1458,14 +1635,15 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
             
             // Функция для обновления всех кнопок избранного для этого товара (optimistic)
             function updateAllFavoriteButtonsForProductOptimistic(productId, isFavorite) {
-                // Обновляем кнопку на странице товара
+                // Обновляем кнопку в верхнем меню страницы товара
                 updateFavoriteButtonState(favoriteButton, isFavorite);
                 
                 // Находим и обновляем все кнопки избранного на карточках товаров
+                // Используем селектор, который найдет кнопки на карточках, но не в верхнем меню
                 const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
                 allFavoriteButtons.forEach(btn => {
-                    // Пропускаем кнопку на странице товара, чтобы не обновлять её дважды
-                    if (btn !== favoriteButton) {
+                    // Пропускаем кнопку в верхнем меню, чтобы не обновлять её дважды
+                    if (btn !== favoriteButton && !btn.classList.contains('product-top-menu-favorite')) {
                         updateFavoriteButtonState(btn, isFavorite);
                     }
                 });
@@ -1476,14 +1654,15 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
             
             // Функция для обновления всех кнопок избранного для этого товара
             function updateAllFavoriteButtonsForProduct(productId, isFavorite) {
-                // Обновляем кнопку на странице товара
+                // Обновляем кнопку в верхнем меню страницы товара
                 updateFavoriteButtonState(favoriteButton, isFavorite);
                 
                 // Находим и обновляем все кнопки избранного на карточках товаров
+                // Используем селектор, который найдет кнопки на карточках, но не в верхнем меню
                 const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
                 allFavoriteButtons.forEach(btn => {
-                    // Пропускаем кнопку на странице товара, чтобы не обновлять её дважды
-                    if (btn !== favoriteButton) {
+                    // Пропускаем кнопку в верхнем меню, чтобы не обновлять её дважды
+                    if (btn !== favoriteButton && !btn.classList.contains('product-top-menu-favorite')) {
                         updateFavoriteButtonState(btn, isFavorite);
                     }
                 });
@@ -1518,15 +1697,276 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
             }
         });
         
-        // Добавляем кнопку в контейнер изображения (будет добавлена в showProductPageImage)
-        // Временно добавляем в productPageImage, потом она будет перемещена в контейнер изображения
-        productPageImage.appendChild(favoriteButton);
+        // Кнопка избранного теперь в верхнем меню, не добавляем её в изображение
+    } else if (productTopMenuFavorite) {
+        // Если пользователь не клиент, скрываем кнопку избранного
+        productTopMenuFavorite.style.display = 'none';
     }
     
     // Показываем изображение на странице товара
     showProductPageImage(0);
+    
+    // Инициализируем и обновляем bottom sheet для страницы товара
+    updateProductPageBottomSheet(prod);
+    
+    // Дополнительно сбрасываем скролл после загрузки изображений
+    // Используем несколько попыток для надежности
+    const finalScrollReset = () => {
+        if (productPage) {
+            productPage.scrollTop = 0;
+            if (productPage.scrollTo) {
+                productPage.scrollTo({ top: 0, behavior: 'instant' });
+            }
+        }
+    };
+    
+    // Сбрасываем после небольшой задержки (когда изображения начнут загружаться)
+    setTimeout(finalScrollReset, 50);
+    setTimeout(finalScrollReset, 100);
+    setTimeout(finalScrollReset, 200);
+    
+    // Сбрасываем через requestAnimationFrame
+    requestAnimationFrame(() => {
+        finalScrollReset();
+        requestAnimationFrame(finalScrollReset);
+    });
 }
 // ========== END REFACTORING STEP 3.1 ==========
+
+/**
+ * Обновление bottom sheet на странице товара (постоянно видимый)
+ */
+async function updateProductPageBottomSheet(product) {
+    const productPageBottomSheet = document.getElementById('product-page-bottom-sheet');
+    if (!productPageBottomSheet) {
+        console.warn('⚠️ Product page bottom sheet not found');
+        return;
+    }
+    
+    // Получаем контекст приложения
+    const appContext = appContextGetter ? appContextGetter() : null;
+    if (!appContext) {
+        console.error('❌ App context not available');
+        // Скрываем bottom sheet если контекст недоступен
+        productPageBottomSheet.style.display = 'none';
+        return;
+    }
+    
+    // ВАЖНО: Bottom sheet показывается только клиентам, не админам
+    if (appContext.role !== 'client') {
+        // Скрываем bottom sheet для админов и других ролей
+        productPageBottomSheet.style.display = 'none';
+        return;
+    }
+    
+    const sheetContent = productPageBottomSheet.querySelector('.cart-bottom-sheet-content');
+    if (!sheetContent) {
+        console.warn('⚠️ Product page bottom sheet content not found');
+        return;
+    }
+    
+    // Получаем текущее количество товара в корзине
+    let currentQuantity = 1;
+    try {
+        const { getCartItems } = await import('../cart/cartStore.js');
+        const cartItems = getCartItems();
+        const existingItem = cartItems.find(item => item.product.id === product.id);
+        if (existingItem) {
+            currentQuantity = existingItem.quantity || 1;
+        }
+    } catch (error) {
+        console.error('❌ Error getting cart items:', error);
+    }
+    
+    // Заполняем информацию о товаре
+    const productImage = sheetContent.querySelector('.cart-bottom-sheet-product-image');
+    const productName = sheetContent.querySelector('.cart-bottom-sheet-product-name');
+    const productPrice = sheetContent.querySelector('.cart-bottom-sheet-product-price');
+    const quantityInput = sheetContent.querySelector('.cart-bottom-sheet-quantity-input');
+    const primaryBtn = document.getElementById('product-page-bottom-sheet-primary-btn');
+    const minusBtn = sheetContent.querySelector('.cart-bottom-sheet-quantity-btn.minus');
+    const plusBtn = sheetContent.querySelector('.cart-bottom-sheet-quantity-btn.plus');
+    
+    // Изображение товара
+    if (productImage) {
+        let imageUrl = '';
+        if (product.images_urls && Array.isArray(product.images_urls) && product.images_urls.length > 0) {
+            imageUrl = product.images_urls[0];
+        } else if (product.image_url) {
+            imageUrl = product.image_url;
+        }
+        
+        if (imageUrl) {
+            if (!imageUrl.startsWith('http')) {
+                const API_BASE = window.API_BASE || '';
+                imageUrl = imageUrl.startsWith('/') ? API_BASE + imageUrl : API_BASE + '/' + imageUrl;
+            }
+            productImage.style.backgroundImage = `url('${imageUrl}')`;
+        } else {
+            productImage.style.backgroundImage = 'none';
+            productImage.style.backgroundColor = 'var(--bg-secondary)';
+        }
+    }
+    
+    // Название товара
+    if (productName) {
+        productName.textContent = product.name || '';
+    }
+    
+    // Цена товара
+    if (productPrice) {
+        const priceDisplay = getProductPriceDisplay(product);
+        productPrice.textContent = priceDisplay;
+    }
+    
+    // Количество
+    if (quantityInput) {
+        quantityInput.value = currentQuantity;
+    }
+    
+    // Определяем тип товара и показываем соответствующие кнопки
+    const isForSale = product.is_for_sale === true || 
+                     product.is_for_sale === 1 || 
+                     product.is_for_sale === '1' ||
+                     product.is_for_sale === 'true' ||
+                     String(product.is_for_sale).toLowerCase() === 'true';
+    
+    const isMadeToOrder = product.is_made_to_order === true || 
+                         product.is_made_to_order === 1 || 
+                         product.is_made_to_order === '1' ||
+                         product.is_made_to_order === 'true' ||
+                         String(product.is_made_to_order).toLowerCase() === 'true';
+    
+    // Проверяем настройки резервации
+    const shopSettings = getCurrentShopSettings();
+    const reservationsEnabled = shopSettings ? (shopSettings.reservations_enabled === true) : true;
+    const canReserve = appContext.role === 'client' && 
+                      appContext.permissions && 
+                      appContext.permissions.can_reserve && 
+                      reservationsEnabled &&
+                      !isMadeToOrder;
+    
+    // Настраиваем кнопки в зависимости от типа товара
+    if (primaryBtn) {
+        if (isForSale && appContext.role === 'client') {
+            primaryBtn.textContent = 'Продать сейчас';
+            primaryBtn.style.display = 'flex';
+        } else if (isMadeToOrder && appContext.role === 'client') {
+            primaryBtn.textContent = 'Заказать сейчас';
+            primaryBtn.style.display = 'flex';
+        } else if (canReserve) {
+            primaryBtn.textContent = 'Резервировать сейчас';
+            primaryBtn.style.display = 'flex';
+        } else {
+            primaryBtn.textContent = 'Готово';
+            primaryBtn.style.display = 'flex';
+        }
+        
+        // Обработчик основной кнопки
+        primaryBtn.onclick = async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            
+            try {
+                if (isForSale && appContext.role === 'client') {
+                    if (showSaleOrderModalCallback) {
+                        showSaleOrderModalCallback(product);
+                    }
+                } else if (isMadeToOrder && appContext.role === 'client') {
+                    if (showOrderModalCallback) {
+                        showOrderModalCallback(product.id);
+                    }
+                } else if (canReserve) {
+                    if (showReservationModalCallback) {
+                        showReservationModalCallback(product.id);
+                    }
+                }
+                // Для остальных товаров - просто обновляем состояние кнопок
+                if (window.updateCartButtonsState) {
+                    window.updateCartButtonsState();
+                }
+            } catch (error) {
+                console.error('❌ Error in primary button action:', error);
+            }
+        };
+    }
+    
+    // Обработчики кнопок количества
+    if (minusBtn) {
+        minusBtn.onclick = async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (quantityInput && product) {
+                const currentValue = parseInt(quantityInput.value) || 1;
+                if (currentValue > 1) {
+                    const newQuantity = currentValue - 1;
+                    quantityInput.value = newQuantity;
+                    try {
+                        const { updateCartItemQuantity } = await import('../cart/cartStore.js');
+                        await updateCartItemQuantity(product.id, newQuantity);
+                        if (window.updateCartButtonsState) {
+                            window.updateCartButtonsState();
+                        }
+                    } catch (error) {
+                        console.error('❌ Error updating cart quantity:', error);
+                    }
+                } else if (currentValue === 1) {
+                    // Удаляем товар из корзины
+                    quantityInput.value = 0;
+                    try {
+                        const { updateCartItemQuantity } = await import('../cart/cartStore.js');
+                        await updateCartItemQuantity(product.id, 0);
+                        if (window.updateCartButtonsState) {
+                            window.updateCartButtonsState();
+                        }
+                    } catch (error) {
+                        console.error('❌ Error removing product from cart:', error);
+                    }
+                }
+            }
+        };
+    }
+    
+    if (plusBtn) {
+        plusBtn.onclick = async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (quantityInput && product) {
+                const currentValue = parseInt(quantityInput.value) || 1;
+                const newQuantity = currentValue + 1;
+                quantityInput.value = newQuantity;
+                try {
+                    const { updateCartItemQuantity } = await import('../cart/cartStore.js');
+                    await updateCartItemQuantity(product.id, newQuantity);
+                    if (window.updateCartButtonsState) {
+                        window.updateCartButtonsState();
+                    }
+                } catch (error) {
+                    console.error('❌ Error updating cart quantity:', error);
+                }
+            }
+        };
+    }
+    
+    // Убеждаемся, что bottom sheet видимый
+    productPageBottomSheet.style.display = 'flex';
+    
+    // Также убеждаемся, что товар добавлен в корзину (если его там еще нет)
+    try {
+        const { getCartItems, addProductToCart } = await import('../cart/cartStore.js');
+        const cartItems = getCartItems();
+        const existingItem = cartItems.find(item => item.product.id === product.id);
+        if (!existingItem) {
+            // Если товара нет в корзине, добавляем его
+            await addProductToCart(product, currentQuantity);
+            if (window.updateCartButtonsState) {
+                window.updateCartButtonsState();
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error ensuring product in cart:', error);
+    }
+}
 
 // История навигации - отслеживаем, откуда пришли на страницу товара
 let navigationHistory = null; // 'main', 'favorites', 'cart', или 'admin'
@@ -1554,17 +1994,32 @@ export function closeProductPage() {
     const productPageImage = document.getElementById('product-page-image');
     
     if (productPage) {
-        // Очищаем blob URL если был
+        // Очищаем blob URLs если были
         if (productPageImage) {
+            // Очищаем старый формат (одиночный blob URL)
             const oldBlobUrl = productPageImage.dataset.blobUrl;
             if (oldBlobUrl) {
                 URL.revokeObjectURL(oldBlobUrl);
                 delete productPageImage.dataset.blobUrl;
             }
-            // Очищаем навигацию
-            const oldNav = productPageImage.querySelector('.product-page-image-navigation');
-            if (oldNav) {
-                oldNav.remove();
+            // Очищаем новый формат (массив blob URLs)
+            const oldBlobUrls = productPageImage.dataset.blobUrls;
+            if (oldBlobUrls) {
+                try {
+                    const urls = JSON.parse(oldBlobUrls);
+                    urls.forEach(url => {
+                        if (url) URL.revokeObjectURL(url);
+                    });
+                } catch (e) {
+                    console.warn('[PRODUCT PAGE] Error parsing blob URLs:', e);
+                }
+                delete productPageImage.dataset.blobUrls;
+            }
+            // Удаляем обработчики resize слайдера (если есть)
+            const slider = productPageImage.querySelector('.product-slider');
+            if (slider && slider.dataset.resizeHandler) {
+                // Обработчик resize будет удален при очистке innerHTML
+                delete slider.dataset.resizeHandler;
             }
             // Полностью очищаем содержимое
             productPageImage.innerHTML = '';
@@ -1575,6 +2030,20 @@ export function closeProductPage() {
         
         // Скрываем страницу товара
         productPage.style.display = 'none';
+        
+        // Скрываем bottom sheet страницы товара
+        const productPageBottomSheet = document.getElementById('product-page-bottom-sheet');
+        if (productPageBottomSheet) {
+            productPageBottomSheet.style.display = 'none';
+        }
+        
+        // Убираем обработчик скролла и класс scrolled
+        const productTopMenu = document.querySelector('.product-new-top-menu');
+        if (productTopMenu && window.productPageScrollHandler) {
+            productPage.removeEventListener('scroll', window.productPageScrollHandler);
+            productTopMenu.classList.remove('scrolled');
+            window.productPageScrollHandler = null;
+        }
         
         // Возвращаемся на предыдущую страницу в зависимости от истории навигации
         // Скрываем все страницы сначала
