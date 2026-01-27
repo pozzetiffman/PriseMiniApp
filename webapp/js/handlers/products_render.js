@@ -372,43 +372,80 @@ export async function renderProducts(products) {
             });
         }
         
-        // Создаем кнопку корзины (левый нижний угол) - только для клиентов
+        // Создаем кнопку корзины (левый нижний угол) - только для клиентов и только на странице избранного
         let cartButton = null;
-        if (isClient) {
+        // Проверяем, находимся ли мы на странице избранного
+        const favoritesPage = document.getElementById('favorites-page');
+        const isOnFavoritesPage = favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex');
+        
+        if (isClient && isOnFavoritesPage) {
             cartButton = document.createElement('button');
             cartButton.className = 'cart-button-card';
             cartButton.setAttribute('aria-label', 'Добавить в корзину');
             cartButton.dataset.productId = prod.id;
             
-            // SVG иконка корзины
+            // SVG иконка корзины (тележка) с индикатором количества
             cartButton.innerHTML = `
-                <svg viewBox="0 0 24 24" class="cart-icon" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
+                <svg viewBox="0 0 24 24" class="cart-icon" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path class="cart-icon-outline" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
                 </svg>
+                <span class="cart-icon-badge" style="display: none;">0</span>
             `;
             
-            // Обработчик клика на кнопку корзины
+            // Проверяем, есть ли товар в корзине, и устанавливаем активное состояние с количеством
+            // Делаем это асинхронно после создания всех кнопок
+            setTimeout(() => {
+                import('../cart/cartStore.js').then(({ isProductInCart, getProductQuantityInCart }) => {
+                    const quantity = getProductQuantityInCart(prod.id);
+                    if (quantity > 0) {
+                        cartButton.classList.add('cart-active');
+                        const badge = cartButton.querySelector('.cart-icon-badge');
+                        if (badge) {
+                            badge.textContent = quantity > 99 ? '99+' : quantity.toString();
+                            badge.style.display = 'flex';
+                        }
+                    }
+                }).catch(() => {
+                    // Игнорируем ошибки импорта
+                });
+            }, 0);
+            
+            // Обработчик клика на кнопку корзины - показываем bottom sheet только на странице избранного
             cartButton.addEventListener('click', async (e) => {
                 e.stopPropagation(); // Предотвращаем открытие модального окна товара
                 e.preventDefault(); // Предотвращаем стандартное поведение
                 
+                // Проверяем, что мы все еще на странице избранного
+                const favoritesPage = document.getElementById('favorites-page');
+                const isOnFavoritesPage = favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex');
+                
+                if (!isOnFavoritesPage) {
+                    return; // Не показываем bottom sheet, если не на странице избранного
+                }
+                
                 try {
-                    // Импортируем функцию добавления в корзину
-                    const { addProductToCart } = await import('../cart/cartNew.js');
-                    await addProductToCart(prod, 1);
+                    // Проверяем, есть ли товар уже в корзине
+                    const { isProductInCart, getProductQuantityInCart } = await import('../cart/cartStore.js');
+                    const isInCart = isProductInCart(prod.id);
+                    const currentQuantity = getProductQuantityInCart(prod.id);
                     
-                    // Визуальная обратная связь
-                    cartButton.style.transform = 'scale(0.9)';
-                    setTimeout(() => {
-                        cartButton.style.transform = 'scale(1)';
-                    }, 200);
+                    // Если товара нет в корзине, добавляем его с количеством 1
+                    if (!isInCart || currentQuantity === 0) {
+                        const { addProductToCart } = await import('../cart/cartNew.js');
+                        await addProductToCart(prod, 1);
+                    }
+                    // Если товар уже есть в корзине, просто открываем bottom sheet без добавления
+                    
+                    // Открываем bottom sheet только на странице избранного
+                    const { showCartBottomSheet } = await import('../cart/cartBottomSheet.js');
+                    showCartBottomSheet(prod);
+                    
+                    // Обновляем состояние кнопок корзины
+                    if (window.updateCartButtonsState) {
+                        window.updateCartButtonsState();
+                    }
                 } catch (error) {
-                    console.error('❌ Error adding to cart:', error);
-                    console.error('❌ Error details:', {
-                        message: error.message,
-                        stack: error.stack,
-                        name: error.name
-                    });
+                    console.error('❌ Error adding product to cart or showing bottom sheet:', error);
                     alert('Ошибка при добавлении товара в корзину: ' + (error.message || 'Неизвестная ошибка'));
                 }
             });
@@ -1064,44 +1101,90 @@ export async function renderProducts(products) {
         }
         card.appendChild(listPricesRightContainer);
         
-        // Создаем кнопку корзины для режима списка (над статусом в правой части) - только для клиентов
+        // Создаем кнопку корзины для режима списка (над статусом в правой части) - только для клиентов и только на странице избранного
         let cartButtonList = null;
-        if (isClient) {
+        // Проверяем, находимся ли мы на странице избранного
+        const favoritesPageForList = document.getElementById('favorites-page');
+        const isOnFavoritesPageForList = favoritesPageForList && (favoritesPageForList.style.display === 'block' || favoritesPageForList.style.display === 'flex');
+        
+        if (isClient && isOnFavoritesPageForList) {
             cartButtonList = document.createElement('button');
             cartButtonList.className = 'cart-button-card cart-button-list';
             cartButtonList.setAttribute('aria-label', 'Добавить в корзину');
             cartButtonList.dataset.productId = prod.id;
             
-            // SVG иконка корзины
+            // SVG иконка корзины (тележка) с индикатором количества
             cartButtonList.innerHTML = `
-                <svg viewBox="0 0 24 24" class="cart-icon" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
+                <svg viewBox="0 0 24 24" class="cart-icon" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path class="cart-icon-outline" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
                 </svg>
+                <span class="cart-icon-badge" style="display: none;">0</span>
             `;
             
-            // Обработчик клика на кнопку корзины в режиме списка
+            // Проверяем, есть ли товар в корзине, и устанавливаем активное состояние с количеством
+            // Делаем это асинхронно после создания всех кнопок
+            setTimeout(() => {
+                import('../cart/cartStore.js').then(({ isProductInCart, getProductQuantityInCart }) => {
+                    const quantity = getProductQuantityInCart(prod.id);
+                    if (quantity > 0) {
+                        cartButtonList.classList.add('cart-active');
+                        const badge = cartButtonList.querySelector('.cart-icon-badge');
+                        if (badge) {
+                            badge.textContent = quantity > 99 ? '99+' : quantity.toString();
+                            badge.style.display = 'flex';
+                        }
+                    }
+                }).catch(() => {
+                    // Игнорируем ошибки импорта
+                });
+            }, 0);
+            
+            // Обработчик клика на кнопку корзины в режиме списка - показываем bottom sheet только на странице избранного
             cartButtonList.addEventListener('click', async (e) => {
                 e.stopPropagation(); // Предотвращаем открытие модального окна товара
                 e.preventDefault(); // Предотвращаем стандартное поведение
                 
+                // Проверяем, что мы все еще на странице избранного
+                const favoritesPageForList = document.getElementById('favorites-page');
+                const isOnFavoritesPageForList = favoritesPageForList && (favoritesPageForList.style.display === 'block' || favoritesPageForList.style.display === 'flex');
+                
+                if (!isOnFavoritesPageForList) {
+                    return; // Не показываем bottom sheet, если не на странице избранного
+                }
+                
                 try {
-                    // Импортируем функцию добавления в корзину
-                    const { addProductToCart } = await import('../cart/cartNew.js');
-                    await addProductToCart(prod, 1);
+                    // Проверяем, есть ли товар уже в корзине
+                    const { isProductInCart, getProductQuantityInCart } = await import('../cart/cartStore.js');
+                    const isInCart = isProductInCart(prod.id);
+                    const currentQuantity = getProductQuantityInCart(prod.id);
                     
-                    // Визуальная обратная связь
-                    cartButtonList.style.transform = 'scale(0.9)';
-                    setTimeout(() => {
-                        cartButtonList.style.transform = 'scale(1)';
-                    }, 200);
+                    // Если товара нет в корзине, добавляем его с количеством 1
+                    if (!isInCart || currentQuantity === 0) {
+                        const { addProductToCart } = await import('../cart/cartNew.js');
+                        await addProductToCart(prod, 1);
+                    }
+                    // Если товар уже есть в корзине, просто открываем bottom sheet без добавления
+                    
+                    // Импортируем функцию показа bottom sheet
+                    const { showCartBottomSheet } = await import('../cart/cartBottomSheet.js');
+                    showCartBottomSheet(prod);
+                    
+                    // Обновляем состояние кнопок корзины
+                    if (window.updateCartButtonsState) {
+                        window.updateCartButtonsState();
+                    }
                 } catch (error) {
-                    console.error('❌ Error adding to cart:', error);
-                    console.error('❌ Error details:', {
-                        message: error.message,
-                        stack: error.stack,
-                        name: error.name
-                    });
-                    alert('Ошибка при добавлении товара в корзину: ' + (error.message || 'Неизвестная ошибка'));
+                    console.error('❌ Error showing cart bottom sheet:', error);
+                    // Fallback: добавляем напрямую в корзину
+                    try {
+                        const { addProductToCart } = await import('../cart/cartNew.js');
+                        await addProductToCart(prod, 1);
+                        if (window.updateCartButtonsState) {
+                            window.updateCartButtonsState();
+                        }
+                    } catch (addError) {
+                        alert('Ошибка при добавлении товара в корзину: ' + (addError.message || 'Неизвестная ошибка'));
+                    }
                 }
             });
             

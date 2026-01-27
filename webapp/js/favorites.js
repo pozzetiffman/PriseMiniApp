@@ -197,6 +197,21 @@ function updateFavoritesCountUI() {
             favoritesButton.classList.remove('favorites-has-items');
         }
     }
+    
+    // Обновляем счетчик в шапке избранного
+    const favoritesTopMenuCount = document.getElementById('favorites-top-menu-count');
+    if (favoritesTopMenuCount) {
+        // Форматируем количество товаров
+        let countText = '0 товаров';
+        if (favoritesCount === 1) {
+            countText = '1 товар';
+        } else if (favoritesCount > 1 && favoritesCount < 5) {
+            countText = `${favoritesCount} товара`;
+        } else if (favoritesCount >= 5) {
+            countText = `${favoritesCount} товаров`;
+        }
+        favoritesTopMenuCount.textContent = countText;
+    }
 }
 
 /**
@@ -243,7 +258,7 @@ export async function openFavoritesPage() {
             return;
         }
         
-        // Настраиваем кнопку "Назад" при открытии страницы
+        // Настраиваем кнопку "Назад" при открытии страницы (старая кнопка, если есть)
         const favoritesPageBack = document.getElementById('favorites-page-back');
         if (favoritesPageBack) {
             favoritesPageBack.onclick = (e) => {
@@ -252,6 +267,19 @@ export async function openFavoritesPage() {
                 closeFavoritesPage();
             };
         }
+        
+        // Настраиваем кнопку закрытия в верхнем меню
+        const favoritesPageClose = document.getElementById('favorites-page-close');
+        if (favoritesPageClose) {
+            favoritesPageClose.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                closeFavoritesPage();
+            };
+        }
+        
+        // Обновляем счетчик в шапке при открытии страницы
+        updateFavoritesCountUI();
         
         // Скрываем другие страницы
         if (mainContent) mainContent.style.display = 'none';
@@ -294,8 +322,17 @@ export async function closeFavoritesPage() {
         // Сначала синхронизируем кэш
         await syncFavoritesCache();
         
-        // Затем обновляем состояние на главной странице
-        await refreshFavoritesOnMainPage();
+        // Перезагружаем данные для восстановления карточек и анимаций
+        try {
+            const dataModule = await import('./data.js');
+            if (dataModule && dataModule.loadData) {
+                await dataModule.loadData();
+            }
+        } catch (e) {
+            console.warn('[FAVORITES] Failed to reload data after close:', e);
+            // Fallback: обновляем только состояние избранного
+            await refreshFavoritesOnMainPage();
+        }
         
         // Дополнительная проверка: убеждаемся, что все блокировки сняты
         const productsGrid = document.getElementById('products-grid');
@@ -309,6 +346,7 @@ export async function closeFavoritesPage() {
             }
         }
     } catch (error) {
+        console.error('[FAVORITES] Error in closeFavoritesPage:', error);
         // Ошибки логируются только в бэкенде
     }
 }
@@ -592,6 +630,10 @@ async function loadFavoritesPage() {
         // Получаем избранные товары
         const products = await getFavorites(appContext.shop_owner_id);
         
+        // Обновляем счетчик
+        favoritesCount = products ? products.length : 0;
+        updateFavoritesCountUI();
+        
         if (!products || products.length === 0) {
             favoritesGrid.innerHTML = '<p class="loading" style="text-align: center; padding: 40px;">У вас пока нет избранных товаров</p>';
             return;
@@ -599,6 +641,9 @@ async function loadFavoritesPage() {
         
         // Очищаем контейнер
         favoritesGrid.innerHTML = '';
+        
+        // Добавляем класс для режима сетки, чтобы CSS правильно скрывал элементы режима списка
+        favoritesGrid.classList.add('products-grid-view');
         
         // Рендерим товары используя renderProducts
         // Временно используем productsGrid для рендеринга, потом переместим карточки
@@ -634,8 +679,22 @@ async function loadFavoritesPage() {
                 if (!prod) return;
                 
                 // Удаляем элементы режима списка (дубликаты)
+                // Удаляем все элементы, которые используются только в режиме списка
                 const listElements = clonedCard.querySelectorAll(
-                    '.product-top-badges-list, .product-name-list, .product-list-price-status, .favorite-button-list'
+                    '.product-top-badges-list, ' +
+                    '.product-name-list, ' +
+                    '.product-description-list, ' +
+                    '.product-list-prices, ' +
+                    '.product-list-prices-right-container, ' +
+                    '.product-list-right-side, ' +
+                    '.product-quantity-badge-list, ' +
+                    '.cart-button-list, ' +
+                    '.favorite-button-list, ' +
+                    '.product-list-price-status, ' +
+                    '.product-list-old-price, ' +
+                    '.product-list-card-price, ' +
+                    '.product-list-cash-price, ' +
+                    '.product-list-price-single'
                 );
                 listElements.forEach(el => el.remove());
                 
@@ -682,10 +741,46 @@ async function loadFavoritesPage() {
                     });
                 }
                 
+                // Восстанавливаем обработчик клика на кнопку корзины - показываем bottom sheet
+                const cartButton = clonedCard.querySelector('.cart-button-card:not(.cart-button-list)');
+                if (cartButton) {
+                    cartButton.addEventListener('click', async (e) => {
+                        e.stopPropagation(); // Предотвращаем открытие модального окна товара
+                        e.preventDefault(); // Предотвращаем стандартное поведение
+                        
+                        try {
+                            // Проверяем, есть ли товар уже в корзине
+                            const { isProductInCart, getProductQuantityInCart } = await import('./cart/cartStore.js');
+                            const isInCart = isProductInCart(prod.id);
+                            const currentQuantity = getProductQuantityInCart(prod.id);
+                            
+                            // Если товара нет в корзине, добавляем его с количеством 1
+                            if (!isInCart || currentQuantity === 0) {
+                                const { addProductToCart } = await import('./cart/cartNew.js');
+                                await addProductToCart(prod, 1);
+                            }
+                            // Если товар уже есть в корзине, просто открываем bottom sheet без добавления
+                            
+                            // Открываем bottom sheet
+                            const { showCartBottomSheet } = await import('./cart/cartBottomSheet.js');
+                            showCartBottomSheet(prod);
+                            
+                            // Обновляем состояние кнопок корзины
+                            if (window.updateCartButtonsState) {
+                                window.updateCartButtonsState();
+                            }
+                        } catch (error) {
+                            console.error('❌ Error adding product to cart or showing bottom sheet:', error);
+                            alert('Ошибка при добавлении товара в корзину: ' + (error.message || 'Неизвестная ошибка'));
+                        }
+                    });
+                }
+                
                 // Добавляем обработчик клика на карточку для открытия товара
                 clonedCard.addEventListener('click', (e) => {
-                    // Проверяем, не кликнули ли на кнопку избранного
-                    if (e.target.closest('.favorite-button-card')) {
+                    // Проверяем, не кликнули ли на кнопку избранного или корзины
+                    if (e.target.closest('.favorite-button-card') || 
+                        e.target.closest('.cart-button-card')) {
                         return;
                     }
                     
@@ -706,6 +801,35 @@ async function loadFavoritesPage() {
                 
                 favoritesGrid.appendChild(clonedCard);
             });
+            
+            // Обновляем состояние всех кнопок корзины на странице избранного
+            setTimeout(() => {
+                import('./cart/cartStore.js').then(({ getProductQuantityInCart }) => {
+                    const allCartButtons = favoritesGrid.querySelectorAll('.cart-button-card[data-product-id]');
+                    allCartButtons.forEach(button => {
+                        const productId = parseInt(button.dataset.productId);
+                        if (productId && !isNaN(productId)) {
+                            const quantity = getProductQuantityInCart(productId);
+                            const badge = button.querySelector('.cart-icon-badge');
+                            
+                            if (quantity > 0) {
+                                button.classList.add('cart-active');
+                                if (badge) {
+                                    badge.textContent = quantity > 99 ? '99+' : quantity.toString();
+                                    badge.style.display = 'flex';
+                                }
+                            } else {
+                                button.classList.remove('cart-active');
+                                if (badge) {
+                                    badge.style.display = 'none';
+                                }
+                            }
+                        }
+                    });
+                }).catch(() => {
+                    // Игнорируем ошибки импорта
+                });
+            }, 100);
             
             // КРИТИЧНО: Восстанавливаем productsGrid правильно
             // Очищаем временные карточки

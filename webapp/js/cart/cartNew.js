@@ -646,6 +646,40 @@ export function updateCartButtonCount() {
             cartButton.classList.remove('cart-has-items');
         }
     }
+    
+    // Обновляем состояние всех кнопок корзины на карточках товаров
+    updateCartButtonsState();
+}
+
+/**
+ * Обновить состояние всех кнопок корзины на карточках товаров
+ */
+export function updateCartButtonsState() {
+    import('./cartStore.js').then(({ isProductInCart, getProductQuantityInCart }) => {
+        const allCartButtons = document.querySelectorAll('.cart-button-card[data-product-id]');
+        allCartButtons.forEach(button => {
+            const productId = parseInt(button.dataset.productId);
+            if (productId && !isNaN(productId)) {
+                const quantity = getProductQuantityInCart(productId);
+                const badge = button.querySelector('.cart-icon-badge');
+                
+                if (quantity > 0) {
+                    button.classList.add('cart-active');
+                    if (badge) {
+                        badge.textContent = quantity > 99 ? '99+' : quantity.toString();
+                        badge.style.display = 'flex';
+                    }
+                } else {
+                    button.classList.remove('cart-active');
+                    if (badge) {
+                        badge.style.display = 'none';
+                    }
+                }
+            }
+        });
+    }).catch(() => {
+        // Игнорируем ошибки импорта
+    });
 }
 
 /**

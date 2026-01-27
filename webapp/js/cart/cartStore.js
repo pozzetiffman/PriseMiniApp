@@ -134,6 +134,11 @@ export async function addToCart(product, quantity = 1) {
             window.updateCartButtonCount();
         }
         
+        // Обновляем состояние кнопок корзины на карточках товаров
+        if (window.updateCartButtonsState) {
+            window.updateCartButtonsState();
+        }
+        
         console.log(`[CART STORE] ✅ Product ${product.id} added to cart, quantity: ${result.quantity}`);
         
         return getCartItems();
@@ -177,6 +182,11 @@ export async function removeFromCart(productId) {
         // Обновляем счетчик в меню
         if (window.updateCartButtonCount) {
             window.updateCartButtonCount();
+        }
+        
+        // Обновляем состояние кнопок корзины на карточках товаров
+        if (window.updateCartButtonsState) {
+            window.updateCartButtonsState();
         }
         
         console.log(`[CART STORE] ✅ Product ${productId} removed from cart`);
@@ -235,6 +245,11 @@ export async function updateCartItemQuantity(productId, quantity) {
         // Обновляем счетчик в меню
         if (window.updateCartButtonCount) {
             window.updateCartButtonCount();
+        }
+        
+        // Обновляем состояние кнопок корзины на карточках товаров
+        if (window.updateCartButtonsState) {
+            window.updateCartButtonsState();
         }
         
         console.log(`[CART STORE] ✅ Product ${productId} quantity updated to ${result.quantity}`);
@@ -411,6 +426,11 @@ export async function removeSelectedCartItems() {
             window.updateCartButtonCount();
         }
         
+        // Обновляем состояние кнопок корзины на карточках товаров
+        if (window.updateCartButtonsState) {
+            window.updateCartButtonsState();
+        }
+        
         console.log(`[CART STORE] ✅ Selected items removed`);
         
         return getCartItems();
@@ -581,6 +601,11 @@ export async function clearCart() {
         // Обновляем счетчик в меню
         if (window.updateCartButtonCount) {
             window.updateCartButtonCount();
+        }
+        
+        // Обновляем состояние кнопок корзины на карточках товаров
+        if (window.updateCartButtonsState) {
+            window.updateCartButtonsState();
         }
         
         console.log(`[CART STORE] ✅ Cart cleared`);

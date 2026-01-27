@@ -3,7 +3,8 @@ import { initAdmin, loadShopSettings, openAdmin } from './admin.js';
 import { getContext } from './api.js';
 import { API_BASE } from './api/config.js';
 import { initCart, loadCart, loadOrders, loadPurchases, loadSaleOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
-import { initCartNew, updateCartButtonCount } from './cart/cartNew.js';
+import { initCartNew, updateCartButtonCount, updateCartButtonsState } from './cart/cartNew.js';
+import { initCartBottomSheet } from './cart/cartBottomSheet.js';
 import { initSettingsModal, openSettings } from './handlers/admin_settings_modal.js';
 import { initProfile, setupProfileButton } from './profile.js';
 import { getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
@@ -523,8 +524,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     initCart();
     // Инициализируем новую корзину (старая отключена, но сохранена)
     initCartNew();
+    // Инициализируем bottom sheet для добавления в корзину (с небольшой задержкой для гарантии загрузки DOM)
+    setTimeout(() => {
+        try {
+            initCartBottomSheet();
+        } catch (error) {
+            console.error('❌ Error initializing cart bottom sheet:', error);
+        }
+    }, 100);
     // Добавляем updateCartButtonCount в window для доступа из других модулей
     window.updateCartButtonCount = updateCartButtonCount;
+    // Добавляем updateCartButtonsState в window для обновления состояния кнопок корзины на карточках
+    window.updateCartButtonsState = updateCartButtonsState;
     // Обновляем счетчик корзины при инициализации
     updateCartButtonCount();
     
