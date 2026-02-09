@@ -197,6 +197,40 @@ export async function loadData() {
             allProductsSetter(products);
         }
         
+        // ========== DEBUG: Логирование продуктов после загрузки ==========
+        const DEBUG_DATA_LOAD = true; // Установить в false для отключения
+        if (DEBUG_DATA_LOAD && products.length > 0) {
+            console.log(`[DATA DEBUG] Loaded ${products.length} products`);
+            // Логируем первые 2 товара с action_type
+            products.slice(0, 2).forEach((p, idx) => {
+                console.log(`[DATA DEBUG] Product ${idx + 1}:`, {
+                    id: p.id,
+                    name: p.name?.substring(0, 30),
+                    action_type: p.action_type,
+                    can_add_to_cart: p.can_add_to_cart,
+                    is_sale_enabled: p.is_sale_enabled,
+                    is_made_to_order: p.is_made_to_order,
+                    is_reservation_enabled: p.is_reservation_enabled
+                });
+            });
+        }
+        // ========== КОНЕЦ DEBUG ==========
+        
+        // ========== ЭКСПОРТ ФУНКЦИЙ ДЛЯ РАБОТЫ С allProducts ==========
+        // Экспортируем функции для безопасного доступа к allProducts из других модулей
+        if (typeof window !== 'undefined') {
+            window.getAllProducts = () => {
+                const products = allProductsGetter ? allProductsGetter() : [];
+                return Array.isArray(products) ? products : [];
+            };
+            window.setAllProducts = (next) => {
+                if (allProductsSetter && Array.isArray(next)) {
+                    allProductsSetter(next);
+                }
+            };
+        }
+        // ========== КОНЕЦ ЭКСПОРТА ==========
+        
         // === ИСПРАВЛЕНИЕ: Безопасное обновление фильтров ===
         try {
             // Обновляем опции фильтра на основе доступных товаров

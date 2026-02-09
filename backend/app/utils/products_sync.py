@@ -4,10 +4,117 @@
 Этот модуль содержит функции для синхронизации товаров между основным ботом
 и подключенными ботами пользователя.
 """
-
+import logging
 from sqlalchemy.orm import Session
 from ..db import models
 from .products_utils import normalize_category_id
+
+log = logging.getLogger(__name__)
+
+
+def _sync_characteristics(source_product: models.Product, target_product: models.Product, db: Session) -> int:
+    """
+    Синхронизирует характеристики из source_product в target_product:
+    DELETE старые у target, INSERT новые из source с сохранением sort_order.
+    Источник загружается прямым запросом (не lazy load).
+    Возвращает количество вставленных характеристик.
+    """
+    source_id = source_product.id
+    target_id = target_product.id
+    source_chars = db.query(models.ProductCharacteristic).filter(
+        models.ProductCharacteristic.product_id == source_id
+    ).order_by(models.ProductCharacteristic.sort_order).all()
+    n_source = len(source_chars)
+    db.query(models.ProductCharacteristic).filter(
+        models.ProductCharacteristic.product_id == target_id
+    ).delete(synchronize_session=False)
+    db.flush()
+    new_chars = [
+        models.ProductCharacteristic(
+            product_id=target_id,
+            name=pc.name,
+            value=pc.value,
+            sort_order=pc.sort_order or 0
+        )
+        for pc in source_chars
+    ]
+    db.add_all(new_chars)
+    db.flush()
+    log.debug("[SYNC CHARS] source_id=%s target_id=%s bot_id=%s inserted=%s", source_id, target_id, target_product.bot_id, n_source)
+    return n_source
+
+
+def _sync_characteristics_to_all_siblings(source_product: models.Product, db: Session, action: str) -> None:
+    """
+    BACKFILL: для всех товаров с тем же sync_product_id (siblings) копирует характеристики из source.
+    Вызывается при action=create/update. source_product — тот, кого только что обновили.
+    """
+    sync_id = source_product.sync_product_id
+    if sync_id is None:
+        return
+    user_id = source_product.user_id
+    source_id = source_product.id
+    source_chars = db.query(models.ProductCharacteristic).filter(
+        models.ProductCharacteristic.product_id == source_id
+    ).order_by(models.ProductCharacteristic.sort_order).all()
+    n_source = len(source_chars)
+    log.debug(f"📋 [SYNC CHARS BACKFILL] source_id={source_id} sync_id={sync_id} source_chars={n_source}")
+    siblings = db.query(models.Product).filter(
+        models.Product.user_id == user_id,
+        models.Product.sync_product_id == sync_id,
+        models.Product.id != source_id
+    ).all()
+    for t in siblings:
+        _sync_characteristics(source_product, t, db)
+
+
+def _sync_delivery(source_product: models.Product, target_product: models.Product, db: Session) -> None:
+    """
+    Синхронизирует настройки доставки из source_product в target_product:
+    удаляет старую запись у target (если есть), создаёт одну запись с полями из source.
+    """
+    target_id = target_product.id
+    source_d = getattr(source_product, "delivery_option", None) or (
+        db.query(models.ProductDelivery).filter(
+            models.ProductDelivery.product_id == source_product.id
+        ).first()
+    )
+    # Удаляем старую запись доставки у target
+    db.query(models.ProductDelivery).filter(
+        models.ProductDelivery.product_id == target_id
+    ).delete(synchronize_session=False)
+    db.flush()
+    if source_d:
+        new_d = models.ProductDelivery(
+            product_id=target_id,
+            is_delivery_enabled=source_d.is_delivery_enabled,
+            is_pickup_enabled=source_d.is_pickup_enabled,
+            delivery_time=getattr(source_d, "delivery_time", None),
+            delivery_price=source_d.delivery_price,
+            pickup_address=source_d.pickup_address,
+            sort_order=source_d.sort_order or 0
+        )
+        db.add(new_d)
+        db.flush()
+        log.debug(f"📦 [SYNC DELIVERY] source_id={source_product.id} target_id={target_id} bot_id={target_product.bot_id} copied")
+    else:
+        log.debug(f"📦 [SYNC DELIVERY] source_id={source_product.id} target_id={target_id} bot_id={target_product.bot_id} no source delivery")
+
+
+def _sync_delivery_to_all_siblings(source_product: models.Product, db: Session, action: str) -> None:
+    """BACKFILL: для всех товаров с тем же sync_product_id копирует доставку из source."""
+    sync_id = source_product.sync_product_id
+    if sync_id is None:
+        return
+    user_id = source_product.user_id
+    source_id = source_product.id
+    siblings = db.query(models.Product).filter(
+        models.Product.user_id == user_id,
+        models.Product.sync_product_id == sync_id,
+        models.Product.id != source_id
+    ).all()
+    for t in siblings:
+        _sync_delivery(source_product, t, db)
 
 
 def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session, old_name: str, old_price: float):
@@ -69,6 +176,10 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.is_sold = db_product.is_sold
                 matching.is_made_to_order = db_product.is_made_to_order
                 matching.is_for_sale = db_product.is_for_sale
+                matching.is_sale_enabled = db_product.is_sale_enabled
+                matching.is_reservation_enabled = getattr(db_product, 'is_reservation_enabled', False)
+                matching.is_client_sale = db_product.is_client_sale
+                matching.seller_id = db_product.seller_id
                 matching.price_from = db_product.price_from
                 matching.price_to = db_product.price_to
                 matching.price_fixed = db_product.price_fixed
@@ -77,11 +188,15 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.quantity_unit = db_product.quantity_unit
                 matching.quantity_show_enabled = db_product.quantity_show_enabled
                 matching.is_hidden = db_product.is_hidden
+                # КРИТИЧНО: Обновляем новые поля цен
+                matching.price_card = db_product.price_card
+                matching.price_cash = db_product.price_cash
+                matching.price_old = db_product.price_old
                 matching.category_id = category_id_for_bot
                 # Обновляем sync_product_id если он не был установлен
                 if not matching.sync_product_id:
                     matching.sync_product_id = sync_id
-                print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+                log.debug(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
             else:
                 # Товар не найден - проверяем, не существует ли уже товар с новым именем и sync_product_id
                 existing = None
@@ -120,6 +235,10 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                         is_sold=db_product.is_sold,
                         is_made_to_order=db_product.is_made_to_order,
                         is_for_sale=db_product.is_for_sale,
+                        is_sale_enabled=db_product.is_sale_enabled,
+                        is_reservation_enabled=getattr(db_product, 'is_reservation_enabled', False),
+                        is_client_sale=db_product.is_client_sale,
+                        seller_id=db_product.seller_id,
                         price_from=db_product.price_from,
                         price_to=db_product.price_to,
                         price_fixed=db_product.price_fixed,
@@ -128,10 +247,14 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
                         is_hidden=db_product.is_hidden,
+                        # КРИТИЧНО: Копируем новые поля цен
+                        price_card=db_product.price_card,
+                        price_cash=db_product.price_cash,
+                        price_old=db_product.price_old,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
-                    print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+                    log.debug(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
     
     else:
         # Товар в подключенном боте - синхронизируем в основной бот И во все другие подключенные боты
@@ -182,6 +305,10 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
             matching_main.price_type = db_product.price_type
             matching_main.quantity_from = db_product.quantity_from
             matching_main.quantity_unit = db_product.quantity_unit
+            # КРИТИЧНО: Обновляем новые поля цен
+            matching_main.price_card = db_product.price_card
+            matching_main.price_cash = db_product.price_cash
+            matching_main.price_old = db_product.price_old
             matching_main.category_id = category_id_for_main
             # Устанавливаем sync_product_id если он не был установлен
             if not matching_main.sync_product_id:
@@ -189,7 +316,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
             if not db_product.sync_product_id:
                 db_product.sync_product_id = matching_main.sync_product_id
             sync_id = matching_main.sync_product_id
-            print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
+            log.debug(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
         
         # 2. Обновляем товар во всех других подключенных ботах (кроме текущего)
         for bot in connected_bots:
@@ -239,11 +366,15 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 matching.price_type = db_product.price_type
                 matching.quantity_from = db_product.quantity_from
                 matching.quantity_unit = db_product.quantity_unit
+                # КРИТИЧНО: Обновляем новые поля цен
+                matching.price_card = db_product.price_card
+                matching.price_cash = db_product.price_cash
+                matching.price_old = db_product.price_old
                 matching.category_id = category_id_for_bot
                 # Обновляем sync_product_id если он не был установлен
                 if sync_id and not matching.sync_product_id:
                     matching.sync_product_id = sync_id
-                print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+                log.debug(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
 
 
 def sync_product_to_all_bots(db_product: models.Product, db: Session, action: str = "create"):
@@ -304,6 +435,10 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         is_sold=db_product.is_sold,
                         is_made_to_order=db_product.is_made_to_order,
                         is_for_sale=db_product.is_for_sale,
+                        is_sale_enabled=db_product.is_sale_enabled,
+                        is_reservation_enabled=getattr(db_product, 'is_reservation_enabled', False),
+                        is_client_sale=db_product.is_client_sale,
+                        seller_id=db_product.seller_id,
                         price_from=db_product.price_from,
                         price_to=db_product.price_to,
                         price_fixed=db_product.price_fixed,
@@ -312,10 +447,25 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
                         is_hidden=db_product.is_hidden,
+                        # КРИТИЧНО: Копируем новые поля цен
+                        price_card=db_product.price_card,
+                        price_cash=db_product.price_cash,
+                        price_old=db_product.price_old,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+                    db.flush()  # Получаем new_product.id для копирования характеристик
+                    # Копируем характеристики товара в синхронизированную копию
+                    for pc in db_product.characteristics:
+                        new_pc = models.ProductCharacteristic(
+                            product_id=new_product.id,
+                            name=pc.name,
+                            value=pc.value,
+                            sort_order=pc.sort_order
+                        )
+                        db.add(new_pc)
+                    _sync_delivery(db_product, new_product, db)
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
             
             elif action == "update":
                 # Ищем синхронизированный товар по sync_product_id (надежный способ)
@@ -338,6 +488,18 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
                     category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
                     
+                    # Синхронизируем характеристики: удаляем старые, копируем новые
+                    for old_pc in list(matching.characteristics):
+                        db.delete(old_pc)
+                    for pc in db_product.characteristics:
+                        new_pc = models.ProductCharacteristic(
+                            product_id=matching.id,
+                            name=pc.name,
+                            value=pc.value,
+                            sort_order=pc.sort_order
+                        )
+                        db.add(new_pc)
+                    _sync_delivery(db_product, matching, db)
                     matching.name = db_product.name  # Обновляем название
                     matching.description = db_product.description
                     matching.price = db_product.price  # Обновляем цену при синхронизации
@@ -352,17 +514,25 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     matching.is_hidden = db_product.is_hidden
                     # Обновляем поля для продажи
                     matching.is_for_sale = db_product.is_for_sale
+                    matching.is_sale_enabled = db_product.is_sale_enabled
+                    matching.is_reservation_enabled = getattr(db_product, 'is_reservation_enabled', False)
+                    matching.is_client_sale = db_product.is_client_sale
+                    matching.seller_id = db_product.seller_id
                     matching.price_from = db_product.price_from
                     matching.price_to = db_product.price_to
                     matching.price_fixed = db_product.price_fixed
                     matching.price_type = db_product.price_type
                     matching.quantity_from = db_product.quantity_from
                     matching.quantity_unit = db_product.quantity_unit
+                    # КРИТИЧНО: Обновляем новые поля цен
+                    matching.price_card = db_product.price_card
+                    matching.price_cash = db_product.price_cash
+                    matching.price_old = db_product.price_old
                     matching.category_id = category_id_for_bot
                     # Обновляем sync_product_id если он не был установлен
                     if not matching.sync_product_id:
                         matching.sync_product_id = sync_id
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
     
     else:
         # Товар в подключенном боте - синхронизируем в основной бот И во все другие подключенные боты
@@ -430,6 +600,10 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 existing_main.price_type = db_product.price_type
                 existing_main.quantity_from = db_product.quantity_from
                 existing_main.quantity_unit = db_product.quantity_unit
+                # КРИТИЧНО: Обновляем новые поля цен
+                existing_main.price_card = db_product.price_card
+                existing_main.price_cash = db_product.price_cash
+                existing_main.price_old = db_product.price_old
                 existing_main.category_id = category_id_for_main
                 # Устанавливаем sync_product_id если он не был установлен
                 if not existing_main.sync_product_id:
@@ -437,7 +611,11 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 # Обновляем sync_product_id у товара в боте
                 if not db_product.sync_product_id:
                     db_product.sync_product_id = existing_main.sync_product_id
-                print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={existing_main.sync_product_id}) to main bot (UPDATE existing)")
+                # Синхронизируем характеристики и доставку: main bot <- bot product
+                _sync_characteristics(db_product, existing_main, db)
+                _sync_delivery(db_product, existing_main, db)
+                log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={existing_main.sync_product_id}) to main bot (UPDATE existing)")
+                log.debug(f"💾 [SYNC] Updated main bot product {existing_main.id}: price_card={existing_main.price_card}, price_cash={existing_main.price_cash}, price_old={existing_main.price_old}")
             elif not existing_main:
                 # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
                 category_id_for_main = normalize_category_id(db_product.category_id, None, user_id, db)
@@ -458,6 +636,10 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     is_sold=db_product.is_sold,
                     is_made_to_order=db_product.is_made_to_order,
                     is_for_sale=db_product.is_for_sale,
+                    is_sale_enabled=db_product.is_sale_enabled,
+                    is_reservation_enabled=getattr(db_product, 'is_reservation_enabled', False),
+                    is_client_sale=db_product.is_client_sale,
+                    seller_id=db_product.seller_id,
                     price_from=db_product.price_from,
                     price_to=db_product.price_to,
                     price_fixed=db_product.price_fixed,
@@ -465,6 +647,10 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     quantity_from=db_product.quantity_from,
                     quantity_unit=db_product.quantity_unit,
                     quantity_show_enabled=db_product.quantity_show_enabled,
+                    # КРИТИЧНО: Копируем новые поля цен
+                    price_card=db_product.price_card,
+                    price_cash=db_product.price_cash,
+                    price_old=db_product.price_old,
                     category_id=category_id_for_main
                 )
                 db.add(new_product)
@@ -475,7 +661,11 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 if not db_product.sync_product_id:
                     db_product.sync_product_id = new_product.id
                 sync_id = new_product.id
-                print(f"🔄 Synced product '{db_product.name}' (id={new_product.id}, sync_id={sync_id}) to main bot (CREATE)")
+                # Копируем характеристики и доставку в main bot
+                _sync_characteristics(db_product, new_product, db)
+                _sync_delivery(db_product, new_product, db)
+                log.debug(f"🔄 Synced product '{db_product.name}' (id={new_product.id}, sync_id={sync_id}) to main bot (CREATE)")
+                log.debug(f"💾 [SYNC] Created main bot product {new_product.id}: price_card={new_product.price_card}, price_cash={new_product.price_cash}, price_old={new_product.price_old}")
             
             # 2. Синхронизируем во все другие подключенные боты (кроме текущего)
             # Используем sync_id для надежной синхронизации
@@ -524,11 +714,18 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     existing.price_type = db_product.price_type
                     existing.quantity_from = db_product.quantity_from
                     existing.quantity_unit = db_product.quantity_unit
+                    # КРИТИЧНО: Обновляем новые поля цен
+                    existing.price_card = db_product.price_card
+                    existing.price_cash = db_product.price_cash
+                    existing.price_old = db_product.price_old
                     existing.category_id = category_id_for_bot
                     # Обновляем sync_product_id если он не был установлен
                     if sync_id and not existing.sync_product_id:
                         existing.sync_product_id = sync_id
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE existing)")
+                    # Синхронизируем характеристики и доставку: other bot <- bot product
+                    _sync_characteristics(db_product, existing, db)
+                    _sync_delivery(db_product, existing, db)
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE existing)")
                 elif not existing:
                     # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
                     category_id_for_bot = normalize_category_id(db_product.category_id, bot.id, user_id, db)
@@ -548,6 +745,10 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         is_sold=db_product.is_sold,
                         is_made_to_order=db_product.is_made_to_order,
                         is_for_sale=db_product.is_for_sale,
+                        is_sale_enabled=db_product.is_sale_enabled,
+                        is_reservation_enabled=getattr(db_product, 'is_reservation_enabled', False),
+                        is_client_sale=db_product.is_client_sale,
+                        seller_id=db_product.seller_id,
                         price_from=db_product.price_from,
                         price_to=db_product.price_to,
                         price_fixed=db_product.price_fixed,
@@ -556,10 +757,18 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         quantity_unit=db_product.quantity_unit,
                         quantity_show_enabled=db_product.quantity_show_enabled,
                         is_hidden=db_product.is_hidden,
+                        # КРИТИЧНО: Копируем новые поля цен
+                        price_card=db_product.price_card,
+                        price_cash=db_product.price_cash,
+                        price_old=db_product.price_old,
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+                    db.flush()
+                    # Копируем характеристики и доставку в other bot
+                    _sync_characteristics(db_product, new_product, db)
+                    _sync_delivery(db_product, new_product, db)
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
         
         elif action == "update":
             # Используем sync_product_id для надежной синхронизации
@@ -604,6 +813,8 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 matching_main.quantity = db_product.quantity
                 matching_main.is_sold = db_product.is_sold
                 matching_main.is_made_to_order = db_product.is_made_to_order
+                matching_main.is_sale_enabled = db_product.is_sale_enabled
+                matching_main.is_reservation_enabled = getattr(db_product, "is_reservation_enabled", False)
                 matching_main.quantity_show_enabled = db_product.quantity_show_enabled
                 matching_main.is_hidden = db_product.is_hidden
                 # Обновляем поля для продажи
@@ -614,8 +825,15 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 matching_main.price_type = db_product.price_type
                 matching_main.quantity_from = db_product.quantity_from
                 matching_main.quantity_unit = db_product.quantity_unit
+                # КРИТИЧНО: Обновляем новые поля цен
+                matching_main.price_card = db_product.price_card
+                matching_main.price_cash = db_product.price_cash
+                matching_main.price_old = db_product.price_old
                 matching_main.category_id = category_id_for_main
-                print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
+                # Синхронизируем характеристики и доставку: main bot <- bot product
+                _sync_characteristics(db_product, matching_main, db)
+                _sync_delivery(db_product, matching_main, db)
+                log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
             
             # 2. Обновляем товар во всех других подключенных ботах (кроме текущего)
             # Используем sync_id для надежной синхронизации
@@ -662,17 +880,26 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     matching.is_hidden = db_product.is_hidden
                     # Обновляем поля для продажи
                     matching.is_for_sale = db_product.is_for_sale
+                    matching.is_sale_enabled = db_product.is_sale_enabled
+                    matching.is_reservation_enabled = getattr(db_product, 'is_reservation_enabled', False)
                     matching.price_from = db_product.price_from
                     matching.price_to = db_product.price_to
                     matching.price_fixed = db_product.price_fixed
                     matching.price_type = db_product.price_type
                     matching.quantity_from = db_product.quantity_from
                     matching.quantity_unit = db_product.quantity_unit
+                    # КРИТИЧНО: Обновляем новые поля цен
+                    matching.price_card = db_product.price_card
+                    matching.price_cash = db_product.price_cash
+                    matching.price_old = db_product.price_old
                     matching.category_id = category_id_for_bot
                     # Обновляем sync_product_id если он не был установлен
                     if sync_id and not matching.sync_product_id:
                         matching.sync_product_id = sync_id
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+                    # Синхронизируем характеристики и доставку: other bot <- bot product
+                    _sync_characteristics(db_product, matching, db)
+                    _sync_delivery(db_product, matching, db)
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
         
         elif action == "delete":
             # Используем sync_product_id для надежного удаления всех связанных товаров
@@ -695,7 +922,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
             
             for matching_main in matching_main_products:
                 db.delete(matching_main)
-                print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching_main.id}, sync_id={sync_id}) to main bot (DELETE)")
+                log.debug(f"🔄 Synced deletion of product '{db_product.name}' (id={matching_main.id}, sync_id={sync_id}) to main bot (DELETE)")
             
             # 2. Удаляем все связанные товары из всех других подключенных ботов (кроме текущего)
             for bot in connected_bots:
@@ -719,7 +946,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 
                 for matching in matching_products:
                     db.delete(matching)
-                    print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) to bot {bot.id} (DELETE)")
+                    log.debug(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) to bot {bot.id} (DELETE)")
     
     # Также обрабатываем удаление из основного бота во все подключенные боты
     if db_product.bot_id is None and action == "delete":
@@ -743,5 +970,10 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
             
             for matching in matching_products:
                 db.delete(matching)
-                print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) from main bot to bot {bot.id} (DELETE)")
+                log.debug(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) from main bot to bot {bot.id} (DELETE)")
+    
+    # BACKFILL: для create/update — синхронизируем характеристики и доставку во все siblings (товары с тем же sync_product_id)
+    if action in ("create", "update") and db_product.sync_product_id is not None:
+        _sync_characteristics_to_all_siblings(db_product, db, action)
+        _sync_delivery_to_all_siblings(db_product, db, action)
 

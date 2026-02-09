@@ -11,7 +11,10 @@ from ..models import reservation as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
 from ..utils.product_snapshot import create_product_snapshot, get_product_display_info_from_snapshot
 from ..utils.products_utils import make_full_url
+from ..utils.logging_config import get_logger
 import json
+
+log = get_logger(__name__)
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -705,7 +708,7 @@ async def get_cart_reservations(
         )
     ).order_by(models.Reservation.created_at.desc()).all()
     
-    print(f"🔍 [CART DEBUG] After filtering (is_active=True, reserved_until > now): {len(reservations)} reservations")
+    log.debug("[CART] After filtering: %s reservations", len(reservations))
     
     # Фильтруем резервации и используем snapshot для изоляции данных товара
     # Группируем по sync_product_id, чтобы не показывать дубликаты синхронизированных товаров

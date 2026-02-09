@@ -39,7 +39,8 @@ def create_product_snapshot(
         except (json.JSONDecodeError, TypeError):
             images_urls_list = []
     
-    # Формируем JSON с данными товара на момент операции
+    # Формируем JSON с данными товара на момент операции.
+    # Включаем все поля цен и описания, чтобы в деталях операции отображать "как карточка товара".
     product_data = {
         # Основные данные товара
         "id": product.id,
@@ -49,6 +50,10 @@ def create_product_snapshot(
         "discount": product.discount or 0.0,
         "image_url": product.image_url,
         "images_urls": images_urls_list,
+        # Цены: карта, наличные, старая (для витрины и расчёта итого по способу оплаты)
+        "price_card": getattr(product, 'price_card', None),
+        "price_cash": getattr(product, 'price_cash', None),
+        "price_old": getattr(product, 'price_old', None),
         # Дополнительные поля
         "is_hot_offer": product.is_hot_offer or False,
         "quantity": product.quantity or 0,

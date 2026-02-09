@@ -14,6 +14,21 @@ from ..utils.product_snapshot import create_product_snapshot, get_product_displa
 from ..utils.products_utils import make_full_url
 from sqlalchemy.orm import joinedload
 
+def _minimal_product_no_snapshot(product_id: Optional[int], product_exists: bool) -> dict:
+    """Минимальный объект товара для операции без snapshot. НЕ использует данные живого Product."""
+    return {
+        "id": product_id or 0,
+        "name": "Товар недоступен" if not product_exists else "Товар",
+        "price": None,
+        "price_card": None,
+        "price_cash": None,
+        "discount": 0,
+        "image_url": None,
+        "images_urls": [],
+        "is_unavailable": not product_exists,
+    }
+
+
 def get_product_price_from_dict(product_dict: dict) -> Optional[float]:
     """
     Получить правильную цену товара из словаря (например, из snapshot).
@@ -369,6 +384,8 @@ async def get_shop_sales(
                     if product_info.get("image_url"):
                         product_info["image_url"] = make_full_url(product_info["image_url"])
                     sale_dict['product'] = product_info
+                    if product_info.get("price_card") is not None:
+                        print(f"   📸 [SALES] item.product.price_card from snapshot_json (sale_id={sale.id})")
                 else:
                     sale_dict['product'] = {
                         "id": sale.product_id or 0,
@@ -380,61 +397,11 @@ async def get_shop_sales(
                         "is_unavailable": True
                     }
             else:
-                # Snapshot не найден - fallback к актуальному товару
-                if sale.product:
-                    images_urls_list = None
-                    if sale.product.images_urls:
-                        try:
-                            images_urls_list = json.loads(sale.product.images_urls) if isinstance(sale.product.images_urls, str) else sale.product.images_urls
-                        except (json.JSONDecodeError, TypeError):
-                            images_urls_list = []
-                    sale_dict['product'] = {
-                        "id": sale.product.id,
-                        "name": sale.product.name,
-                        "price": sale.product.price,
-                        "discount": sale.product.discount,
-                        "image_url": make_full_url(sale.product.image_url) if sale.product.image_url else None,
-                        "images_urls": images_urls_list,
-                        "is_unavailable": False
-                    }
-                else:
-                    sale_dict['product'] = {
-                        "id": sale.product_id or 0,
-                        "name": "Товар недоступен",
-                        "price": None,
-                        "discount": 0,
-                        "image_url": None,
-                        "images_urls": [],
-                        "is_unavailable": True
-                    }
+                sale_dict['product'] = _minimal_product_no_snapshot(sale.product_id, sale.product is not None)
         elif sale.product:
-            # Нет snapshot - используем актуальный товар (для старых продаж без snapshot)
-            images_urls_list = None
-            if sale.product.images_urls:
-                try:
-                    images_urls_list = json.loads(sale.product.images_urls) if isinstance(sale.product.images_urls, str) else sale.product.images_urls
-                except (json.JSONDecodeError, TypeError):
-                    images_urls_list = []
-            sale_dict['product'] = {
-                "id": sale.product.id,
-                "name": sale.product.name,
-                "price": sale.product.price,
-                "discount": sale.product.discount,
-                "image_url": make_full_url(sale.product.image_url) if sale.product.image_url else None,
-                "images_urls": images_urls_list,
-                "is_unavailable": False
-            }
+            sale_dict['product'] = _minimal_product_no_snapshot(sale.product_id, True)
         else:
-            # Товар удален и нет snapshot - показываем заглушку
-            sale_dict['product'] = {
-                "id": sale.product_id or 0,
-                "name": "Товар недоступен",
-                "price": None,
-                "discount": 0,
-                "image_url": None,
-                "images_urls": [],
-                "is_unavailable": True
-            }
+            sale_dict['product'] = _minimal_product_no_snapshot(sale.product_id, False)
         
         result.append(sale_dict)
     
@@ -498,6 +465,8 @@ async def get_my_sales(
                     if product_info.get("image_url"):
                         product_info["image_url"] = make_full_url(product_info["image_url"])
                     sale_dict['product'] = product_info
+                    if product_info.get("price_card") is not None:
+                        print(f"   📸 [SALES] item.product.price_card from snapshot_json (sale_id={sale.id})")
                 else:
                     sale_dict['product'] = {
                         "id": sale.product_id or 0,
@@ -509,61 +478,11 @@ async def get_my_sales(
                         "is_unavailable": True
                     }
             else:
-                # Snapshot не найден - fallback к актуальному товару
-                if sale.product:
-                    images_urls_list = None
-                    if sale.product.images_urls:
-                        try:
-                            images_urls_list = json.loads(sale.product.images_urls) if isinstance(sale.product.images_urls, str) else sale.product.images_urls
-                        except (json.JSONDecodeError, TypeError):
-                            images_urls_list = []
-                    sale_dict['product'] = {
-                        "id": sale.product.id,
-                        "name": sale.product.name,
-                        "price": sale.product.price,
-                        "discount": sale.product.discount,
-                        "image_url": make_full_url(sale.product.image_url) if sale.product.image_url else None,
-                        "images_urls": images_urls_list,
-                        "is_unavailable": False
-                    }
-                else:
-                    sale_dict['product'] = {
-                        "id": sale.product_id or 0,
-                        "name": "Товар недоступен",
-                        "price": None,
-                        "discount": 0,
-                        "image_url": None,
-                        "images_urls": [],
-                        "is_unavailable": True
-                    }
+                sale_dict['product'] = _minimal_product_no_snapshot(sale.product_id, sale.product is not None)
         elif sale.product:
-            # Нет snapshot - используем актуальный товар (для старых продаж без snapshot)
-            images_urls_list = None
-            if sale.product.images_urls:
-                try:
-                    images_urls_list = json.loads(sale.product.images_urls) if isinstance(sale.product.images_urls, str) else sale.product.images_urls
-                except (json.JSONDecodeError, TypeError):
-                    images_urls_list = []
-            sale_dict['product'] = {
-                "id": sale.product.id,
-                "name": sale.product.name,
-                "price": sale.product.price,
-                "discount": sale.product.discount,
-                "image_url": make_full_url(sale.product.image_url) if sale.product.image_url else None,
-                "images_urls": images_urls_list,
-                "is_unavailable": False
-            }
+            sale_dict['product'] = _minimal_product_no_snapshot(sale.product_id, True)
         else:
-            # Товар удален и нет snapshot - показываем заглушку
-            sale_dict['product'] = {
-                "id": sale.product_id or 0,
-                "name": "Товар недоступен",
-                "price": None,
-                "discount": 0,
-                "image_url": None,
-                "images_urls": [],
-                "is_unavailable": True
-            }
+            sale_dict['product'] = _minimal_product_no_snapshot(sale.product_id, False)
         
         result.append(sale_dict)
     

@@ -20,17 +20,26 @@ class PurchaseCreate(PurchaseBase):
     video_url: Optional[str] = None  # 1 видео
 
 class ProductInfo(BaseModel):
+    """Информация о товаре из snapshot для операций (совпадает с order.ProductInfo по полям)."""
     id: int
     name: str
-    price: float
+    price: Optional[float] = None
     discount: float = 0.0
     image_url: Optional[str] = None
     images_urls: Optional[list] = None
-    
+    price_card: Optional[float] = None
+    price_cash: Optional[float] = None
+    price_old: Optional[float] = None
+    description: Optional[str] = None
+    is_for_sale: Optional[bool] = None
+    price_from: Optional[float] = None
+    price_to: Optional[float] = None
+    price_fixed: Optional[float] = None
+    price_type: Optional[str] = None
+
     @field_validator('images_urls', mode='before')
     @classmethod
     def parse_images_urls(cls, v):
-        """Преобразует images_urls из JSON строки в список"""
         if v is None:
             return None
         if isinstance(v, list):
@@ -41,15 +50,17 @@ class ProductInfo(BaseModel):
             except (json.JSONDecodeError, TypeError):
                 return []
         return []
-    
+
     class Config:
         from_attributes = True
+        extra = "allow"
 
 class Purchase(PurchaseBase):
     id: int
     user_id: int  # Владелец магазина
     purchased_by_user_id: int  # Кто хочет продать товар
     created_at: datetime
+    order_number: Optional[str] = None  # Уникальный номер операции (PUR-...); для старых записей может отсутствовать
     is_completed: bool
     is_cancelled: bool
     organization: Optional[str] = None

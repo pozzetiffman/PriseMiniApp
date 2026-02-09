@@ -2,8 +2,9 @@ import os
 from typing import Optional
 from sqlalchemy.orm import Session
 from ..db import models
+from ..utils.logging_config import get_logger
 
-# Telegram Bot Token для отправки уведомлений (основной бот)
+log = get_logger(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 # Получаем публичный URL из переменной окружения или используем ngrok по умолчанию
@@ -30,11 +31,9 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     ).first()
     
     if connected_bot and connected_bot.bot_token:
-        print(f"✅ Using connected bot token for user {shop_owner_id} (bot_id={connected_bot.id})")
+        log.debug("Using connected bot token for user %s bot_id=%s", shop_owner_id, connected_bot.id)
         return connected_bot.bot_token
-    
-    # Если подключенного бота нет, используем основной токен
-    print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
+    log.debug("No connected bot for user %s, using main bot token", shop_owner_id)
     return TELEGRAM_BOT_TOKEN
 
 
@@ -144,4 +143,29 @@ def normalize_category_id(category_id: Optional[int], target_bot_id: Optional[in
             # Категория с таким именем не найдена в целевом боте
             print(f"⚠️ WARNING: Category with name='{category.name}' not found in target_bot_id={target_bot_id}, returning None")
             return None
+
+
+def normalize_action_flags(product: models.Product) -> None:
+    """
+    Нормализация взаимоисключающих флагов типа товара на бэкенде.
+    Гарантирует консистентное состояние при любом порядке PATCH (sale / made_to_order / reservation).
+    Без этого при нескольких PATCH подряд возможны рассинхроны: is_made_to_order=True, но is_sale_enabled
+    остаётся True → на фронте приоритет sale выше order → кнопка остаётся "Купить" и логика "ensure in cart".
+    Модифицирует product in-place.
+    """
+    sale = bool(getattr(product, "is_sale_enabled", False))
+    order = bool(getattr(product, "is_made_to_order", False))
+    reserve = bool(getattr(product, "is_reservation_enabled", False))
+    if order:
+        sale = False
+        reserve = False
+    elif sale:
+        order = False
+        reserve = False
+    elif reserve:
+        sale = False
+        order = False
+    product.is_sale_enabled = sale
+    product.is_made_to_order = order
+    product.is_reservation_enabled = reserve
 

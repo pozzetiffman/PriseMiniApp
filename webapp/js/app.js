@@ -1,11 +1,17 @@
 // Главный файл приложения - инициализация и координация модулей
-import { initAdmin, loadShopSettings, openAdmin } from './admin.js';
+import { initAdmin, loadShopSettings } from './admin.js';
 import { getContext } from './api.js';
 import { API_BASE } from './api/config.js';
 import { initCart, loadCart, loadOrders, loadPurchases, loadSaleOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
-import { initCartNew, updateCartButtonCount, updateCartButtonsState } from './cart/cartNew.js';
 import { initCartBottomSheet } from './cart/cartBottomSheet.js';
-import { initSettingsModal, openSettings } from './handlers/admin_settings_modal.js';
+import { initCartNew, updateCartButtonCount, updateCartButtonsState } from './cart/cartNew.js';
+import { initSettingsModal } from './handlers/admin_settings_modal.js';
+import { initMainMenu, setupMainMenuButton } from './menu.js';
+import { initDealCheckoutPage } from './dealCheckout.js';
+import { initOrdersPage } from './operationsOrders.js';
+import { initPurchasesPage } from './operationsPurchases.js';
+import { initReservationsPage } from './operationsReservations.js';
+import { initSaleOrdersPage } from './operationsSaleOrders.js';
 import { initProfile, setupProfileButton } from './profile.js';
 import { getTelegramInstance, initTelegram, requireTelegram } from './telegram.js';
 // Импорт функций категорий из отдельного модуля (рефакторинг)
@@ -22,15 +28,15 @@ import { initProductsDependencies, renderProducts, showProductModal } from './pr
 // Импорт функции закрытия страницы товара
 import { closeProductPage } from './handlers/products_modal.js';
 // Импорт функций редактирования товаров из отдельного модуля (рефакторинг)
-import { deleteProduct, initProductEditDependencies, markAsSold, showEditProductModal, showSellModal } from './product-edit.js';
+import { deleteProduct, initProductEditDependencies, markAsSold, showEditProductModal, showEditProductPage, showSellModal } from './product-edit.js';
 // Импорт функций резерваций из отдельного модуля (рефакторинг)
 import { cancelReservation, initReservationsDependencies, showReservationModal } from './reservations.js';
 // Импорт функций заказов из отдельного модуля (рефакторинг)
-import { initOrdersDependencies, showOrderModal } from './orders.js';
+import { initOrdersDependencies, showOrderModal, showOrderPage } from './orders.js';
 // Импорт функций заказов на покупку из отдельного модуля
 import { initSaleOrdersDependencies, showSaleOrderModal } from './sale_orders.js';
 // Импорт функций продаж из отдельного модуля (рефакторинг)
-import { initPurchasesDependencies, showPurchaseModal } from './purchases.js';
+import { initPurchasesDependencies, showPurchaseModal, showPurchasePage } from './purchases.js';
 // Импорт функций фильтров из отдельного модуля (рефакторинг)
 import { applyFilters, initFilters, initFiltersDependencies, updateProductFilterOptions } from './filters.js';
 // Импорт функций настройки модальных окон из отдельного модуля (рефакторинг)
@@ -39,8 +45,13 @@ import { initModalsDependencies, setupModals } from './modals.js';
 import { initDataDependencies, loadData, updateShopNameInHeader } from './data.js';
 // Импорт функций переключения вида карточек
 import { initCardViewToggle } from './handlers/cardViewToggle.js';
-// Импорт remoteLogger для отладки
+// Импорт логирования: console proxy (глушит шум в prod) + remoteLogger (только при ?remote_log=1)
+import { initConsoleProxy } from './utils/consoleProxy.js';
 import { initRemoteLogger } from './utils/remoteLogger.js';
+// Импорт модуля индикаторов активности
+import { initActivityIndicators, updateActivityCounts } from './activityIndicators.js';
+// Глобальная обработка клавиатуры и нижнего меню (скрытие header при фокусе на input/textarea)
+import { initKeyboardHeader } from './keyboardHeader.js';
 
 // Глобальные переменные
 let appContext = null; // Контекст магазина (viewer_id, shop_owner_id, role, permissions)
@@ -125,7 +136,8 @@ async function tryUpdateFavoritesCount() {
 document.addEventListener('DOMContentLoaded', async () => {
     // === ИСПРАВЛЕНИЕ: Глобальная защита от падения приложения ===
     try {
-        // 0. Инициализируем remoteLogger ПЕРВЫМ, чтобы перехватить все логи
+        // 0. Инициализируем логирование: proxy (глушит log/info в prod) -> remoteLogger (если ?remote_log=1)
+        initConsoleProxy();
         initRemoteLogger();
         
         console.log('📄 DOMContentLoaded - инициализация приложения');
@@ -308,6 +320,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         modal: null, // Product modal больше не используется - заменен на product-page
         loadData: loadData, // Функция для загрузки данных
         allProductsGetter: () => allProducts, // Функция-геттер для получения allProducts
+        allProductsSetter: (val) => { allProducts = val; }, // Для подстановки свежего товара после сохранения (client-visible)
+        applyFiltersCallback: applyFilters, // Перерисовать сетку после подстановки свежих товаров
         showSellModal: showSellModal, // Функция для показа модального окна продажи (используется в markAsSold)
         sellModal: sellModal, // Элемент модального окна продажи
         showProductModal: showProductModal // Функция для показа/обновления страницы товара
@@ -333,13 +347,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         modal: null, // Product modal больше не используется - заменен на product-page
         modalState: modalState,
         loadData: loadData,
-        showEditProductModal: showEditProductModal,
+        showEditProductModal: showEditProductPage, // открываем страницу edit-product-page
         markAsSold: markAsSold,
         deleteProduct: deleteProduct,
         cancelReservation: cancelReservation,
-        showPurchaseModal: showPurchaseModal,
+        showPurchaseModal: showPurchasePage, // открываем страницу purchase-page
         showReservationModal: showReservationModal,
-        showOrderModal: showOrderModal,
+        showOrderModal: showOrderPage, // открываем страницу order-page
         showSaleOrderModal: showSaleOrderModal
     });
     
@@ -468,7 +482,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
     }
-    
+
+    // Глобальная обработка клавиатуры и нижнего меню: скрытие header при фокусе на input/textarea
+    initKeyboardHeader();
+
     // 5. Устанавливаем приветствие (будет обновлено после загрузки настроек)
     const tg = getTelegramInstance();
     if (appContext.role === 'client') {
@@ -553,35 +570,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     initProfile();
     setupProfileButton();
     
+    // 8.2 Инициализируем страницы операций
+    initOrdersPage();
+    initReservationsPage();
+    initPurchasesPage();
+    initSaleOrdersPage();
+    initDealCheckoutPage();
+    
+    // 8.3 Инициализируем индикаторы активности
+    await initActivityIndicators();
+    
     // 7.5 Инициализируем модальное окно настроек
     initSettingsModal();
     
-    // 7.6 Настраиваем кнопки настроек и админки для владельцев магазинов
+    // 7.6 Инициализируем главное меню с выпадающим списком
+    initMainMenu();
+    
+    // 7.7 Настраиваем видимость элементов меню
     const isOwner = appContext && appContext.role === 'owner';
-    const settingsButton = document.getElementById('settings-button');
-    const adminButton = document.getElementById('admin-button');
-    
-    if (settingsButton) {
-        if (isOwner) {
-            settingsButton.style.display = 'flex';
-            settingsButton.onclick = () => {
-                openSettings();
-            };
-        } else {
-            settingsButton.style.display = 'none';
-        }
-    }
-    
-    if (adminButton) {
-        if (isOwner) {
-            adminButton.style.display = 'flex';
-            adminButton.onclick = () => {
-                openAdmin();
-            };
-        } else {
-            adminButton.style.display = 'none';
-        }
-    }
+    setupMainMenuButton(
+        true,  // Личный кабинет доступен всем
+        isOwner,  // Настройки только для владельца
+        isOwner   // Админка только для владельца
+    );
     
     // 8.2 Инициализируем переключение вида карточек
     const cardViewToggleButton = document.getElementById('card-view-toggle-button');
@@ -671,6 +682,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             setInterval(() => {
                 updateCartButtonCount();
             }, 30000);
+            
+            // Запускаем периодическое обновление индикаторов активности (каждые 60 секунд)
+            setInterval(async () => {
+                try {
+                    await updateActivityCounts();
+                } catch (e) {
+                    console.error('❌ Error updating activity indicators:', e);
+                }
+            }, 60000);
         } catch (e) {
             console.error('❌ Error updating cart button count:', e);
         }

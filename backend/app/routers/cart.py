@@ -5,13 +5,14 @@ from typing import List, Optional
 from datetime import datetime
 from ..db import models, database
 from ..utils.telegram_auth import validate_init_data_multi_bot
+from ..utils.product_action_type import get_product_action_type
+from ..utils.logging_config import get_logger
 import os
 from dotenv import load_dotenv
 import json
 
 load_dotenv()
-
-# Telegram Bot Token для валидации
+log = get_logger(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 router = APIRouter(prefix="/api/cart", tags=["cart"])
@@ -26,10 +27,8 @@ async def add_to_cart(
     db: Session = Depends(database.get_db)
 ):
     """Добавить товар в корзину или увеличить количество"""
-    print(f"[CART DEBUG] add_to_cart called: product_id={product_id}, quantity={quantity}, shop_owner_id={shop_owner_id}, bot_id={bot_id}")
-    
     if not x_telegram_init_data:
-        print("[CART DEBUG] add_to_cart: No initData provided")
+        log.warning("add_to_cart: No initData product_id=%s", product_id)
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -38,18 +37,49 @@ async def add_to_cart(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] add_to_cart: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] add_to_cart: Validation error: {str(e)}")
+        log.warning("add_to_cart: Validation error product_id=%s: %s", product_id, str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
-    # Проверяем наличие товара
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
-        print(f"[CART DEBUG] add_to_cart: Product {product_id} not found")
+        log.warning("add_to_cart: Product not found product_id=%s", product_id)
         raise HTTPException(status_code=404, detail="Product not found")
+    
+    # ========== ВАЛИДАЦИЯ ТИПА ТОВАРА: ТОЛЬКО SALE МОЖНО ДОБАВЛЯТЬ В КОРЗИНУ ==========
+    # Определяем роль пользователя (клиент или владелец)
+    user_role = 'client' if user_id != product.user_id else 'owner'
+    
+    # Получаем настройки магазина из БД
+    from ..utils.product_action_type import get_shop_settings_dict
+    shop_settings = get_shop_settings_dict(product.user_id, getattr(product, 'bot_id', None), db)
+    
+    action_type, can_add_to_cart, reason_not_sale = get_product_action_type(
+        product, user_role, shop_settings, db
+    )
+    
+    if not can_add_to_cart:
+        action_type_text = {
+            'purchase': 'покупка',
+            'order': 'заказ',
+            'reserve': 'резервация',
+            'none': 'не продается'
+        }.get(action_type, 'не продается')
+        
+        error_message = f"Этот товар нельзя добавить в корзину. Тип: {action_type_text}"
+        log.info("add_to_cart BLOCKED product_id=%s reason=%s", product_id, reason_not_sale)
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "NOT_SALE",
+                "message": error_message,
+                "action_type": action_type,
+                "reason": reason_not_sale
+            }
+        )
+    # ========== КОНЕЦ ВАЛИДАЦИИ ТИПА ТОВАРА ==========
     
     # Проверяем, есть ли уже товар в корзине
     cart_item = db.query(models.CartItem).filter(
@@ -62,14 +92,10 @@ async def add_to_cart(
     ).first()
     
     if cart_item:
-        # Увеличиваем количество
-        print(f"[CART DEBUG] add_to_cart: Updating quantity for product_id={product_id}, user_id={user_id}")
         cart_item.quantity += quantity
         cart_item.updated_at = datetime.utcnow()
         is_new = False
     else:
-        # Добавляем новый товар в корзину
-        print(f"[CART DEBUG] add_to_cart: Adding new item for product_id={product_id}, user_id={user_id}, shop_owner_id={shop_owner_id}, bot_id={bot_id}")
         cart_item = models.CartItem(
             product_id=product_id,
             user_id=user_id,
@@ -85,9 +111,6 @@ async def add_to_cart(
     
     db.commit()
     db.refresh(cart_item)
-    
-    print(f"[CART DEBUG] add_to_cart result: product_id={product_id}, user_id={user_id}, quantity={cart_item.quantity}, is_new={is_new}")
-    
     return {
         "id": cart_item.id,
         "product_id": cart_item.product_id,
@@ -105,10 +128,8 @@ async def remove_from_cart(
     db: Session = Depends(database.get_db)
 ):
     """Удалить товар из корзины"""
-    print(f"[CART DEBUG] remove_from_cart called: product_id={product_id}, shop_owner_id={shop_owner_id}, bot_id={bot_id}")
-    
     if not x_telegram_init_data:
-        print("[CART DEBUG] remove_from_cart: No initData provided")
+        log.warning("remove_from_cart: No initData product_id=%s", product_id)
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -117,11 +138,10 @@ async def remove_from_cart(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] remove_from_cart: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] remove_from_cart: Validation error: {str(e)}")
+        log.warning("remove_from_cart: Validation error product_id=%s: %s", product_id, str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Находим товар в корзине
@@ -135,14 +155,10 @@ async def remove_from_cart(
     ).first()
     
     if not cart_item:
-        print(f"[CART DEBUG] remove_from_cart: Cart item not found for product_id={product_id}, user_id={user_id}")
         raise HTTPException(status_code=404, detail="Cart item not found")
     
     db.delete(cart_item)
     db.commit()
-    
-    print(f"[CART DEBUG] remove_from_cart result: product_id={product_id}, user_id={user_id}, removed=True")
-    
     return {"removed": True}
 
 @router.post("/update")
@@ -156,10 +172,8 @@ async def update_cart_item(
     db: Session = Depends(database.get_db)
 ):
     """Обновить количество или выбор товара в корзине"""
-    print(f"[CART DEBUG] update_cart_item called: product_id={product_id}, quantity={quantity}, selected={selected}, shop_owner_id={shop_owner_id}, bot_id={bot_id}")
-    
     if not x_telegram_init_data:
-        print("[CART DEBUG] update_cart_item: No initData provided")
+        log.warning("update_cart_item: No initData product_id=%s", product_id)
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -168,11 +182,10 @@ async def update_cart_item(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] update_cart_item: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] update_cart_item: Validation error: {str(e)}")
+        log.warning("update_cart_item: Validation error product_id=%s: %s", product_id, str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Находим товар в корзине
@@ -186,7 +199,6 @@ async def update_cart_item(
     ).first()
     
     if not cart_item:
-        print(f"[CART DEBUG] update_cart_item: Cart item not found for product_id={product_id}, user_id={user_id}")
         raise HTTPException(status_code=404, detail="Cart item not found")
     
     cart_item.quantity = quantity
@@ -196,8 +208,6 @@ async def update_cart_item(
     
     db.commit()
     db.refresh(cart_item)
-    
-    print(f"[CART DEBUG] update_cart_item result: product_id={product_id}, user_id={user_id}, quantity={cart_item.quantity}, selected={cart_item.selected}")
     
     return {
         "id": cart_item.id,
@@ -215,10 +225,8 @@ async def toggle_cart_item_selection(
     db: Session = Depends(database.get_db)
 ):
     """Переключить выбор товара в корзине"""
-    print(f"[CART DEBUG] toggle_cart_item_selection called: product_id={product_id}, shop_owner_id={shop_owner_id}, bot_id={bot_id}")
-    
     if not x_telegram_init_data:
-        print("[CART DEBUG] toggle_cart_item_selection: No initData provided")
+        log.warning("toggle_cart_item_selection: No initData product_id=%s", product_id)
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -227,11 +235,10 @@ async def toggle_cart_item_selection(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] toggle_cart_item_selection: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] toggle_cart_item_selection: Validation error: {str(e)}")
+        log.warning("toggle_cart_item_selection: Validation error product_id=%s: %s", product_id, str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Находим товар в корзине
@@ -245,7 +252,6 @@ async def toggle_cart_item_selection(
     ).first()
     
     if not cart_item:
-        print(f"[CART DEBUG] toggle_cart_item_selection: Cart item not found for product_id={product_id}, user_id={user_id}")
         raise HTTPException(status_code=404, detail="Cart item not found")
     
     cart_item.selected = not cart_item.selected
@@ -253,9 +259,6 @@ async def toggle_cart_item_selection(
     
     db.commit()
     db.refresh(cart_item)
-    
-    print(f"[CART DEBUG] toggle_cart_item_selection result: product_id={product_id}, user_id={user_id}, selected={cart_item.selected}")
-    
     return {
         "id": cart_item.id,
         "product_id": cart_item.product_id,
@@ -271,10 +274,8 @@ async def select_all_cart_items(
     db: Session = Depends(database.get_db)
 ):
     """Выбрать/снять выбор со всех товаров в корзине"""
-    print(f"[CART DEBUG] select_all_cart_items called: shop_owner_id={shop_owner_id}, bot_id={bot_id}, selected={selected}")
-    
     if not x_telegram_init_data:
-        print("[CART DEBUG] select_all_cart_items: No initData provided")
+        log.warning("select_all_cart_items: No initData")
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -283,11 +284,10 @@ async def select_all_cart_items(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] select_all_cart_items: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] select_all_cart_items: Validation error: {str(e)}")
+        log.warning("select_all_cart_items: Validation error: %s", str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Находим все товары в корзине
@@ -307,9 +307,6 @@ async def select_all_cart_items(
         updated_count += 1
     
     db.commit()
-    
-    print(f"[CART DEBUG] select_all_cart_items result: user_id={user_id}, updated_count={updated_count}, selected={selected}")
-    
     return {"updated_count": updated_count, "selected": selected}
 
 @router.post("/remove-selected")
@@ -320,10 +317,8 @@ async def remove_selected_cart_items(
     db: Session = Depends(database.get_db)
 ):
     """Удалить все выбранные товары из корзины"""
-    print(f"[CART DEBUG] remove_selected_cart_items called: shop_owner_id={shop_owner_id}, bot_id={bot_id}")
-    
     if not x_telegram_init_data:
-        print("[CART DEBUG] remove_selected_cart_items: No initData provided")
+        log.warning("remove_selected_cart_items: No initData")
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -332,11 +327,10 @@ async def remove_selected_cart_items(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] remove_selected_cart_items: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] remove_selected_cart_items: Validation error: {str(e)}")
+        log.warning("remove_selected_cart_items: Validation error: %s", str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Находим все выбранные товары в корзине
@@ -354,9 +348,6 @@ async def remove_selected_cart_items(
         db.delete(item)
     
     db.commit()
-    
-    print(f"[CART DEBUG] remove_selected_cart_items result: user_id={user_id}, removed_count={removed_count}")
-    
     return {"removed_count": removed_count}
 
 @router.get("/list")
@@ -367,10 +358,8 @@ async def get_cart(
     db: Session = Depends(database.get_db)
 ):
     """Получить список товаров в корзине для текущего пользователя"""
-    print(f"[CART DEBUG] get_cart called: shop_owner_id={shop_owner_id}, bot_id={bot_id}")
-    
     if not x_telegram_init_data:
-        print("[CART DEBUG] get_cart: No initData provided")
+        log.warning("get_cart: No initData")
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -379,11 +368,10 @@ async def get_cart(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] get_cart: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] get_cart: Validation error: {str(e)}")
+        log.warning("get_cart: Validation error: %s", str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Получаем все товары в корзине пользователя для указанного магазина
@@ -399,7 +387,6 @@ async def get_cart(
         )
     ).order_by(models.CartItem.created_at.desc()).all()
     
-    print(f"[CART DEBUG] get_cart: Found {len(cart_items)} cart items")
     
     # Формируем список товаров с данными из корзины
     items = []
@@ -442,7 +429,6 @@ async def get_cart(
                 "updated_at": cart_item.updated_at.isoformat() if cart_item.updated_at else None
             })
     
-    print(f"[CART DEBUG] get_cart result: Returning {len(items)} items")
     return items
 
 @router.get("/count")
@@ -453,10 +439,10 @@ async def get_cart_count(
     db: Session = Depends(database.get_db)
 ):
     """Получить количество товаров в корзине для текущего пользователя"""
-    print(f"[CART DEBUG] get_cart_count called: shop_owner_id={shop_owner_id}, bot_id={bot_id}")
+    # log.debug( get_cart_count called: shop_owner_id={shop_owner_id}, bot_id={bot_id}")
     
     if not x_telegram_init_data:
-        print("[CART DEBUG] get_cart_count: No initData provided")
+        log.debug("get_cart_count: No initData provided")
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -465,11 +451,10 @@ async def get_cart_count(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] get_cart_count: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] get_cart_count: Validation error: {str(e)}")
+        log.warning("get_cart_count: Validation error: %s", str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Подсчитываем товары в корзине пользователя для указанного магазина
@@ -500,7 +485,7 @@ async def get_cart_count(
         db.func.sum(models.CartItem.quantity)
     ).scalar() or 0
     
-    print(f"[CART DEBUG] get_cart_count result: user_id={user_id}, shop_owner_id={shop_owner_id}, count={count}, total_quantity={total_quantity}")
+    # log.debug( get_cart_count result: user_id={user_id}, shop_owner_id={shop_owner_id}, count={count}, total_quantity={total_quantity}")
     
     return {"count": count, "total_quantity": total_quantity}
 
@@ -512,10 +497,8 @@ async def clear_cart(
     db: Session = Depends(database.get_db)
 ):
     """Очистить всю корзину"""
-    print(f"[CART DEBUG] clear_cart called: shop_owner_id={shop_owner_id}, bot_id={bot_id}")
-    
     if not x_telegram_init_data:
-        print("[CART DEBUG] clear_cart: No initData provided")
+        log.warning("clear_cart: No initData")
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -524,11 +507,10 @@ async def clear_cart(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[CART DEBUG] clear_cart: user_id={user_id}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[CART DEBUG] clear_cart: Validation error: {str(e)}")
+        log.warning("clear_cart: Validation error: %s", str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Находим все товары в корзине
@@ -546,6 +528,5 @@ async def clear_cart(
     
     db.commit()
     
-    print(f"[CART DEBUG] clear_cart result: user_id={user_id}, removed_count={removed_count}")
     
     return {"removed_count": removed_count}

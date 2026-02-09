@@ -1,8 +1,10 @@
-// Модуль для работы с заказами на покупку (когда мы продаем товар клиенту)
-// Аналогично orders.js, но для заказов на покупку
+// Модуль для работы с заказами на покупку (когда мы продаем товар клиенту).
+// Клиентский UX «Купить» ведёт в единый поток Deal (startDealCheckoutAPI -> #deal-checkout-page -> confirm).
+// showSaleOrderModal теперь алиас для openBuyCheckoutForProduct (Deal flow). API /api/sale-orders/ оставлен для совместимости.
 
-// Импорт утилит для работы с ценами
+import { hideAllPages } from './operationsBase.js';
 import { getProductPriceDisplay } from './utils/priceUtils.js';
+import { getPricingQuoteAPI } from './api/pricing.js';
 
 // Вспомогательные функции для работы с ценами
 
@@ -131,61 +133,37 @@ function setupSaleOrderPageCloseHandlers() {
     }
 }
 
-// Показ страницы заказа на покупку
+/**
+ * Единый поток покупки для одного товара: создаём draft Deal и открываем #deal-checkout-page.
+ * Используется из карточки товара (модалка) и из bottom sheet — везде одна форма оформления.
+ */
+export async function openBuyCheckoutForProduct(product, quantity = 1) {
+    if (!product || !product.id) {
+        console.error('❌ [BUY] openBuyCheckoutForProduct: product or product.id missing');
+        return;
+    }
+    try {
+        const { startDealCheckoutAPI } = await import('./api/deals.js');
+        const { openDealCheckoutPage } = await import('./dealCheckout.js');
+        const qty = Math.max(1, parseInt(quantity, 10) || 1);
+        const result = await startDealCheckoutAPI({
+            items: [{ product_id: product.id, quantity: qty }],
+        });
+        openDealCheckoutPage(result.deal_id, {
+            total_items_count: result.total_items_count,
+            total_amount: result.total_amount,
+            currency: result.currency,
+        }, { source: 'single' });
+    } catch (error) {
+        console.error('❌ [BUY] Error starting deal checkout:', error);
+        const { safeAlert } = await import('./telegram.js').catch(() => ({ safeAlert: (m) => alert(m) }));
+        await safeAlert('Ошибка при оформлении: ' + (error.message || 'не удалось начать оформление'));
+    }
+}
+
+/** Алиас для совместимости: модалка товара и прочие вызывают «показать оформление покупки» — ведём в Deal flow. */
 export function showSaleOrderModal(product) {
-    console.log('📦 [SALE ORDER] showSaleOrderModal called with product:', product?.id, product?.name);
-    console.log('📦 [SALE ORDER] saleOrderPageElement:', saleOrderPageElement);
-    console.log('📦 [SALE ORDER] appContextGetter:', appContextGetter);
-    
-    const appContext = appContextGetter ? appContextGetter() : null;
-    console.log('📦 [SALE ORDER] appContext:', appContext);
-    
-    if (!appContext) {
-        console.error('❌ [SALE ORDER] appContext is null');
-        alert('❌ Ошибка: контекст не загружен');
-        return;
-    }
-    
-    if (!saleOrderPageElement) {
-        console.error('❌ [SALE ORDER] saleOrderPageElement is null');
-        alert('❌ Ошибка: страница заказа на покупку не найдена');
-        return;
-    }
-    
-    console.log('📦 [SALE ORDER] Setting up page...');
-    currentSaleOrderProduct = product;
-    currentSaleOrderStep = 1;
-    
-    // Скрываем все страницы
-    const mainContent = document.getElementById('main-content');
-    const productPage = document.getElementById('product-page');
-    const favoritesPage = document.getElementById('favorites-page');
-    const cartPage = document.getElementById('cart-page');
-    const adminPage = document.getElementById('admin-page');
-    
-    if (mainContent) mainContent.style.display = 'none';
-    if (productPage) productPage.style.display = 'none';
-    if (favoritesPage) favoritesPage.style.display = 'none';
-    if (cartPage) cartPage.style.display = 'none';
-    if (adminPage) adminPage.style.display = 'none';
-    
-    // Сбрасываем форму
-    resetSaleOrderForm();
-    
-    // Показываем первый шаг
-    showSaleOrderStep(1);
-    
-    // Показываем информацию о товаре (асинхронно, чтобы не блокировать)
-    updateSaleOrderProductSummary(product).catch(err => {
-        console.error('❌ [SALE ORDER] Error updating product summary:', err);
-    });
-    
-    // Устанавливаем обработчики
-    setupSaleOrderFormHandlers();
-    
-    // Показываем страницу
-    saleOrderPageElement.style.display = 'block';
-    console.log('✅ [SALE ORDER] Page displayed');
+    openBuyCheckoutForProduct(product, 1);
 }
 
 // Закрытие страницы заказа на покупку
@@ -320,75 +298,59 @@ async function updateSaleOrderProductSummary(product) {
     }
 }
 
-// Обновление общей суммы заказа
+/**
+ * Привести способ оплаты формы (online/crypto/cash) к значению API (card/cash/other).
+ */
+function saleOrderPaymentToApi(value) {
+    if (value === 'cash') return 'cash';
+    if (value === 'crypto') return 'other';
+    return 'card'; // online и по умолчанию
+}
+
+/**
+ * Привести способ доставки формы (delivery/pickup) к значению API (courier/pickup).
+ */
+function saleOrderDeliveryToApi(value) {
+    return (value === 'delivery') ? 'courier' : 'pickup';
+}
+
+// Обновление общей суммы заказа через API quote (единый расчёт с бэкендом)
 async function updateSaleOrderTotal() {
-    console.log('📦 [SALE ORDER] updateSaleOrderTotal called');
-    console.log('📦 [SALE ORDER] currentSaleOrderProduct:', currentSaleOrderProduct?.id, currentSaleOrderProduct?.name);
-    
     const totalDiv = document.getElementById('sale-order-page-total');
     const quantityInput = document.getElementById('sale-order-page-quantity');
-    
-    console.log('📦 [SALE ORDER] Elements found:', {
-        totalDiv: !!totalDiv,
-        quantityInput: !!quantityInput,
-        currentSaleOrderProduct: !!currentSaleOrderProduct
-    });
-    
-    if (!totalDiv || !quantityInput || !currentSaleOrderProduct) {
-        console.error('❌ [SALE ORDER] Cannot update total - missing elements or product');
-        return;
-    }
-    
-    const quantity = parseInt(quantityInput.value) || 1;
-    console.log('📦 [SALE ORDER] Quantity:', quantity);
-    
+    if (!totalDiv || !quantityInput || !currentSaleOrderProduct) return;
+
+    const quantity = Math.max(1, parseInt(quantityInput.value) || 1);
+    const paymentEl = document.querySelector('input[name="sale-order-page-payment-method"]:checked');
+    const deliveryEl = document.querySelector('input[name="sale-order-page-delivery-method"]:checked');
+    const payment_method = saleOrderPaymentToApi(paymentEl ? paymentEl.value : 'online');
+    const delivery_method = saleOrderDeliveryToApi(deliveryEl ? deliveryEl.value : 'delivery');
+
     try {
-        // Получаем числовое значение цены товара
-        const productPrice = getProductNumericPrice(currentSaleOrderProduct);
-        console.log('📦 [SALE ORDER] Product numeric price:', productPrice);
-        
-        if (productPrice === null) {
-            // Цена по запросу - показываем без расчета
-            const priceDisplay = getProductPriceDisplay(currentSaleOrderProduct);
-            totalDiv.innerHTML = `<div style="margin-top: 8px; font-weight: 600; font-size: 18px;">Итого: ${priceDisplay}</div>`;
-        } else {
-            // Рассчитываем итоговую сумму: цена * количество
-            const totalPrice = productPrice * quantity;
-            console.log('📦 [SALE ORDER] Total price calculation:', productPrice, '×', quantity, '=', totalPrice);
-            
-            // Форматируем итоговую сумму
-            const formattedTotal = formatPrice(totalPrice);
-            const priceDisplay = getProductPriceDisplay(currentSaleOrderProduct);
-            
-            totalDiv.innerHTML = `
-                <div style="margin-top: 8px; font-weight: 600; font-size: 18px;">
-                    Итого: ${formattedTotal}
-                    ${quantity > 1 ? `<div style="font-size: 12px; color: var(--text-hint); margin-top: 4px;">${priceDisplay} × ${quantity} шт.</div>` : ''}
-                </div>
-            `;
-        }
-        
-        console.log('✅ [SALE ORDER] Total updated');
-    } catch (error) {
-        console.error('❌ [SALE ORDER] Error in updateSaleOrderTotal:', error);
-        console.error('❌ [SALE ORDER] Error details:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
+        const quote = await getPricingQuoteAPI({
+            items: [{ product_id: currentSaleOrderProduct.id, quantity }],
+            payment_method,
+            delivery_method,
         });
-        
-        // Fallback: показываем цену из товара напрямую
-        let priceText = 'Цена по запросу';
+        const itemsAmount = quote.items_amount;
+        const deliveryFee = quote.delivery_fee;
+        const total = quote.total_amount;
+        let html = '<div style="margin-top: 8px; font-weight: 600; font-size: 18px;">';
+        if (itemsAmount != null) html += `<div>Товары: ${formatPrice(itemsAmount)}</div>`;
+        if (deliveryFee != null && deliveryFee > 0) html += `<div style="font-size: 14px;">Доставка: ${formatPrice(deliveryFee)}</div>`;
+        if (total != null) html += `<div style="margin-top: 4px;">Итого: ${formatPrice(total)}</div>`;
+        if (quantity > 1) html += `<div style="font-size: 12px; color: var(--text-hint); margin-top: 4px;">${quantity} шт.</div>`;
+        html += '</div>';
+        totalDiv.innerHTML = html;
+    } catch (error) {
+        console.error('❌ [SALE ORDER] Quote error:', error);
+        const priceDisplay = getProductPriceDisplay(currentSaleOrderProduct);
         const fallbackPrice = getProductNumericPrice(currentSaleOrderProduct);
-        if (fallbackPrice !== null) {
-            const totalPrice = fallbackPrice * quantity;
-            priceText = formatPrice(totalPrice);
-            if (quantity > 1) {
-                priceText += ` (${formatPrice(fallbackPrice)} × ${quantity} шт.)`;
-            }
+        if (fallbackPrice != null) {
+            totalDiv.innerHTML = `<div style="margin-top: 8px; font-weight: 600; font-size: 18px;">Итого: ${formatPrice(fallbackPrice * quantity)}</div>`;
+        } else {
+            totalDiv.innerHTML = `<div style="margin-top: 8px; font-weight: 600; font-size: 18px;">Итого: ${priceDisplay}</div>`;
         }
-        
-        totalDiv.innerHTML = `<div style="margin-top: 8px; font-weight: 600; font-size: 18px;">Итого: ${priceText}</div>`;
     }
 }
 
@@ -482,13 +444,15 @@ function setupSaleOrderFormHandlers() {
         };
     }
     
-    // Обновление общей суммы при изменении количества
+    // Обновление общей суммы при изменении количества, способа оплаты или доставки
     const quantityInput = document.getElementById('sale-order-page-quantity');
-    if (quantityInput) {
-        quantityInput.oninput = () => {
-            updateSaleOrderTotal();
-        };
-    }
+    if (quantityInput) quantityInput.oninput = () => updateSaleOrderTotal();
+    document.querySelectorAll('input[name="sale-order-page-payment-method"]').forEach((radio) => {
+        radio.addEventListener('change', () => updateSaleOrderTotal());
+    });
+    document.querySelectorAll('input[name="sale-order-page-delivery-method"]').forEach((radio) => {
+        radio.addEventListener('change', () => updateSaleOrderTotal());
+    });
 }
 
 // Отправка заказа на покупку
@@ -564,6 +528,10 @@ async function submitSaleOrder() {
             await loadSaleOrdersCallback();
         }
         
+        // Обновляем индикаторы активности
+        const { updateActivityCounts } = await import('./activityIndicators.js');
+        await updateActivityCounts();
+        
         currentSaleOrderStep = 1;
         currentSaleOrderProduct = null;
     } catch (error) {
@@ -605,6 +573,10 @@ export async function cancelSaleOrderFromCart(saleOrderId) {
         if (loadSaleOrdersCallback) {
             await loadSaleOrdersCallback();
         }
+        
+        // Обновляем индикаторы активности
+        const { updateActivityCounts } = await import('./activityIndicators.js');
+        await updateActivityCounts();
     } catch (error) {
         console.error(`❌ [SALE ORDER] Error cancelling sale order ${saleOrderId}:`, error);
         const { safeAlert } = await import('./telegram.js');

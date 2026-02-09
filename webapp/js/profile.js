@@ -1,40 +1,91 @@
 // Модуль личного кабинета пользователя
+import { updateActivityCounts } from './activityIndicators.js';
 import { getMyContactInfoAPI, updateMyContactInfoAPI } from './api/clients.js';
+import { clearOverlaysAndBodyClasses, hideAllPages } from './operationsBase.js';
+import { openOrdersPage } from './operationsOrders.js';
+import { openPurchasesPage } from './operationsPurchases.js';
+import { openReservationsPage } from './operationsReservations.js';
+import { openSaleOrdersPage } from './operationsSaleOrders.js';
 import { getTelegramInstance, isTelegramAvailable } from './telegram.js';
 
-let profileModal = null;
+let profilePage = null;
+let profileDetailsPage = null;
 
 /**
  * Инициализация личного кабинета
  */
 export function initProfile() {
-    console.log('👤 Initializing profile panel...');
+    console.log('👤 Initializing profile page...');
     
-    profileModal = document.getElementById('profile-modal');
+    profilePage = document.getElementById('profile-page');
+    profileDetailsPage = document.getElementById('profile-details-page');
     
-    if (!profileModal) {
-        console.error('❌ Profile modal not found');
+    if (!profilePage) {
+        console.error('❌ Profile page not found');
         return;
     }
     
-    // Настройка закрытия модального окна
-    const profileClose = document.querySelector('.profile-close');
-    if (profileClose) {
-        profileClose.onclick = () => {
-            profileModal.style.display = 'none';
+    // Настройка кнопки закрытия страницы
+    const profilePageClose = document.getElementById('profile-page-close');
+    if (profilePageClose) {
+        profilePageClose.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeProfilePage();
         };
     }
     
-    // Закрытие при клике вне модального окна
-    profileModal.onclick = (e) => {
-        if (e.target === profileModal) {
-            profileModal.style.display = 'none';
-        }
-    };
+    // Кнопка перехода к контактной информации
+    const profileContactInfoBtn = document.getElementById('profile-contact-info-btn');
+    if (profileContactInfoBtn) {
+        profileContactInfoBtn.onclick = () => openProfileDetailsPage();
+    }
     
-    // Кнопка админки удалена - теперь есть отдельные кнопки в header
+    // Кнопка «Назад» на странице контактной информации
+    const profileDetailsClose = document.getElementById('profile-details-page-close');
+    if (profileDetailsClose && profileDetailsPage) {
+        profileDetailsClose.onclick = (e) => {
+            e.preventDefault();
+            closeProfileDetailsPage();
+        };
+    }
     
-    console.log('✅ Profile panel initialized');
+    // Редактирование контактных данных (поля на profile-details-page) — один раз при загрузке
+    setupContactEditing();
+    
+    // Один обработчик на контейнер профиля: делегирование для «Мои операции» (кнопки остаются рабочими после возврата со сделки)
+    if (profilePage) {
+        profilePage.addEventListener('click', handleProfileOperationClick);
+    }
+    
+    console.log('✅ Profile page initialized');
+}
+
+/**
+ * Обработчик клика по кнопкам «Мои операции» (event delegation).
+ * Срабатывает по data-type у .profile-operation-card, не зависит от перерисовки DOM.
+ */
+function handleProfileOperationClick(e) {
+    const btn = e.target.closest('.profile-operation-card[data-type]');
+    if (!btn) return;
+    const type = btn.dataset.type;
+    if (!type) return;
+    switch (type) {
+        case 'orders':
+            openOrdersPage();
+            break;
+        case 'reservations':
+            openReservationsPage();
+            break;
+        case 'purchases':
+            openPurchasesPage();
+            break;
+        case 'sale-orders':
+            openSaleOrdersPage();
+            break;
+        default:
+            break;
+    }
 }
 
 /**
@@ -57,9 +108,20 @@ export function setupProfileButton() {
  * Открытие личного кабинета
  */
 export async function openProfile() {
-    if (!profileModal) {
-        console.error('❌ Profile modal not initialized');
+    if (!profilePage) {
+        console.error('❌ Profile page not initialized');
         return;
+    }
+    
+    // Единый способ: скрыть все страницы, затем показать профиль
+    hideAllPages();
+    clearOverlaysAndBodyClasses();
+    profilePage.style.display = 'block';
+    
+    // Сбрасываем позицию скролла
+    profilePage.scrollTop = 0;
+    if (profilePage.scrollTo) {
+        profilePage.scrollTo(0, 0);
     }
     
     // Получаем данные пользователя из Telegram
@@ -72,21 +134,31 @@ export async function openProfile() {
         displayUserData(null);
     }
     
-    // Загружаем контактную информацию из заказов/покупок
-    try {
-        const contactInfo = await getMyContactInfoAPI();
-        displayContactInfo(contactInfo);
-    } catch (error) {
-        console.error('Error loading contact info:', error);
-        displayContactInfo(null);
+    // Обновляем индикаторы активности
+    await updateActivityCounts();
+    
+    // Обработчик скролла для появления фона меню
+    const profileTopMenu = document.querySelector('.profile-new-top-menu');
+    let scrollHandler = null;
+    
+    if (profileTopMenu) {
+        scrollHandler = () => {
+            const scrollTop = profilePage.scrollTop || 0;
+            if (scrollTop > 20) {
+                profileTopMenu.classList.add('scrolled');
+            } else {
+                profileTopMenu.classList.remove('scrolled');
+            }
+        };
+        
+        profilePage.addEventListener('scroll', scrollHandler, { passive: true });
+        setTimeout(() => {
+            scrollHandler();
+        }, 0);
     }
     
-    // Настраиваем редактирование контактных данных
-    setupContactEditing();
-    
-    // Кнопка админки удалена - теперь есть отдельные кнопки в header
-    
-    profileModal.style.display = 'flex';
+    // Сохраняем обработчик для удаления при закрытии
+    window.profilePageScrollHandler = scrollHandler;
 }
 
 /**
@@ -115,44 +187,39 @@ function getUserDataFromTelegram() {
  * @param {Object|null} userData - Данные пользователя
  */
 function displayUserData(userData) {
+    const greetingEl = document.getElementById('profile-greeting');
+    const avatarImg = document.getElementById('profile-avatar');
+    const avatarPlaceholder = document.getElementById('profile-avatar-placeholder');
+    const firstNameEl = document.getElementById('profile-first-name');
+    const lastNameEl = document.getElementById('profile-last-name');
+    const usernameEl = document.getElementById('profile-username');
+    const userIdEl = document.getElementById('profile-user-id');
+    const languageEl = document.getElementById('profile-language');
+    
     if (!userData) {
-        // Если данных нет, показываем заглушку
-        document.getElementById('profile-first-name').textContent = '—';
-        document.getElementById('profile-last-name').textContent = '—';
-        document.getElementById('profile-username').textContent = '—';
-        document.getElementById('profile-user-id').textContent = '—';
-        document.getElementById('profile-language').textContent = '—';
-        
-        const avatarImg = document.getElementById('profile-avatar');
-        const avatarPlaceholder = document.getElementById('profile-avatar-placeholder');
+        if (greetingEl) greetingEl.textContent = '—';
+        if (firstNameEl) firstNameEl.textContent = '—';
+        if (lastNameEl) lastNameEl.textContent = '—';
+        if (usernameEl) usernameEl.textContent = '—';
+        if (userIdEl) userIdEl.textContent = '—';
+        if (languageEl) languageEl.textContent = '—';
         if (avatarImg) avatarImg.style.display = 'none';
         if (avatarPlaceholder) avatarPlaceholder.style.display = 'block';
         return;
     }
     
-    // Отображаем имя
     const firstName = userData.first_name || '—';
-    document.getElementById('profile-first-name').textContent = firstName;
-    
-    // Отображаем фамилию
     const lastName = userData.last_name || '—';
-    document.getElementById('profile-last-name').textContent = lastName;
-    
-    // Отображаем username
     const username = userData.username ? `@${userData.username}` : '—';
-    document.getElementById('profile-username').textContent = username;
-    
-    // Отображаем ID пользователя
     const userId = userData.id ? userData.id.toString() : '—';
-    document.getElementById('profile-user-id').textContent = userId;
-    
-    // Отображаем язык
     const language = userData.language_code || '—';
-    document.getElementById('profile-language').textContent = language;
     
-    // Отображаем аватар, если доступен
-    const avatarImg = document.getElementById('profile-avatar');
-    const avatarPlaceholder = document.getElementById('profile-avatar-placeholder');
+    if (greetingEl) greetingEl.textContent = `Привет, ${userData.first_name || 'Пользователь'}!`;
+    if (firstNameEl) firstNameEl.textContent = firstName;
+    if (lastNameEl) lastNameEl.textContent = lastName;
+    if (usernameEl) usernameEl.textContent = username;
+    if (userIdEl) userIdEl.textContent = userId;
+    if (languageEl) languageEl.textContent = language;
     
     if (userData.photo_url && avatarImg) {
         avatarImg.src = userData.photo_url;
@@ -209,6 +276,147 @@ function displayContactInfo(contactInfo) {
     if (emailEl) emailEl.value = contactInfo.email || '';
     if (cityEl) cityEl.value = contactInfo.city || '';
     if (addressEl) addressEl.value = contactInfo.address || '';
+}
+
+/**
+ * Заполнение профильного блока на странице «Контактная информация»:
+ * аватар слева, имя, @username, ссылка «Открыть профиль».
+ * @param {Object|null} userData - Данные пользователя из Telegram
+ */
+function displayProfileBlock(userData) {
+    const avatarImg = document.getElementById('profile-details-avatar');
+    const avatarPlaceholder = document.getElementById('profile-details-avatar-placeholder');
+    const displayNameEl = document.getElementById('profile-details-display-name');
+    const usernameEl = document.getElementById('profile-details-username');
+    const openProfileLink = document.getElementById('profile-details-open-profile-link');
+    
+    if (!userData) {
+        if (displayNameEl) displayNameEl.textContent = '—';
+        if (usernameEl) usernameEl.textContent = '—';
+        if (avatarImg) avatarImg.style.display = 'none';
+        if (avatarPlaceholder) avatarPlaceholder.style.display = 'flex';
+        if (openProfileLink) {
+            openProfileLink.href = '#';
+            openProfileLink.style.display = 'none';
+        }
+        return;
+    }
+    
+    const displayName = [userData.first_name, userData.last_name].filter(Boolean).join(' ') || '—';
+    const username = userData.username ? `@${userData.username}` : '—';
+    
+    if (displayNameEl) displayNameEl.textContent = displayName;
+    if (usernameEl) usernameEl.textContent = username;
+    
+    if (userData.photo_url && avatarImg) {
+        avatarImg.src = userData.photo_url;
+        avatarImg.alt = displayName;
+        avatarImg.style.display = 'block';
+        if (avatarPlaceholder) avatarPlaceholder.style.display = 'none';
+    } else {
+        if (avatarImg) avatarImg.style.display = 'none';
+        if (avatarPlaceholder) avatarPlaceholder.style.display = 'flex';
+    }
+    
+    if (openProfileLink && userData.username) {
+        const telegramUrl = `https://t.me/${userData.username}`;
+        openProfileLink.href = telegramUrl;
+        openProfileLink.style.display = 'inline-block';
+        openProfileLink.onclick = (e) => {
+            e.preventDefault();
+            const webApp = getTelegramInstance();
+            if (webApp && typeof webApp.openTelegramLink === 'function') {
+                webApp.openTelegramLink(telegramUrl);
+            } else if (webApp && typeof webApp.openLink === 'function') {
+                webApp.openLink(telegramUrl);
+            } else {
+                window.open(telegramUrl, '_blank');
+            }
+        };
+    } else if (openProfileLink) {
+        openProfileLink.href = '#';
+        openProfileLink.style.display = 'none';
+    }
+}
+
+/**
+ * Открытие страницы «Контактная информация».
+ * Не использует history браузера.
+ */
+export async function openProfileDetailsPage() {
+    if (!profileDetailsPage) {
+        profileDetailsPage = document.getElementById('profile-details-page');
+    }
+    if (!profileDetailsPage) {
+        console.error('❌ Profile details page not found');
+        return;
+    }
+    
+    hideAllPages();
+    profileDetailsPage.style.display = 'block';
+    profileDetailsPage.scrollTop = 0;
+    if (profileDetailsPage.scrollTo) {
+        profileDetailsPage.scrollTo(0, 0);
+    }
+    
+    const userData = getUserDataFromTelegram();
+    displayProfileBlock(userData);
+    displayUserData(userData);
+    
+    try {
+        const contactInfo = await getMyContactInfoAPI();
+        displayContactInfo(contactInfo);
+    } catch (error) {
+        console.error('Error loading contact info:', error);
+        displayContactInfo(null);
+    }
+    
+    const topMenu = profileDetailsPage.querySelector('.operation-top-menu');
+    let scrollHandler = null;
+    if (topMenu) {
+        scrollHandler = () => {
+            const scrollTop = profileDetailsPage.scrollTop || 0;
+            if (scrollTop > 20) {
+                topMenu.classList.add('scrolled');
+            } else {
+                topMenu.classList.remove('scrolled');
+            }
+        };
+        profileDetailsPage.addEventListener('scroll', scrollHandler, { passive: true });
+        setTimeout(scrollHandler, 0);
+    }
+    window.profileDetailsPageScrollHandler = scrollHandler;
+}
+
+/**
+ * Закрытие страницы «Контактная информация», возврат в личный кабинет.
+ * Не использует history браузера.
+ */
+export function closeProfileDetailsPage() {
+    if (!profileDetailsPage) {
+        profileDetailsPage = document.getElementById('profile-details-page');
+    }
+    if (!profileDetailsPage) return;
+    
+    const topMenu = profileDetailsPage.querySelector('.operation-top-menu');
+    if (topMenu && window.profileDetailsPageScrollHandler) {
+        profileDetailsPage.removeEventListener('scroll', window.profileDetailsPageScrollHandler);
+        topMenu.classList.remove('scrolled');
+        window.profileDetailsPageScrollHandler = null;
+    }
+    
+    profileDetailsPage.style.display = 'none';
+    if (profilePage) {
+        profilePage.style.display = 'block';
+    }
+}
+
+/**
+ * Настройка навигации к страницам операций (оставлено для совместимости).
+ * Обработчики «Мои операции» вешаются через делегирование в initProfile (handleProfileOperationClick).
+ */
+function setupOperationsNavigation() {
+    // Пусто: клики обрабатываются через делегирование на profilePage
 }
 
 /**
@@ -331,4 +539,38 @@ function showNotification(message, type) {
         // Простое уведомление через alert
         alert(message);
     }
+}
+
+/**
+ * Закрытие страницы профиля
+ */
+export function closeProfilePage() {
+    console.log('[PROFILE PAGE] Closing profile page');
+    
+    if (!profilePage) {
+        return;
+    }
+    
+    // Убираем обработчик скролла и класс scrolled
+    const profileTopMenu = document.querySelector('.profile-new-top-menu');
+    if (profileTopMenu && window.profilePageScrollHandler) {
+        profilePage.removeEventListener('scroll', window.profilePageScrollHandler);
+        profileTopMenu.classList.remove('scrolled');
+        window.profilePageScrollHandler = null;
+    }
+    
+    // Скрываем страницу профиля
+    profilePage.style.display = 'none';
+    
+    // Возвращаемся на главную страницу
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) {
+        mainContent.style.display = 'block';
+    }
+    
+    // Обновляем индикаторы активности при закрытии профиля
+    // (чтобы отразить возможные изменения после просмотра операций)
+    updateActivityCounts().catch(err => {
+        console.error('❌ Error updating activity counts on profile close:', err);
+    });
 }

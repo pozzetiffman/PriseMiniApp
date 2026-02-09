@@ -8,11 +8,13 @@ import { cancelOrderAPI, createOrderAPI } from './api/orders.js';
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 // import { cancelOrderAPI, createOrderAPI } from './api.js';
 // ========== END REFACTORING STEP 8 ==========
+import { hideAllPages } from './operationsBase.js';
+import { setupPageScrollHandler } from './operationsBase.js';
 
 // Зависимости, которые будут переданы из app.js
 let appContextGetter = null; // Функция-геттер для получения appContext
 let allProductsGetter = null; // Функция-геттер для получения allProducts
-let orderModalElement = null; // DOM элемент модального окна заказа
+let orderModalElement = null; // DOM элемент модального окна заказа (устарел)
 let modalElement = null; // DOM элемент модального окна товара
 let loadDataCallback = null; // Функция для загрузки данных
 let updateCartUICallback = null; // Функция для обновления корзины
@@ -20,6 +22,8 @@ let loadOrdersCallback = null; // Функция для загрузки зак�
 
 // Текущий товар для заказа (локальная переменная модуля)
 let currentOrderProduct = null;
+// Куда вернуться при закрытии страницы заказа: 'product-page' | 'cart-page-new'
+let orderPageReturnTo = 'product-page';
 
 // Инициализация зависимостей
 export function initOrdersDependencies(dependencies) {
@@ -86,47 +90,121 @@ function setupGlobalFunctions() {
     };
 }
 
-// Показ модального окна заказа
-export function showOrderModal(productId) {
+/**
+ * Закрытие страницы заказа, возврат на product-page или cart-page-new
+ */
+export function closeOrderPage() {
+    const orderPage = document.getElementById('order-page');
+    const returnPage = document.getElementById(orderPageReturnTo);
+    if (orderPage) orderPage.style.display = 'none';
+    if (returnPage) returnPage.style.display = 'block';
+}
+
+/**
+ * Показ страницы оформления заказа (вместо модального окна)
+ * @param {string} productId - ID товара
+ * @param {boolean} fromCart - true если открыто из корзины (назад → корзина)
+ */
+export function showOrderPage(productId, fromCart = false) {
+    orderPageReturnTo = fromCart ? 'cart-page-new' : 'product-page';
     const appContext = appContextGetter ? appContextGetter() : null;
     if (!appContext) {
         alert('❌ Ошибка: контекст не загружен');
         return;
     }
-    
-    if (!orderModalElement) {
-        alert('❌ Ошибка: модальное окно заказа не найдено');
+    const orderPage = document.getElementById('order-page');
+    if (!orderPage) {
+        alert('❌ Ошибка: страница заказа не найдена');
         return;
     }
-    
-    // Находим товар
+    hideAllPages();
+    orderPage.style.display = 'block';
+    orderPage.scrollTop = 0;
+    const backBtn = document.getElementById('order-page-back');
+    if (backBtn) backBtn.onclick = closeOrderPage;
+    setupPageScrollHandler(orderPage);
+    // Заполнение и обработчики — те же, что в showOrderModal
     const allProducts = allProductsGetter ? allProductsGetter() : [];
     const product = allProducts.find(p => p.id === productId);
     if (!product) {
         alert('❌ Товар не найден');
         return;
     }
-    
     currentOrderProduct = product;
-    
-    // Сбрасываем форму
     resetOrderForm();
-    
-    // Показываем информацию о товаре
+    const quantityInput = document.getElementById('order-quantity');
+    if (quantityInput) {
+        import('./orderStore.js').then(({ getOrderQuantity }) => {
+            try {
+                const productQuantity = product.quantity !== undefined && product.quantity !== null ? product.quantity : null;
+                const activeReservationsCount = product.reservation && product.reservation.active_count ? product.reservation.active_count : 0;
+                const maxQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0
+                    ? Math.max(0, productQuantity - activeReservationsCount)
+                    : null;
+                let selectedQuantity = getOrderQuantity(productId, 1);
+                if (selectedQuantity < 1) selectedQuantity = 1;
+                else if (maxQuantity !== null && selectedQuantity > maxQuantity) selectedQuantity = Math.max(1, maxQuantity);
+                quantityInput.value = selectedQuantity;
+                updateOrderProductSummary(product);
+            } catch (error) {
+                console.error('❌ Error getting order quantity from store:', error);
+                quantityInput.value = 1;
+            }
+        }).catch(() => { if (quantityInput) quantityInput.value = 1; });
+    }
     updateOrderProductSummary(product);
-    
-    // Показываем первый шаг
     showOrderStep(1);
-    
-    // Устанавливаем обработчики
     setupOrderFormHandlers(productId);
-    
+}
+
+// Показ модального окна заказа (устарело: используется showOrderPage)
+export function showOrderModal(productId) {
+    const appContext = appContextGetter ? appContextGetter() : null;
+    if (!appContext) {
+        alert('❌ Ошибка: контекст не загружен');
+        return;
+    }
+    if (!orderModalElement) {
+        alert('❌ Ошибка: модальное окно заказа не найдено');
+        return;
+    }
+    const allProducts = allProductsGetter ? allProductsGetter() : [];
+    const product = allProducts.find(p => p.id === productId);
+    if (!product) {
+        alert('❌ Товар не найден');
+        return;
+    }
+    currentOrderProduct = product;
+    resetOrderForm();
+    const quantityInput = document.getElementById('order-quantity');
+    if (quantityInput) {
+        import('./orderStore.js').then(({ getOrderQuantity }) => {
+            try {
+                const productQuantity = product.quantity !== undefined && product.quantity !== null ? product.quantity : null;
+                const activeReservationsCount = product.reservation && product.reservation.active_count ? product.reservation.active_count : 0;
+                const maxQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0
+                    ? Math.max(0, productQuantity - activeReservationsCount)
+                    : null;
+                let selectedQuantity = getOrderQuantity(productId, 1);
+                if (selectedQuantity < 1) selectedQuantity = 1;
+                else if (maxQuantity !== null && selectedQuantity > maxQuantity) selectedQuantity = Math.max(1, maxQuantity);
+                quantityInput.value = selectedQuantity;
+                updateOrderProductSummary(product);
+            } catch (error) {
+                quantityInput.value = 1;
+            }
+        }).catch(() => { if (quantityInput) quantityInput.value = 1; });
+    }
+    updateOrderProductSummary(product);
+    showOrderStep(1);
+    setupOrderFormHandlers(productId);
     orderModalElement.style.display = 'flex';
 }
 
 // Сброс формы заказа
 export function resetOrderForm() {
     document.getElementById('order-promo-code').value = '';
+    // Количество будет установлено из store в showOrderModal
     document.getElementById('order-quantity').value = 1;
     document.getElementById('order-first-name').value = '';
     document.getElementById('order-last-name').value = '';
@@ -162,7 +240,42 @@ export function updateOrderProductSummary(product) {
         totalDiv.textContent = `Итого: ${total} ₽`;
     };
     
-    quantityInput.oninput = updateTotal;
+    // Обработчик изменения количества с синхронизацией в store
+    quantityInput.oninput = () => {
+        const value = parseInt(quantityInput.value) || 1;
+        let validatedValue = value;
+        
+        // Валидация: ограничиваем значение максимумом и минимумом 1
+        if (value < 1) {
+            validatedValue = 1;
+            quantityInput.value = validatedValue;
+        }
+        
+        // Получаем доступное количество для валидации
+        const productQuantity = product.quantity !== undefined && product.quantity !== null ? product.quantity : null;
+        const activeReservationsCount = product.reservation && product.reservation.active_count 
+            ? product.reservation.active_count 
+            : 0;
+        const maxQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0
+            ? Math.max(0, productQuantity - activeReservationsCount)
+            : null;
+        
+        if (maxQuantity !== null && validatedValue > maxQuantity) {
+            validatedValue = maxQuantity;
+            quantityInput.value = validatedValue;
+        }
+        
+        // Обновляем итого
+        updateTotal();
+        
+        // Синхронизируем с единым store (без блокировки)
+        import('./orderStore.js').then(({ setOrderQuantity }) => {
+            setOrderQuantity(product.id, validatedValue);
+        }).catch((error) => {
+            console.error('❌ Error syncing order quantity on input:', error);
+        });
+    };
+    
     updateTotal();
 }
 
@@ -189,11 +302,43 @@ export function setupOrderFormHandlers(productId) {
     const step1Next = document.getElementById('order-step-1-next');
     if (step1Next) {
         step1Next.onclick = () => {
-            const quantity = parseInt(document.getElementById('order-quantity').value) || 1;
+            const quantityInput = document.getElementById('order-quantity');
+            let quantity = parseInt(quantityInput.value) || 1;
+            
+            // ВАЛИДАЦИЯ: Проверяем количество перед переходом к следующему шагу
             if (quantity < 1) {
                 alert('❌ Количество должно быть не менее 1');
+                quantity = 1;
+                quantityInput.value = quantity;
                 return;
             }
+            
+            // Получаем доступное количество товара для валидации
+            const product = currentOrderProduct;
+            if (product) {
+                const productQuantity = product.quantity !== undefined && product.quantity !== null ? product.quantity : null;
+                const activeReservationsCount = product.reservation && product.reservation.active_count 
+                    ? product.reservation.active_count 
+                    : 0;
+                const maxQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0
+                    ? Math.max(0, productQuantity - activeReservationsCount)
+                    : null;
+                
+                if (maxQuantity !== null && quantity > maxQuantity) {
+                    alert(`❌ Недостаточно товара. Доступно для заказа: ${maxQuantity} шт.`);
+                    quantity = maxQuantity;
+                    quantityInput.value = quantity;
+                    return;
+                }
+            }
+            
+            // Синхронизируем финальное значение с store перед переходом
+            import('./orderStore.js').then(({ setOrderQuantity }) => {
+                setOrderQuantity(productId, quantity);
+            }).catch((error) => {
+                console.error('❌ Error syncing order quantity before step 2:', error);
+            });
+            
             showOrderStep(2);
         };
     }
@@ -254,9 +399,35 @@ export async function submitOrder(productId) {
         }
         
         // Собираем данные формы
+        let quantity = parseInt(document.getElementById('order-quantity').value) || 1;
+        
+        // ВАЛИДАЦИЯ: Проверяем количество перед подтверждением заказа
+        const product = currentOrderProduct;
+        if (product) {
+            const productQuantity = product.quantity !== undefined && product.quantity !== null ? product.quantity : null;
+            const activeReservationsCount = product.reservation && product.reservation.active_count 
+                ? product.reservation.active_count 
+                : 0;
+            const maxQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0
+                ? Math.max(0, productQuantity - activeReservationsCount)
+                : null;
+            
+            if (quantity < 1) {
+                alert('❌ Количество должно быть не менее 1');
+                return;
+            }
+            
+            if (maxQuantity !== null && quantity > maxQuantity) {
+                alert(`❌ Недостаточно товара. Доступно для заказа: ${maxQuantity} шт.`);
+                quantity = maxQuantity;
+                document.getElementById('order-quantity').value = quantity;
+                return;
+            }
+        }
+        
         const orderData = {
             product_id: productId,
-            quantity: parseInt(document.getElementById('order-quantity').value) || 1,
+            quantity: quantity,
             promo_code: document.getElementById('order-promo-code').value.trim() || null,
             first_name: document.getElementById('order-first-name').value.trim(),
             last_name: document.getElementById('order-last-name').value.trim(),
@@ -277,10 +448,20 @@ export async function submitOrder(productId) {
         // Отправляем заказ
         const order = await createOrderAPI(orderData);
         
+        // Очищаем сохраненное количество после успешного создания заказа (без блокировки)
+        import('./orderStore.js').then(({ clearOrderQuantity }) => {
+            clearOrderQuantity(productId);
+        }).catch((error) => {
+            console.error('❌ Error clearing order quantity after creation:', error);
+        });
+        
         alert(`✅ Заказ оформлен! Статус: ожидание`);
         
-        if (orderModalElement) {
-            orderModalElement.style.display = 'none';
+        const orderPage = document.getElementById('order-page');
+        if (orderPage && (orderPage.style.display === 'block' || orderPage.style.display === 'flex')) {
+            closeOrderPage();
+        } else {
+            if (orderModalElement) orderModalElement.style.display = 'none';
         }
         if (modalElement) {
             modalElement.style.display = 'none';
@@ -295,6 +476,9 @@ export async function submitOrder(productId) {
             if (updateCartUICallback) {
                 await updateCartUICallback();
             }
+            // Обновляем индикаторы активности
+            const { updateActivityCounts } = await import('./activityIndicators.js');
+            await updateActivityCounts();
         }, 500);
     } catch (e) {
         console.error('Order error:', e);
@@ -335,6 +519,9 @@ export async function cancelOrder(orderId) {
             if (updateCartUICallback) {
                 await updateCartUICallback();
             }
+            // Обновляем индикаторы активности
+            const { updateActivityCounts } = await import('./activityIndicators.js');
+            await updateActivityCounts();
         }, 500);
     } catch (e) {
         console.error('Cancel order error:', e);

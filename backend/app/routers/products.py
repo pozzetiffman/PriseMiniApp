@@ -15,9 +15,11 @@ from ..utils.products_sync import sync_product_to_all_bots_with_rename, sync_pro
 from ..handlers.products_sold import get_sold_products as get_sold_products_handler, delete_sold_product as delete_sold_product_handler, delete_sold_products as delete_sold_products_handler
 from ..handlers.products_read import get_product_by_id as get_product_by_id_handler, get_products as get_products_handler
 from ..handlers.products_create import create_product as create_product_handler, sync_all_products as sync_all_products_handler
-from ..handlers.products_update import update_product as update_product_handler, toggle_hot_offer as toggle_hot_offer_handler, update_price_discount as update_price_discount_handler, update_name_description as update_name_description_handler, update_quantity as update_quantity_handler, update_made_to_order as update_made_to_order_handler, update_for_sale as update_for_sale_handler, update_quantity_show_enabled as update_quantity_show_enabled_handler, bulk_update_made_to_order as bulk_update_made_to_order_handler, update_hidden as update_hidden_handler, update_sale_enabled as update_sale_enabled_handler
+from ..handlers.products_update import update_product as update_product_handler, toggle_hot_offer as toggle_hot_offer_handler, update_price_discount as update_price_discount_handler, update_name_description as update_name_description_handler, update_quantity as update_quantity_handler, update_made_to_order as update_made_to_order_handler, update_for_sale as update_for_sale_handler, update_quantity_show_enabled as update_quantity_show_enabled_handler, bulk_update_made_to_order as bulk_update_made_to_order_handler, update_hidden as update_hidden_handler, update_sale_enabled as update_sale_enabled_handler, update_reservation_enabled as update_reservation_enabled_handler, update_product_characteristics as update_product_characteristics_handler, update_product_delivery as update_product_delivery_handler
 from ..handlers.products_delete import delete_product as delete_product_handler, mark_product_sold as mark_product_sold_handler
+from ..utils.logging_config import get_logger
 
+log = get_logger(__name__)
 router = APIRouter(prefix="/api/products", tags=["products"])
 
 # Получаем публичный URL из переменной окружения или используем ngrok по умолчанию
@@ -53,11 +55,11 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     ).first()
     
     if connected_bot and connected_bot.bot_token:
-        print(f"✅ Using connected bot token for user {shop_owner_id} (bot_id={connected_bot.id})")
+        log.debug(f"✅ Using connected bot token for user {shop_owner_id} (bot_id={connected_bot.id})")
         return connected_bot.bot_token
     
     # Если подключенного бота нет, используем основной токен
-    print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
+    log.debug(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
     return TELEGRAM_BOT_TOKEN
 """
 # ========== END REFACTORING STEP 1.1 ==========
@@ -189,7 +191,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 # Обновляем sync_product_id если он не был установлен
                 if not matching.sync_product_id:
                     matching.sync_product_id = sync_id
-                print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+                log.debug(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
             else:
                 # Товар не найден - проверяем, не существует ли уже товар с новым именем и sync_product_id
                 existing = None
@@ -252,7 +254,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
-                    print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+                    log.debug(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
     
     else:
         # Товар в подключенном боте - синхронизируем в основной бот И во все другие подключенные боты
@@ -321,7 +323,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
             if not db_product.sync_product_id:
                 db_product.sync_product_id = matching_main.sync_product_id
             sync_id = matching_main.sync_product_id
-            print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
+            log.debug(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
         
         # 2. Обновляем товар во всех других подключенных ботах (кроме текущего)
         for bot in connected_bots:
@@ -388,7 +390,7 @@ def sync_product_to_all_bots_with_rename(db_product: models.Product, db: Session
                 # Обновляем sync_product_id если он не был установлен
                 if sync_id and not matching.sync_product_id:
                     matching.sync_product_id = sync_id
-                print(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+                log.debug(f"🔄 Synced renamed product '{old_name}' -> '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
 """
 # ========== END REFACTORING STEP 2.1 ==========
 
@@ -482,7 +484,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
             
             elif action == "update":
                 # Ищем синхронизированный товар по sync_product_id (надежный способ)
@@ -542,7 +544,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     # Обновляем sync_product_id если он не был установлен
                     if not matching.sync_product_id:
                         matching.sync_product_id = sync_id
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
     
     else:
         # Товар в подключенном боте - синхронизируем в основной бот И во все другие подключенные боты
@@ -629,7 +631,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 # Обновляем sync_product_id у товара в боте
                 if not db_product.sync_product_id:
                     db_product.sync_product_id = existing_main.sync_product_id
-                print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={existing_main.sync_product_id}) to main bot (UPDATE existing)")
+                log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={existing_main.sync_product_id}) to main bot (UPDATE existing)")
             elif not existing_main:
                 # Находим соответствующую категорию в основном боте по имени
                 category_id_for_main = None
@@ -680,7 +682,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 if not db_product.sync_product_id:
                     db_product.sync_product_id = new_product.id
                 sync_id = new_product.id
-                print(f"🔄 Synced product '{db_product.name}' (id={new_product.id}, sync_id={sync_id}) to main bot (CREATE)")
+                log.debug(f"🔄 Synced product '{db_product.name}' (id={new_product.id}, sync_id={sync_id}) to main bot (CREATE)")
             
             # 2. Синхронизируем во все другие подключенные боты (кроме текущего)
             # Используем sync_id для надежной синхронизации
@@ -745,7 +747,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     # Обновляем sync_product_id если он не был установлен
                     if sync_id and not existing.sync_product_id:
                         existing.sync_product_id = sync_id
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE existing)")
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE existing)")
                 elif not existing:
                     # Находим соответствующую категорию в этом боте по имени
                     category_id_for_bot = None
@@ -789,7 +791,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                         category_id=category_id_for_bot
                     )
                     db.add(new_product)
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (CREATE)")
         
         elif action == "update":
             # Используем sync_product_id для надежной синхронизации
@@ -857,7 +859,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 matching_main.quantity_from = db_product.quantity_from
                 matching_main.quantity_unit = db_product.quantity_unit
                 matching_main.category_id = category_id_for_main
-                print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
+                log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to main bot (UPDATE)")
             
             # 2. Обновляем товар во всех других подключенных ботах (кроме текущего)
             # Используем sync_id для надежной синхронизации
@@ -926,7 +928,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                     # Обновляем sync_product_id если он не был установлен
                     if sync_id and not matching.sync_product_id:
                         matching.sync_product_id = sync_id
-                    print(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
+                    log.debug(f"🔄 Synced product '{db_product.name}' (id={db_product.id}, sync_id={sync_id}) to bot {bot.id} (UPDATE)")
         
         elif action == "delete":
             # Используем sync_product_id для надежного удаления всех связанных товаров
@@ -949,7 +951,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
             
             for matching_main in matching_main_products:
                 db.delete(matching_main)
-                print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching_main.id}, sync_id={sync_id}) to main bot (DELETE)")
+                log.debug(f"🔄 Synced deletion of product '{db_product.name}' (id={matching_main.id}, sync_id={sync_id}) to main bot (DELETE)")
             
             # 2. Удаляем все связанные товары из всех других подключенных ботов (кроме текущего)
             for bot in connected_bots:
@@ -973,7 +975,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
                 
                 for matching in matching_products:
                     db.delete(matching)
-                    print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) to bot {bot.id} (DELETE)")
+                    log.debug(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) to bot {bot.id} (DELETE)")
     
     # Также обрабатываем удаление из основного бота во все подключенные боты
     if db_product.bot_id is None and action == "delete":
@@ -997,7 +999,7 @@ def sync_product_to_all_bots(db_product: models.Product, db: Session, action: st
             
             for matching in matching_products:
                 db.delete(matching)
-                print(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) from main bot to bot {bot.id} (DELETE)")
+                log.debug(f"🔄 Synced deletion of product '{db_product.name}' (id={matching.id}, sync_id={sync_id}) from main bot to bot {bot.id} (DELETE)")
 """
 # ========== END REFACTORING STEP 2.2 ==========
 
@@ -1138,7 +1140,7 @@ async def sync_all_products(
                 )
                 db.add(new_product)
                 synced_count += 1
-                print(f"🔄 Synced product '{main_product.name}' (id={main_product.id}, sync_id={sync_id}) to bot {bot.id}")
+                log.debug(f"🔄 Synced product '{main_product.name}' (id={main_product.id}, sync_id={sync_id}) to bot {bot.id}")
     
     # 2. Синхронизируем товары из подключенных ботов в основной бот
     for bot in connected_bots:
@@ -1215,7 +1217,7 @@ async def sync_all_products(
                 if not bot_product.sync_product_id:
                     bot_product.sync_product_id = new_product.id
                 synced_count += 1
-                print(f"🔄 Synced product '{bot_product.name}' (id={new_product.id}, sync_id={new_product.id}) to main bot")
+                log.debug(f"🔄 Synced product '{bot_product.name}' (id={new_product.id}, sync_id={new_product.id}) to main bot")
     
     # 3. Очистка дубликатов: удаляем товары в ботах, которых нет в основном магазине
     deleted_count = 0
@@ -1239,7 +1241,7 @@ async def sync_all_products(
             if bot_product.sync_product_id:
                 if bot_product.sync_product_id not in main_sync_ids:
                     # Товар в боте ссылается на несуществующий товар в основном магазине - удаляем
-                    print(f"🗑️ Deleting orphaned product '{bot_product.name}' (id={bot_product.id}, sync_id={bot_product.sync_product_id}) from bot {bot.id}")
+                    log.debug(f"🗑️ Deleting orphaned product '{bot_product.name}' (id={bot_product.id}, sync_id={bot_product.sync_product_id}) from bot {bot.id}")
                     db.delete(bot_product)
                     deleted_count += 1
             else:
@@ -1251,13 +1253,13 @@ async def sync_all_products(
                         sync_id = main_product.sync_product_id or main_product.id
                         bot_product.sync_product_id = sync_id
                         found_in_main = True
-                        print(f"🔗 Linked product '{bot_product.name}' (id={bot_product.id}) to main product (sync_id={sync_id})")
+                        log.debug(f"🔗 Linked product '{bot_product.name}' (id={bot_product.id}) to main product (sync_id={sync_id})")
                         break
                 
                 if not found_in_main:
                     # Товар в боте не найден в основном магазине - удаляем (или создаем в основном магазине)
                     # Создаем товар в основном магазине, если его там нет
-                    print(f"🔄 Creating missing product '{bot_product.name}' in main shop from bot {bot.id}")
+                    log.debug(f"🔄 Creating missing product '{bot_product.name}' in main shop from bot {bot.id}")
                     # Находим соответствующую категорию в основном боте по имени
                     category_id_for_main = None
                     if bot_product.category_id:
@@ -1304,7 +1306,7 @@ async def sync_all_products(
                     new_main_product.sync_product_id = new_main_product.id
                     bot_product.sync_product_id = new_main_product.id
                     synced_count += 1
-                    print(f"🔄 Created product '{bot_product.name}' (id={new_main_product.id}, sync_id={new_main_product.id}) in main shop")
+                    log.debug(f"🔄 Created product '{bot_product.name}' (id={new_main_product.id}, sync_id={new_main_product.id}) in main shop")
     
     db.commit()
     
@@ -1616,6 +1618,7 @@ def get_product_by_id(
         "is_made_to_order": product.is_made_to_order,
         "is_for_sale": getattr(product, 'is_for_sale', False),
         "is_sale_enabled": getattr(product, 'is_sale_enabled', False),
+        "is_reservation_enabled": getattr(product, 'is_reservation_enabled', False),
         "price_from": getattr(product, 'price_from', None),
         "price_to": getattr(product, 'price_to', None),
         "price_fixed": getattr(product, 'price_fixed', None),
@@ -1641,15 +1644,13 @@ def get_products(
     db: Session = Depends(database.get_db)
 ):
     """Получить список товаров с автоматической синхронизацией между основным магазином и ботами"""
-    print(f"📦 [API] GET /api/products/ - user_id={user_id}, category_id={category_id}, bot_id={bot_id}, viewer_id={viewer_id}")
+    log.debug("[API] GET /api/products/ user_id=%s category_id=%s bot_id=%s viewer_id=%s", user_id, category_id, bot_id, viewer_id)
     try:
         result = get_products_handler(user_id, category_id, bot_id, db, viewer_id=viewer_id)
-        print(f"📦 [API] GET /api/products/ - returning {len(result)} products")
+        log.debug("[API] GET /api/products/ returning %s products", len(result))
         return result
     except Exception as e:
-        print(f"❌ [API] GET /api/products/ - error: {e}")
-        import traceback
-        traceback.print_exc()
+        log.error("[API] GET /api/products/ error: %s", e, exc_info=True)
         raise
 
 # СТАРЫЙ КОД (закомментирован, будет удален после проверки)
@@ -1661,7 +1662,7 @@ def get_products(
     bot_id: Optional[int] = Query(None, description="ID бота для независимых магазинов"),
     db: Session = Depends(database.get_db)
 ):
-    print(f"DEBUG: get_products called with user_id={user_id}, category_id={category_id}, bot_id={bot_id}")
+    log.debug(f"DEBUG: get_products called with user_id={user_id}, category_id={category_id}, bot_id={bot_id}")
     
     # Автоматическая синхронизация: проверяем расхождения между основным магазином и ботами
     # Находим все подключенные боты пользователя
@@ -1707,7 +1708,7 @@ def get_products(
                 
                 # Если товар в боте не найден в основном магазине - синхронизируем
                 if not found_in_main:
-                    print(f"🔄 Auto-syncing product '{bot_product.name}' from bot {bot.id} to main shop")
+                    log.debug(f"🔄 Auto-syncing product '{bot_product.name}' from bot {bot.id} to main shop")
                     # Находим соответствующую категорию в основном боте по имени
                     category_id_for_main = None
                     if bot_product.category_id:
@@ -1755,7 +1756,7 @@ def get_products(
                     if not bot_product.sync_product_id:
                         bot_product.sync_product_id = new_main_product.id
                     db.commit()
-                    print(f"✅ Auto-synced product '{bot_product.name}' (id={new_main_product.id}) to main shop")
+                    log.debug(f"✅ Auto-synced product '{bot_product.name}' (id={new_main_product.id}) to main shop")
         
         # Также синхронизируем товары из основного магазина в боты
         for main_product in main_products:
@@ -1785,7 +1786,7 @@ def get_products(
                 
                 # Если товар в основном магазине не найден в боте - синхронизируем
                 if not existing:
-                    print(f"🔄 Auto-syncing product '{main_product.name}' from main shop to bot {bot.id}")
+                    log.debug(f"🔄 Auto-syncing product '{main_product.name}' from main shop to bot {bot.id}")
                     # Находим соответствующую категорию в боте по имени
                     category_id_for_bot = None
                     if main_product.category_id:
@@ -1829,7 +1830,7 @@ def get_products(
                     )
                     db.add(new_bot_product)
                     db.commit()
-                    print(f"✅ Auto-synced product '{main_product.name}' (id={new_bot_product.id}) to bot {bot.id}")
+                    log.debug(f"✅ Auto-synced product '{main_product.name}' (id={new_bot_product.id}) to bot {bot.id}")
     
     query = db.query(models.Product).filter(
         models.Product.user_id == user_id,
@@ -1846,7 +1847,7 @@ def get_products(
         query = query.filter(models.Product.category_id == category_id)
     products = query.all()
     # Логируем информацию о товарах и их изображениях
-    print(f"DEBUG: Found {len(products)} products for user {user_id}")
+    log.debug(f"DEBUG: Found {len(products)} products for user {user_id}")
     result = []
     for prod in products:
         # Преобразуем images_urls из JSON строки в список
@@ -1918,16 +1919,16 @@ def get_products(
         # Преобразуем is_made_to_order в bool
         is_made_to_order = bool(getattr(prod, 'is_made_to_order', False))
         
-        print(f"DEBUG: Product {prod.id} '{prod.name}' has {'active' if has_reservation else 'no active'} reservation")
-        print(f"DEBUG: Product {prod.id} '{prod.name}' - is_made_to_order raw={getattr(prod, 'is_made_to_order', False)} (type: {type(getattr(prod, 'is_made_to_order', False))}), converted={is_made_to_order}")
-        print(f"DEBUG: Product {prod.id} '{prod.name}' - images_urls: {len(images_list)} images")
+        log.debug(f"DEBUG: Product {prod.id} '{prod.name}' has {'active' if has_reservation else 'no active'} reservation")
+        log.debug(f"DEBUG: Product {prod.id} '{prod.name}' - is_made_to_order raw={getattr(prod, 'is_made_to_order', False)} (type: {type(getattr(prod, 'is_made_to_order', False))}), converted={is_made_to_order}")
+        log.debug(f"DEBUG: Product {prod.id} '{prod.name}' - images_urls: {len(images_list)} images")
         if images_list:
             first_image = images_list[0]
-            print(f"DEBUG: Product {prod.id} first image URL: {first_image}")
+            log.debug(f"DEBUG: Product {prod.id} first image URL: {first_image}")
             if '/api/images/' in first_image:
-                print(f"OK: Product {prod.id} image URL correctly uses /api/images/")
+                log.debug(f"OK: Product {prod.id} image URL correctly uses /api/images/")
             elif '/static/uploads/' in first_image:
-                print(f"WARNING: Product {prod.id} image URL still contains /static/uploads/ - should use /api/images/")
+                log.debug(f"WARNING: Product {prod.id} image URL still contains /static/uploads/ - should use /api/images/")
         
         result.append({
             "id": prod.id,
@@ -1982,7 +1983,7 @@ def str_to_bool(value: str) -> bool:
 @router.post("/", response_model=schemas.Product)
 async def create_product(
     name: str = Form(...),
-    price: float = Form(...),
+    price: Optional[float] = Form(None),  # Опционально - используется только как fallback для старых товаров
     category_id: int = Form(...),
     user_id: int = Form(...),
     description: Optional[str] = Form(None),
@@ -2001,9 +2002,52 @@ async def create_product(
     bot_id: Optional[int] = Form(None, description="ID бота для независимых магазинов"),
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data"),
     images: List[UploadFile] = File(default_factory=list),
+    is_sale_enabled: Optional[str] = Form(None),
+    is_client_sale: Optional[str] = Form(None),
+    seller_id: Optional[int] = Form(None),
+    price_card: Optional[float] = Form(None),  # Базовая цена (обязательна для новых товаров с is_sale_enabled или is_made_to_order)
+    price_cash: Optional[float] = Form(None),
+    price_old: Optional[float] = Form(None),
+    characteristics: Optional[str] = Form(None),  # JSON: [{"name":"Размер","value":"XL"},...]
+    delivery_time: Optional[str] = Form(None),
+    delivery_price: Optional[float] = Form(None),
     db: Session = Depends(database.get_db)
 ):
-    """Эндпоинт для создания товара - вызывает обработчик из products_create.py"""
+    """
+    Эндпоинт для создания товара - вызывает обработчик из products_create.py
+    
+    Для C2C товаров (is_client_sale=true):
+    - Клиенты могут создавать товары
+    - user_id должен быть shop_owner_id (владелец магазина)
+    - seller_id должен быть viewer_id (клиент-продавец, определяется из initData)
+    """
+    # Проверяем, является ли это C2C товаром
+    is_client_sale_bool = False
+    if is_client_sale:
+        is_client_sale_bool = str_to_bool(is_client_sale)
+    
+    # Для C2C товаров: получаем контекст и устанавливаем правильные ID
+    if is_client_sale_bool and x_telegram_init_data:
+        try:
+            from .context import get_context
+            # Получаем контекст для определения shop_owner_id
+            context = await get_context(x_telegram_init_data=x_telegram_init_data, db=db)
+            shop_owner_id = context.get("shop_owner_id")
+            viewer_id = context.get("viewer_id")
+            
+            if shop_owner_id:
+                # user_id должен быть shop_owner_id (владелец магазина)
+                user_id = shop_owner_id
+                log.debug(f"✅ [C2C] Set user_id={user_id} (shop_owner_id) for C2C product")
+            
+            if viewer_id and seller_id is None:
+                # seller_id должен быть viewer_id (клиент-продавец)
+                seller_id = viewer_id
+                log.debug(f"✅ [C2C] Set seller_id={seller_id} (viewer_id) for C2C product")
+        except Exception as e:
+            log.warning("[C2C] Error getting context for C2C product: %s", e)
+            # Продолжаем без изменения user_id и seller_id
+    
     return await create_product_handler(
         name=name,
         price=price,
@@ -2025,7 +2069,16 @@ async def create_product(
         bot_id=bot_id,
         x_telegram_init_data=x_telegram_init_data,
         images=images,
-        db=db
+        db=db,
+        is_sale_enabled=is_sale_enabled,
+        is_client_sale=is_client_sale,
+        seller_id=seller_id,
+        price_card=price_card,
+        price_cash=price_cash,
+        price_old=price_old,
+        characteristics=characteristics,
+        delivery_time=delivery_time,
+        delivery_price=delivery_price
     )
 
 # СТАРЫЙ КОД (закомментирован, будет удален после проверки)
@@ -2033,7 +2086,7 @@ async def create_product(
 @router.post("/", response_model=schemas.Product)
 async def create_product(
     name: str = Form(...),
-    price: float = Form(...),
+    price: Optional[float] = Form(None),  # Опционально - используется только как fallback для старых товаров
     category_id: int = Form(...),
     user_id: int = Form(...),
     description: Optional[str] = Form(None),
@@ -2066,31 +2119,31 @@ async def create_product(
     images_urls = []
     image_url = None  # Для обратной совместимости (первое фото)
     
-    print(f"DEBUG: create_product called - images type: {type(images)}, images count: {len(images) if images else 0}")
+    log.debug(f"DEBUG: create_product called - images type: {type(images)}, images count: {len(images) if images else 0}")
     
     # Фильтруем пустые файлы (если FastAPI передал пустые объекты)
     if images:
         images = [img for img in images if img and img.filename]
     
-    print(f"DEBUG: images is a list with {len(images)} items after filtering")
+    log.debug(f"DEBUG: images is a list with {len(images)} items after filtering")
     for i, img in enumerate(images):
         if img:
-            print(f"DEBUG: images[{i}]: filename={getattr(img, 'filename', 'unknown')}, content_type={getattr(img, 'content_type', 'unknown')}")
+            log.debug(f"DEBUG: images[{i}]: filename={getattr(img, 'filename', 'unknown')}, content_type={getattr(img, 'content_type', 'unknown')}")
     
     if images and len(images) > 0:
         # Ограничиваем до 5 фото
         images = images[:5]
-        print(f"DEBUG: Received {len(images)} image files")
+        log.debug(f"DEBUG: Received {len(images)} image files")
         
         upload_dir = "static/uploads"
         os.makedirs(upload_dir, exist_ok=True)
         
         for idx, image in enumerate(images):
             if not image or not image.filename:
-                print(f"DEBUG: Skipping image {idx+1} - no filename")
+                log.debug(f"DEBUG: Skipping image {idx+1} - no filename")
                 continue
                 
-            print(f"DEBUG: Processing image {idx+1}: filename={image.filename}, content_type={image.content_type}")
+            log.debug(f"DEBUG: Processing image {idx+1}: filename={image.filename}, content_type={image.content_type}")
             
             # Генерируем уникальное имя файла
             file_ext = os.path.splitext(image.filename)[1] if image.filename else '.jpg'
@@ -2105,11 +2158,9 @@ async def create_product(
                 
                 with open(file_path, "wb") as buffer:
                     buffer.write(contents)
-                print(f"DEBUG: Image {idx+1} saved successfully: {file_path}, size: {len(contents)} bytes")
+                log.debug(f"DEBUG: Image {idx+1} saved successfully: {file_path}, size: {len(contents)} bytes")
             except Exception as e:
-                print(f"ERROR: Failed to save image {idx+1}: {e}")
-                import traceback
-                traceback.print_exc()
+                log.error("Failed to save image %s: %s", idx+1, e, exc_info=True)
                 continue
             
             image_url_path = f"/static/uploads/{unique_filename}"
@@ -2119,9 +2170,9 @@ async def create_product(
             if idx == 0:
                 image_url = image_url_path
             
-            print(f"DEBUG: Image {idx+1} saved: {image_url_path}")
+            log.debug(f"DEBUG: Image {idx+1} saved: {image_url_path}")
     else:
-        print("DEBUG: No images received or empty list")
+        log.debug("DEBUG: No images received or empty list")
     
     # Сохраняем массив URL в JSON строку
     images_urls_json = json.dumps(images_urls) if images_urls else None
@@ -2136,7 +2187,7 @@ async def create_product(
             try:
                 from ..routers.context import get_validated_user_and_bot
                 _, final_bot_id = await get_validated_user_and_bot(x_telegram_init_data, db)
-                print(f"✅ Determined bot_id={final_bot_id} from initData for product creation")
+                log.debug(f"✅ Determined bot_id={final_bot_id} from initData for product creation")
             except:
                 final_bot_id = None
         else:
@@ -2148,10 +2199,10 @@ async def create_product(
             ).first()
             if user_bot:
                 final_bot_id = user_bot.id
-                print(f"✅ Determined bot_id={final_bot_id} from user's connected bot for product creation")
+                log.debug(f"✅ Determined bot_id={final_bot_id} from user's connected bot for product creation")
             else:
                 final_bot_id = None  # Основной бот
-                print(f"ℹ️ No connected bot found for user {user_id}, using main bot (bot_id=None)")
+                log.debug(f"ℹ️ No connected bot found for user {user_id}, using main bot (bot_id=None)")
 
     db_product = models.Product(
         name=name,
@@ -2196,7 +2247,7 @@ async def create_product(
     db.commit()
     db.refresh(db_product)
     
-    print(f"DEBUG: Product created in DB: id={db_product.id}, name={db_product.name}, images_count={len(images_urls)}")
+    log.debug(f"DEBUG: Product created in DB: id={db_product.id}, name={db_product.name}, images_count={len(images_urls)}")
     
     # Преобразуем относительные пути в полные HTTPS URL
     images_urls_full = [make_full_url(img_url) for img_url in images_urls]
@@ -2383,7 +2434,7 @@ def update_price_discount(
                 if row[0] is not None:
                     visited_user_ids.add(row[0])
                     reservation_users.append(row[0])
-            print(f"📊 Notification: Found {len(reservation_users)} users from reservations: {reservation_users}")
+            log.debug(f"📊 Notification: Found {len(reservation_users)} users from reservations: {reservation_users}")
             
             # 2. Пользователи, которые просматривали конкретный товар (модальное окно)
             product_views = db.query(distinct(models.ShopVisit.visitor_id)).filter(
@@ -2395,7 +2446,7 @@ def update_price_discount(
                 if row[0] is not None:
                     visited_user_ids.add(row[0])
                     product_view_users.append(row[0])
-            print(f"📊 Notification: Found {len(product_view_users)} users who viewed product {product_id}: {product_view_users}")
+            log.debug(f"📊 Notification: Found {len(product_view_users)} users who viewed product {product_id}: {product_view_users}")
             
             # 3. Пользователи, которые посещали магазин в целом (просмотр списка товаров)
             shop_visits = db.query(distinct(models.ShopVisit.visitor_id)).filter(
@@ -2407,16 +2458,16 @@ def update_price_discount(
                 if row[0] is not None:
                     visited_user_ids.add(row[0])
                     shop_visit_users.append(row[0])
-            print(f"📊 Notification: Found {len(shop_visit_users)} users who visited shop: {shop_visit_users}")
+            log.debug(f"📊 Notification: Found {len(shop_visit_users)} users who visited shop: {shop_visit_users}")
             
             # Преобразуем в список для итерации
             visited_user_ids = list(visited_user_ids)
             
-            print(f"📢 Notification: Found {len(visited_user_ids)} users to notify for product {product_id}")
-            print(f"📢 Notification: User IDs: {visited_user_ids}")
+            log.debug(f"📢 Notification: Found {len(visited_user_ids)} users to notify for product {product_id}")
+            log.debug(f"📢 Notification: User IDs: {visited_user_ids}")
             
             if not visited_user_ids:
-                print("⚠️ Notification: No users found to notify")
+                log.debug("⚠️ Notification: No users found to notify")
                 return {
                     "id": db_product.id,
                     "price": db_product.price,
@@ -2430,7 +2481,7 @@ def update_price_discount(
             
             bot_token = get_bot_token_for_notifications(user_id, db)
             if not bot_token:
-                print("❌ Notification: Bot token not available")
+                log.warning("Notification: Bot token not available")
                 return {
                     "id": db_product.id,
                     "price": db_product.price,
@@ -2477,7 +2528,7 @@ def update_price_discount(
             failed_count = 0
             for visited_user_id in visited_user_ids:
                 try:
-                    print(f"📤 Sending notification to user {visited_user_id}...")
+                    log.debug(f"📤 Sending notification to user {visited_user_id}...")
                     response = requests.post(
                         f"{bot_api_url}/sendMessage",
                         json={
@@ -2488,19 +2539,19 @@ def update_price_discount(
                         timeout=5
                     )
                     if response.status_code == 200:
-                        print(f"✅ Notification sent successfully to user {visited_user_id}")
+                        log.debug(f"✅ Notification sent successfully to user {visited_user_id}")
                         sent_count += 1
                     else:
-                        print(f"❌ Failed to send notification to user {visited_user_id}: status={response.status_code}, response={response.text}")
+                        log.warning("Failed to send notification to user %s: status=%s", visited_user_id, response.status_code)
                         failed_count += 1
                 except Exception as e:
-                    print(f"❌ Error sending notification to user {visited_user_id}: {e}")
+                    log.warning("Error sending notification to user %s: %s", visited_user_id, e)
                     failed_count += 1
                     # Продолжаем отправку другим пользователям даже при ошибке
             
-            print(f"📊 Notification summary: {sent_count} sent, {failed_count} failed out of {len(visited_user_ids)} total")
+            log.debug(f"📊 Notification summary: {sent_count} sent, {failed_count} failed out of {len(visited_user_ids)} total")
         except Exception as e:
-            print(f"Error sending notifications: {e}")
+            log.error("Error sending notifications: %s", e, exc_info=True)
             # Не прерываем обновление товара, даже если уведомления не отправились
     
     return {
@@ -2665,7 +2716,7 @@ def update_made_to_order(
     db.refresh(db_product)
     
     # Отладочный вывод
-    print(f"DEBUG: update_made_to_order - product_id={product_id}, user_id={user_id}, is_made_to_order={made_to_order_update.is_made_to_order}, saved={db_product.is_made_to_order}")
+    log.debug(f"DEBUG: update_made_to_order - product_id={product_id}, user_id={user_id}, is_made_to_order={made_to_order_update.is_made_to_order}, saved={db_product.is_made_to_order}")
     
     return {
         "id": db_product.id,
@@ -2815,6 +2866,41 @@ def update_sale_enabled(
     return update_sale_enabled_handler(product_id, sale_enabled_update, user_id, db)
 # ========== END REFACTORING STEP 6.10 ==========
 
+@router.patch("/{product_id}/update-reservation-enabled")
+def update_reservation_enabled(
+    product_id: int,
+    reservation_enabled_update: schemas.ReservationEnabledUpdate,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление статуса 'резервация' для товара (без уведомлений)"""
+    return update_reservation_enabled_handler(product_id, reservation_enabled_update, user_id, db)
+
+# ========== PATCH /api/products/{id}/characteristics ==========
+# Обновление характеристик товара: замена списком (replace).
+@router.patch("/{product_id}/characteristics")
+def update_product_characteristics(
+    product_id: int,
+    payload: schemas.ProductCharacteristicsUpdateIn,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление характеристик товара: замена списком (удаление отсутствующих, создание/обновление присутствующих)."""
+    return update_product_characteristics_handler(product_id, payload, user_id, db)
+# ========== END PATCH characteristics ==========
+
+# ========== PATCH /api/products/{id}/delivery ==========
+@router.patch("/{product_id}/delivery")
+def update_product_delivery(
+    product_id: int,
+    payload: schemas.ProductDeliveryUpdateIn,
+    user_id: int = Query(...),
+    db: Session = Depends(database.get_db)
+):
+    """Обновление настроек доставки товара (полная замена, upsert одной записи). Синхронизируется во все боты."""
+    return update_product_delivery_handler(product_id, payload, user_id, db)
+# ========== END PATCH delivery ==========
+
 # ========== REFACTORING STEP 6.10: bulk_update_made_to_order ==========
 # НОВЫЙ КОД (используется сейчас)
 # Функция перенесена в backend/app/handlers/products_update.py
@@ -2853,7 +2939,7 @@ async def bulk_update_made_to_order(
     
     # Получаем bot_token из окружения (как в других эндпоинтах)
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    print(f"🔄 Bulk update made-to-order - initData present: {bool(x_telegram_init_data)}, bot_token present: {bool(bot_token)}")
+    log.debug(f"🔄 Bulk update made-to-order - initData present: {bool(x_telegram_init_data)}, bot_token present: {bool(bot_token)}")
     
     try:
         # Используем функцию для валидации с любым ботом
@@ -2862,12 +2948,12 @@ async def bulk_update_made_to_order(
             db,
             default_bot_token=bot_token if bot_token else None
         )
-        print(f"✅ Validated initData - user_id={authenticated_user_id}, bot_id={bot_id}")
+        log.debug(f"✅ Validated initData - user_id={authenticated_user_id}, bot_id={bot_id}")
     except HTTPException as e:
-        print(f"❌ HTTPException during validation: {e.status_code} - {e.detail}")
+        log.warning("HTTPException during validation: %s - %s", e.status_code, e.detail)
         raise
     except Exception as e:
-        print(f"❌ Exception during validation: {type(e).__name__} - {str(e)}")
+        log.warning("Exception during validation: %s - %s", type(e).__name__, str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Получаем только активные товары из основного бота (bot_id=None)
@@ -2879,7 +2965,7 @@ async def bulk_update_made_to_order(
         models.Product.is_sold == False  # Только активные товары (не проданные)
     ).all()
     
-    print(f"📦 Found {len(all_products)} active products in main bot for user {authenticated_user_id}")
+    log.debug(f"📦 Found {len(all_products)} active products in main bot for user {authenticated_user_id}")
     
     if not all_products:
         return {
@@ -2897,15 +2983,15 @@ async def bulk_update_made_to_order(
             try:
                 sync_product_to_all_bots(product, db, action="update")
             except Exception as e:
-                print(f"⚠️ Error syncing product {product.id} to bots: {str(e)}")
+                log.warning("Error syncing product %s to bots: %s", product.id, str(e))
                 # Продолжаем обновление других товаров даже если синхронизация не удалась
             updated_count += 1
         
         db.commit()
-        print(f"✅ Bulk update made-to-order - user_id={authenticated_user_id}, is_made_to_order={bulk_update.is_made_to_order}, updated_count={updated_count}")
+        log.debug(f"✅ Bulk update made-to-order - user_id={authenticated_user_id}, is_made_to_order={bulk_update.is_made_to_order}, updated_count={updated_count}")
     except Exception as e:
         db.rollback()
-        print(f"❌ Error during bulk update: {type(e).__name__} - {str(e)}")
+        log.error("Error during bulk update: %s - %s", type(e).__name__, str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Ошибка при обновлении товаров: {str(e)}")
     
     return {
@@ -2997,7 +3083,7 @@ async def delete_product(
     # Файлы могут использоваться другими товарами (включая синхронизированные копии)
     # или могут быть восстановлены позже
     # Удаление файлов должно быть явным действием администратора
-    print(f"DEBUG: Product deleted, but image files are preserved (may be used by other products or synced copies)")
+    log.debug(f"DEBUG: Product deleted, but image files are preserved (may be used by other products or synced copies)")
     for img_url in images_to_check:
         if img_url and img_url.startswith('/static/'):
             file_path = img_url[1:]  # Убираем первый /
@@ -3012,9 +3098,9 @@ async def delete_product(
             ).count()
             
             if other_products_with_image > 0:
-                print(f"DEBUG: Image file {file_path} is still used by {other_products_with_image} other product(s), preserved")
+                log.debug(f"DEBUG: Image file {file_path} is still used by {other_products_with_image} other product(s), preserved")
             else:
-                print(f"DEBUG: Image file {file_path} is not used by any other product, but preserved for safety (can be manually deleted later)")
+                log.debug(f"DEBUG: Image file {file_path} is not used by any other product, but preserved for safety (can be manually deleted later)")
     
     return {"message": "Product deleted"}
 """

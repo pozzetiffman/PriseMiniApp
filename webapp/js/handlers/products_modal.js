@@ -8,8 +8,11 @@
 // Импорты зависимостей
 import { getCurrentShopSettings, openAdmin } from '../admin.js';
 import { toggleHotOffer, trackShopVisit, updateProductHiddenAPI } from '../api.js';
+import { hideAllPages } from '../operationsBase.js';
 import { getProductPriceDisplay } from '../utils/priceUtils.js';
+import { renderProductPagePricesBlock } from '../utils/productCardParts.js';
 import { isMobileDevice } from '../utils/products_utils.js';
+import { showNotification } from '../utils/admin_utils.js';
 import { showClientDetail } from './admin_clients.js';
 // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
 // НОВЫЙ КОД (используется сейчас)
@@ -85,8 +88,115 @@ function disableHorizontalScrollBlock() {
     console.log('[PRODUCT PAGE] ✅ Horizontal scroll block disabled');
 }
 
+// Toast на странице товара — сверху справа, type: "ok" | "bad", авто-скрытие ~2 сек
+// @deprecated Для тумблеров hot/visibility используется showNotification из admin_utils.js. Оставлено для совместимости.
+function showProductToast(message, type) {
+    const host = document.getElementById('product-page-toast-host');
+    if (!host) return;
+    const el = document.createElement('div');
+    el.className = 'product-toast toast--' + (type === 'ok' ? 'ok' : 'bad');
+    el.textContent = message;
+    host.appendChild(el);
+    setTimeout(() => el.remove(), 2000);
+}
+
+// ========== ПОДПИСКА НА СОБЫТИЕ ОБНОВЛЕНИЯ ТОВАРА ==========
+// Подписываемся на событие product:updated для обновления UI при изменении товара
+let productUpdateHandler = null;
+
+function setupProductUpdateListener() {
+    if (productUpdateHandler) {
+        // Уже подписаны, не дублируем
+        return;
+    }
+    
+    productUpdateHandler = (event) => {
+        const { productId, clientVisibleId, ownerProduct, clientProduct } = event.detail || {};
+        if (!productId) return;
+        
+        // ========== DEBUG: Логирование получения события ==========
+        const DEBUG_PRODUCT_MODAL = true; // Установить в false для отключения
+        if (DEBUG_PRODUCT_MODAL) {
+            console.log(`[PRODUCT MODAL] Received product:updated event for product ${productId}:`, {
+                productId,
+                clientVisibleId,
+                action_type: clientProduct?.action_type || ownerProduct?.action_type,
+                can_add_to_cart: clientProduct?.can_add_to_cart || ownerProduct?.can_add_to_cart
+            });
+        }
+        // ========== КОНЕЦ DEBUG ==========
+        
+        // Проверяем, открыта ли страница товара
+        const productPage = document.getElementById('product-page');
+        const isProductPageOpen = productPage && (productPage.style.display === 'block' || productPage.style.display === 'flex');
+        
+        if (!isProductPageOpen) {
+            // Страница товара не открыта, ничего не делаем
+            return;
+        }
+        
+        // Проверяем, что это тот же товар (по ID или sync_product_id)
+        try {
+            // Получаем текущий продукт из кэша для сравнения
+            const allProducts = typeof window.getAllProducts === 'function' ? window.getAllProducts() : [];
+            if (!Array.isArray(allProducts)) return;
+            
+            // Ищем продукт в кэше по ID или sync_product_id
+            const targetProductId = clientVisibleId || productId;
+            const cachedProduct = allProducts.find(p => 
+                p && (p.id === targetProductId || 
+                     p.id === productId ||
+                     (p.sync_product_id && (p.sync_product_id === targetProductId || p.sync_product_id === productId)) ||
+                     (targetProductId && p.id === targetProductId))
+            );
+            
+            // ========== DEBUG: Логирование поиска товара в кэше ==========
+            const DEBUG_EVENT_SEARCH = true; // Установить в false для отключения
+            if (DEBUG_EVENT_SEARCH) {
+                console.log(`[PRODUCT MODAL DEBUG] Searching for product in cache:`, {
+                    productId,
+                    clientVisibleId,
+                    targetProductId,
+                    allProductsLength: allProducts.length,
+                    cachedProductFound: !!cachedProduct,
+                    cachedProductId: cachedProduct?.id,
+                    cachedProductActionType: cachedProduct?.action_type
+                });
+            }
+            // ========== КОНЕЦ DEBUG ==========
+            
+            if (!cachedProduct) {
+                // Продукт не найден в кэше, возможно еще не загружен
+                return;
+            }
+            
+            // Обновляем bottom sheet с СВЕЖИМ продуктом из кэша
+            updateProductPageBottomSheet(cachedProduct).catch(error => {
+                console.warn(`[PRODUCT MODAL] Failed to update bottom sheet after product:updated event:`, {
+                    message: error?.message || 'Unknown error',
+                    productId: productId
+                });
+            });
+            
+            if (DEBUG_PRODUCT_MODAL) {
+                console.log(`[PRODUCT MODAL] ✅ Updated bottom sheet for product ${productId} after product:updated event`);
+            }
+        } catch (error) {
+            console.warn(`[PRODUCT MODAL] Error handling product:updated event:`, {
+                message: error?.message || 'Unknown error',
+                stack: error?.stack || '',
+                productId: productId
+            });
+        }
+    };
+    
+    window.addEventListener('product:updated', productUpdateHandler);
+}
+
 // Инициализация зависимостей для showProductModal
 export function initProductModalDependencies(dependencies) {
+    // Настраиваем подписку на событие обновления товара
+    setupProductUpdateListener();
     console.log('[PRODUCT MODAL] Initializing dependencies');
     modalElement = dependencies.modal; // Оставляем для обратной совместимости, но не используем
     modalState = dependencies.modalState; // Объект состояния { currentImageLoadId, currentProduct, currentImages, currentImageIndex }
@@ -457,46 +567,7 @@ function showProductPageImage(index = 0) {
         return;
     }
     
-    // Проверяем, является ли товар скрытым для админа
-    const appContext = appContextGetter ? appContextGetter() : null;
-    const isHiddenForAdmin = modalState.currentProduct && modalState.currentProduct.is_hidden && appContext && appContext.role === 'owner' && modalState.currentProduct.user_id === appContext.shop_owner_id;
-    
-    // Функция для создания badge скрытого товара
-    function createHiddenBadge() {
-        if (!isHiddenForAdmin) return null;
-        const hiddenBadge = document.createElement('div');
-        hiddenBadge.className = 'hidden-badge';
-        hiddenBadge.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M12 9C13.6569 9 15 10.3431 15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
-        `;
-        hiddenBadge.setAttribute('aria-label', 'Скрыт от клиентов');
-        hiddenBadge.style.cssText = `
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            background: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            color: #ffffff;
-            padding: 8px;
-            border-radius: 50%;
-            width: 36px;
-            height: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 15;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        `;
-        hiddenBadge.querySelector('svg').style.cssText = 'width: 100%; height: 100%;';
-        return hiddenBadge;
-    }
-    
+    // На странице товара бейджи hot/hidden на фото не показываем (только в карточках каталога)
     // Увеличиваем ID загрузки, чтобы отменить старые запросы
     modalState.currentImageLoadId++;
     const loadId = modalState.currentImageLoadId;
@@ -518,29 +589,6 @@ function showProductPageImage(index = 0) {
         placeholderDiv.className = 'product-slider-placeholder';
         placeholderDiv.innerHTML = '📷';
         productPageImage.appendChild(placeholderDiv);
-        
-        const hiddenBadge = createHiddenBadge();
-        if (hiddenBadge) {
-            placeholderDiv.appendChild(hiddenBadge);
-        }
-        
-        if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-            const hotOfferBadge = document.createElement('div');
-            hotOfferBadge.className = 'hot-offer-badge';
-            hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-            hotOfferBadge.style.position = 'absolute';
-            hotOfferBadge.style.top = '12px';
-            hotOfferBadge.style.right = '12px';
-            hotOfferBadge.innerHTML = `
-                <span class="fire-wrap" aria-hidden="true">
-                    <span class="fire-back">🔥</span>
-                    <span class="fire-front">🔥</span>
-                    <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
-                    <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
-                </span>
-            `;
-            placeholderDiv.appendChild(hotOfferBadge);
-        }
         return;
     }
     
@@ -732,32 +780,6 @@ function showProductPageImage(index = 0) {
     slider.appendChild(sliderTrack);
     sliderContainer.appendChild(slider);
     
-    // Добавляем badge скрытого товара (слева вверху, только для админа)
-    const hiddenBadge = createHiddenBadge();
-    if (hiddenBadge) {
-        sliderContainer.appendChild(hiddenBadge);
-    }
-    
-    // Добавляем значок горящего предложения, если товар горящий
-    if (modalState.currentProduct && modalState.currentProduct.is_hot_offer) {
-        const hotOfferBadge = document.createElement('div');
-        hotOfferBadge.className = 'hot-offer-badge';
-        hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-        hotOfferBadge.style.position = 'absolute';
-        hotOfferBadge.style.top = '12px';
-        hotOfferBadge.style.right = '12px';
-        hotOfferBadge.style.zIndex = '12';
-        hotOfferBadge.innerHTML = `
-            <span class="fire-wrap" aria-hidden="true">
-                <span class="fire-back">🔥</span>
-                <span class="fire-front">🔥</span>
-                <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
-                <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
-            </span>
-        `;
-        sliderContainer.appendChild(hotOfferBadge);
-    }
-    
     // Добавляем индикатор точек (только если больше одного изображения)
     if (modalState.currentImages.length > 1) {
         const indicator = document.createElement('div');
@@ -787,103 +809,15 @@ function showProductPageImage(index = 0) {
 // Старая функция навигации удалена - теперь используется слайдер с встроенной навигацией
 
 // Функция для обновления значка горящего предложения на странице товара
+// На product-page бейджи на фото отключены — бейджи только в карточках каталога.
 function updateHotOfferBadgeOnProductPage(isHotOffer) {
-    const productPageImage = document.getElementById('product-page-image');
-    if (!productPageImage) {
-        return;
-    }
-    
-    // Находим существующий значок огонька
-    const existingBadge = productPageImage.querySelector('.hot-offer-badge');
-    
-    if (isHotOffer && !existingBadge) {
-        // Добавляем значок огонька
-        const imageContainer = productPageImage.querySelector('.product-page-image-container');
-        const placeholderDiv = productPageImage.querySelector('div[style*="display: flex"]');
-        
-        // Определяем, куда добавить значок (в контейнер изображения или в placeholder)
-        const targetContainer = imageContainer || placeholderDiv || productPageImage;
-        
-        const hotOfferBadge = document.createElement('div');
-        hotOfferBadge.className = 'hot-offer-badge';
-        hotOfferBadge.setAttribute('aria-label', 'Горящее предложение');
-        hotOfferBadge.style.position = 'absolute';
-        hotOfferBadge.style.top = '12px';
-        hotOfferBadge.style.right = '12px';
-        hotOfferBadge.style.left = 'auto';
-        hotOfferBadge.style.zIndex = '12';
-        hotOfferBadge.innerHTML = `
-            <span class="fire-wrap" aria-hidden="true">
-                <span class="fire-back">🔥</span>
-                <span class="fire-front">🔥</span>
-                <i class="spark s1"></i><i class="spark s2"></i><i class="spark s3"></i><i class="spark s4"></i><i class="spark s5"></i>
-                <i class="spark s6"></i><i class="spark s7"></i><i class="spark s8"></i><i class="spark s9"></i><i class="spark s10"></i>
-            </span>
-        `;
-        targetContainer.appendChild(hotOfferBadge);
-    } else if (!isHotOffer && existingBadge) {
-        // Удаляем значок огонька
-        existingBadge.remove();
-    }
+    // Ничего не делаем: на странице товара бейджи на фото не показываем.
 }
 
 // Функция для обновления badge скрытого товара на странице товара
+// На product-page бейджи на фото отключены — бейджи только в карточках каталога.
 function updateHiddenBadgeOnProductPage(isHidden, prod) {
-    const productPageImage = document.getElementById('product-page-image');
-    if (!productPageImage) {
-        return;
-    }
-    
-    // Проверяем, является ли товар скрытым для админа
-    const appContext = appContextGetter ? appContextGetter() : null;
-    const isHiddenForAdmin = isHidden && appContext && appContext.role === 'owner' && prod && prod.user_id === appContext.shop_owner_id;
-    
-    // Находим существующий badge скрытого товара
-    const existingBadge = productPageImage.querySelector('.hidden-badge');
-    
-    if (isHiddenForAdmin && !existingBadge) {
-        // Добавляем badge скрытого товара
-        const imageContainer = productPageImage.querySelector('.product-page-image-container');
-        const placeholderDiv = productPageImage.querySelector('div[style*="display: flex"]');
-        
-        // Определяем, куда добавить badge (в контейнер изображения или в placeholder)
-        const targetContainer = imageContainer || placeholderDiv || productPageImage;
-        
-        const hiddenBadge = document.createElement('div');
-        hiddenBadge.className = 'hidden-badge';
-        hiddenBadge.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M12 9C13.6569 9 15 10.3431 15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
-        `;
-        hiddenBadge.setAttribute('aria-label', 'Скрыт от клиентов');
-        hiddenBadge.style.cssText = `
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            background: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            color: #ffffff;
-            padding: 8px;
-            border-radius: 50%;
-            width: 36px;
-            height: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 15;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        `;
-        hiddenBadge.querySelector('svg').style.cssText = 'width: 100%; height: 100%;';
-        targetContainer.appendChild(hiddenBadge);
-    } else if (!isHiddenForAdmin && existingBadge) {
-        // Удаляем badge скрытого товара
-        existingBadge.remove();
-    }
+    // Ничего не делаем: на странице товара бейджи на фото не показываем.
 }
 
 // Показ страницы товара (вместо модального окна)
@@ -907,6 +841,9 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     const mainContent = document.getElementById('main-content');
     const favoritesPage = document.getElementById('favorites-page');
     const cartPage = document.getElementById('cart-page');
+    const cartPageNew = document.getElementById('cart-page-new');
+    const operationDetailPage = document.getElementById('operation-detail-page');
+    const fromOperationDetail = operationDetailPage && (operationDetailPage.style.display === 'block' || operationDetailPage.style.display === 'flex');
     
     if (!productPage) {
         console.error('❌ [PRODUCT PAGE] Product page element not found!');
@@ -921,20 +858,24 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
         navigationHistory = 'admin';
         adminClientId = clientId || (typeof window !== 'undefined' ? window.adminClientId : null); // Сохраняем ID клиента для возврата
         console.log('[PRODUCT PAGE] Coming from admin page, clientId:', adminClientId, 'fromAdmin:', fromAdmin);
+    } else if (fromOperationDetail) {
+        navigationHistory = 'operation-detail';
+        adminClientId = null;
+        console.log('[PRODUCT PAGE] Coming from operation detail page');
     } else {
         // Если НЕ из админки, ВСЕГДА сбрасываем историю навигации админки
-        // Это важно для случая, когда пользователь открывает товар с главной страницы после перехода из админки
         if (favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex')) {
             navigationHistory = 'favorites';
-            adminClientId = null; // Сбрасываем ID клиента, если не из админки
+            adminClientId = null;
             console.log('[PRODUCT PAGE] Coming from favorites page, resetting admin history');
-        } else if (cartPage && (cartPage.style.display === 'block' || cartPage.style.display === 'flex')) {
+        } else if ((cartPageNew && (cartPageNew.style.display === 'block' || cartPageNew.style.display === 'flex')) ||
+                   (cartPage && (cartPage.style.display === 'block' || cartPage.style.display === 'flex'))) {
             navigationHistory = 'cart';
-            adminClientId = null; // Сбрасываем ID клиента, если не из админки
+            adminClientId = null;
             console.log('[PRODUCT PAGE] Coming from cart page, resetting admin history');
         } else {
             navigationHistory = 'main';
-            adminClientId = null; // Сбрасываем ID клиента, если не из админки
+            adminClientId = null;
             console.log('[PRODUCT PAGE] Coming from main page, resetting admin history. fromAdmin:', fromAdmin);
         }
     }
@@ -981,13 +922,18 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     // Активируем блокировку горизонтального скролла
     enableHorizontalScrollBlock();
     
-    // Скрываем все страницы и показываем страницу товара
-    const adminPage = document.getElementById('admin-page');
-    if (adminPage) adminPage.style.display = 'none';
-    if (mainContent) mainContent.style.display = 'none';
-    if (favoritesPage) favoritesPage.style.display = 'none';
-    if (cartPage) cartPage.style.display = 'none';
+    // Единый способ: скрыть все страницы, затем показать страницу товара
+    hideAllPages();
     productPage.style.display = 'block';
+    
+    // Высота верхнего меню для позиции toast (ниже меню) — безопасно, не бросаем ошибок
+    try {
+        const productTopMenu = document.querySelector('.product-new-top-menu');
+        const menuHeight = (productTopMenu && productTopMenu.offsetHeight) ? productTopMenu.offsetHeight : 64;
+        if (productPage.style && typeof productPage.style.setProperty === 'function') {
+            productPage.style.setProperty('--product-top-menu-height', String(menuHeight) + 'px');
+        }
+    } catch (_) { /* игнорируем */ }
     
     // Сбрасываем позицию скролла при открытии новой карточки товара
     // Используем несколько способов для надежности
@@ -1059,6 +1005,14 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     // Получаем актуальный appContext
     const appContext = appContextGetter ? appContextGetter() : null;
     
+    // Класс для отступов контента: админ (без bottom-sheet) / клиент
+    productPage.classList.remove('is-admin', 'is-client');
+    if (appContext && appContext.role === 'client') {
+        productPage.classList.add('is-client');
+    } else if (appContext && appContext.role === 'owner') {
+        productPage.classList.add('is-admin');
+    }
+    
     // Отслеживаем просмотр конкретного товара (только для клиентов, не для владельца)
     if (appContext && appContext.role === 'client' && appContext.shop_owner_id) {
         trackShopVisit(appContext.shop_owner_id, prod.id).catch(err => {
@@ -1066,23 +1020,20 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
         });
     }
     
-    // Управление горящим предложением (только для владельца) - сразу после фото
-    const productPageHotOfferControl = document.getElementById('product-page-hot-offer-control');
+    // Управление горящим предложением и видимостью (только для владельца) — в верхнем меню, компактные тумблеры с emoji
+    const productTopMenuAdminToggles = document.getElementById('product-top-menu-admin-toggles');
     if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
-        productPageHotOfferControl.style.display = 'block';
-        productPageHotOfferControl.innerHTML = '';
-        
-        const hotOfferContainer = document.createElement('div');
-        hotOfferContainer.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--bg-glass); backdrop-filter: blur(10px); border-radius: 12px; margin: 12px 0;';
-        
-        const hotOfferLabel = document.createElement('div');
-        hotOfferLabel.style.cssText = 'display: flex; align-items: center; gap: 8px;';
-        hotOfferLabel.innerHTML = '<span style="font-size: 20px;">🔥</span><span style="font-weight: 600;">Горящее предложение</span>';
-        
+        productTopMenuAdminToggles.style.display = 'flex';
+        productTopMenuAdminToggles.innerHTML = '';
+
+        const hotItem = document.createElement('div');
+        hotItem.className = 'product-top-menu-toggle-item';
+        const hotOfferEmoji = document.createElement('span');
+        hotOfferEmoji.className = 'product-top-menu-toggle-emoji';
+        hotOfferEmoji.textContent = '🔥';
         const hotOfferToggle = document.createElement('label');
-        hotOfferToggle.className = 'toggle-switch';
+        hotOfferToggle.className = 'toggle-switch toggle--sm';
         hotOfferToggle.style.cssText = 'margin: 0;';
-        
         const toggleInput = document.createElement('input');
         toggleInput.type = 'checkbox';
         toggleInput.checked = prod.is_hot_offer || false;
@@ -1091,46 +1042,35 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
             try {
                 await toggleHotOffer(prod.id, appContext.shop_owner_id, isHotOffer);
                 prod.is_hot_offer = isHotOffer;
-                
-                // Обновляем значок огонька на странице товара
+                showNotification(
+                    isHotOffer ? '🔥 Горящее предложение: ВКЛЮЧЕНО. Товар выделен на витрине.' : '🔥 Горящее предложение: ВЫКЛЮЧЕНО. Товар больше не выделяется.',
+                    isHotOffer ? 'success' : 'error',
+                    { anchor: 'product-page' }
+                );
                 updateHotOfferBadgeOnProductPage(isHotOffer);
-                
-                // Обновляем визуальное отображение на карточках
-                if (loadDataCallback) {
-                    setTimeout(() => {
-                        loadDataCallback();
-                    }, 300);
-                }
+                if (loadDataCallback) setTimeout(() => loadDataCallback(), 300);
             } catch (error) {
                 console.error('Error toggling hot offer:', error);
                 alert('Ошибка при изменении статуса: ' + error.message);
-                toggleInput.checked = !isHotOffer; // Возвращаем предыдущее значение
+                toggleInput.checked = !isHotOffer;
             }
         };
-        
         const toggleSlider = document.createElement('span');
         toggleSlider.className = 'toggle-slider';
-        
         hotOfferToggle.appendChild(toggleInput);
         hotOfferToggle.appendChild(toggleSlider);
-        
-        hotOfferContainer.appendChild(hotOfferLabel);
-        hotOfferContainer.appendChild(hotOfferToggle);
-        productPageHotOfferControl.appendChild(hotOfferContainer);
-        
-        // Добавляем тумблер для скрытия товара
-        const hiddenContainer = document.createElement('div');
-        hiddenContainer.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--bg-glass); backdrop-filter: blur(10px); border-radius: 12px; margin: 12px 0;';
-        
-        const hiddenLabel = document.createElement('div');
-        hiddenLabel.style.cssText = 'display: flex; align-items: center; gap: 8px;';
-        const eyeIcon = prod.is_hidden ? '👁️‍🗨️' : '👁️';
-        hiddenLabel.innerHTML = `<span style="font-size: 20px;">${eyeIcon}</span><span style="font-weight: 600;">${prod.is_hidden ? 'Скрыт от клиентов' : 'Виден клиентам'}</span>`;
-        
+        hotItem.appendChild(hotOfferEmoji);
+        hotItem.appendChild(hotOfferToggle);
+        productTopMenuAdminToggles.appendChild(hotItem);
+
+        const visItem = document.createElement('div');
+        visItem.className = 'product-top-menu-toggle-item';
+        const hiddenEmoji = document.createElement('span');
+        hiddenEmoji.className = 'product-top-menu-toggle-emoji';
+        hiddenEmoji.textContent = prod.is_hidden ? '👁️‍🗨️' : '👁️';
         const hiddenToggle = document.createElement('label');
-        hiddenToggle.className = 'toggle-switch';
+        hiddenToggle.className = 'toggle-switch toggle--sm';
         hiddenToggle.style.cssText = 'margin: 0;';
-        
         const hiddenToggleInput = document.createElement('input');
         hiddenToggleInput.type = 'checkbox';
         hiddenToggleInput.checked = prod.is_hidden || false;
@@ -1139,89 +1079,56 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
             try {
                 await updateProductHiddenAPI(prod.id, appContext.shop_owner_id, isHidden);
                 prod.is_hidden = isHidden;
-                // Обновляем иконку
-                hiddenLabel.innerHTML = `<span style="font-size: 20px;">${isHidden ? '👁️‍🗨️' : '👁️'}</span><span style="font-weight: 600;">${isHidden ? 'Скрыт от клиентов' : 'Виден клиентам'}</span>`;
-                
-                // Обновляем badge скрытого товара на странице товара
+                hiddenEmoji.textContent = isHidden ? '👁️‍🗨️' : '👁️';
+                showNotification(
+                    isHidden ? '👁‍🗨️ Товар СКРЫТ. Не показывается на витрине клиентам.' : '👁 Товар ВИДЕН. Показывается на витрине клиентам.',
+                    isHidden ? 'error' : 'success',
+                    { anchor: 'product-page' }
+                );
                 updateHiddenBadgeOnProductPage(isHidden, prod);
-                
-                // Обновляем визуальное отображение на карточках
-                if (loadDataCallback) {
-                    setTimeout(() => {
-                        loadDataCallback();
-                    }, 300);
-                }
+                if (loadDataCallback) setTimeout(() => loadDataCallback(), 300);
             } catch (error) {
                 console.error('Error toggling hidden status:', error);
                 alert('Ошибка при изменении статуса скрытия: ' + error.message);
-                hiddenToggleInput.checked = !isHidden; // Возвращаем предыдущее значение
+                hiddenToggleInput.checked = !isHidden;
             }
         };
-        
         const hiddenToggleSlider = document.createElement('span');
         hiddenToggleSlider.className = 'toggle-slider';
-        
         hiddenToggle.appendChild(hiddenToggleInput);
         hiddenToggle.appendChild(hiddenToggleSlider);
-        
-        hiddenContainer.appendChild(hiddenLabel);
-        hiddenContainer.appendChild(hiddenToggle);
-        productPageHotOfferControl.appendChild(hiddenContainer);
+        visItem.appendChild(hiddenEmoji);
+        visItem.appendChild(hiddenToggle);
+        productTopMenuAdminToggles.appendChild(visItem);
     } else {
-        productPageHotOfferControl.style.display = 'none';
+        productTopMenuAdminToggles.style.display = 'none';
     }
     
-    // Кнопки управления товаром (только для владельца)
+    // Блок кнопок в контенте всегда скрыт; управление перенесено в top-menu (админ-иконки)
     const productPageEditControl = document.getElementById('product-page-edit-control');
-    if (productPageEditControl) {
-        productPageEditControl.innerHTML = '';
+    if (productPageEditControl) productPageEditControl.style.display = 'none';
     
-    if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
-        // Кнопка редактирования
-        const editBtn = document.createElement('button');
-        editBtn.className = 'reserve-btn btn-edit';
-        editBtn.textContent = '✏️ Редактировать';
-        editBtn.onclick = () => {
-            if (showEditProductModalCallback) {
-                showEditProductModalCallback(prod);
+    const productTopMenuAdminActions = document.getElementById('product-top-menu-admin-actions');
+    if (productTopMenuAdminActions) {
+        if (appContext && appContext.role === 'owner' && prod.user_id === appContext.shop_owner_id) {
+            productTopMenuAdminActions.style.display = 'flex';
+            const isForSale = prod.is_for_sale === true || prod.is_for_sale === 1 || prod.is_for_sale === '1' ||
+                prod.is_for_sale === 'true' || String(prod.is_for_sale).toLowerCase() === 'true';
+            const editBtn = productTopMenuAdminActions.querySelector('[data-action="edit"]');
+            const soldBtn = productTopMenuAdminActions.querySelector('[data-action="sold"]');
+            const deleteBtn = productTopMenuAdminActions.querySelector('[data-action="delete"]');
+            if (soldBtn) soldBtn.style.display = isForSale ? 'none' : 'flex';
+            if (editBtn) {
+                editBtn.onclick = () => { if (showEditProductModalCallback) showEditProductModalCallback(prod); };
             }
-        };
-            productPageEditControl.appendChild(editBtn);
-        
-        // Проверяем, является ли товар для покупки (is_for_sale)
-        const isForSale = prod.is_for_sale === true || 
-                         prod.is_for_sale === 1 || 
-                         prod.is_for_sale === '1' ||
-                         prod.is_for_sale === 'true' ||
-                         String(prod.is_for_sale).toLowerCase() === 'true';
-        
-        // Кнопка "Продан" - показываем только для обычных товаров (не для покупки)
-        if (!isForSale) {
-            const soldBtn = document.createElement('button');
-            soldBtn.className = 'reserve-btn btn-sold';
-            soldBtn.textContent = '✅ Продан';
-            soldBtn.onclick = () => {
-                if (markAsSoldCallback) {
-                    markAsSoldCallback(prod.id, prod);
-                }
-            };
-                productPageEditControl.appendChild(soldBtn);
-        }
-        
-        // Кнопка "Удалить"
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'reserve-btn btn-delete';
-        deleteBtn.textContent = '🗑️ Удалить';
-        deleteBtn.onclick = () => {
-            if (deleteProductCallback) {
-                deleteProductCallback(prod.id);
+            if (soldBtn) {
+                soldBtn.onclick = () => { if (markAsSoldCallback) markAsSoldCallback(prod.id, prod); };
             }
-        };
-            productPageEditControl.appendChild(deleteBtn);
-        
-            productPageEditControl.style.display = 'flex';
-    } else {
-            productPageEditControl.style.display = 'none';
+            if (deleteBtn) {
+                deleteBtn.onclick = () => { if (deleteProductCallback) deleteProductCallback(prod.id); };
+            }
+        } else {
+            productTopMenuAdminActions.style.display = 'none';
         }
     }
     
@@ -1230,40 +1137,139 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     if (productPageName) {
         productPageName.textContent = prod.name;
     }
-    
-    const productPageDescription = document.getElementById('product-page-description');
-    if (prod.description) {
-        productPageDescription.textContent = prod.description;
-        productPageDescription.style.display = 'block';
-    } else {
-        productPageDescription.style.display = 'none';
-    }
-    
+
+    // Блок цен на странице товара: подпись слева, цена справа (отдельный рендер только для product-page)
     const productPagePriceContainer = document.getElementById('product-page-price-container');
-    productPagePriceContainer.innerHTML = '';
-    const priceSpan = document.createElement('span');
-    priceSpan.className = 'product-price';
-    
-    // Используем функцию из priceUtils.js для форматирования цены
-    const priceDisplay = getProductPriceDisplay(prod);
-    priceSpan.textContent = priceDisplay;
-    
-    // Старая цена при скидке (только для обычных товаров)
-    const isForSaleModal = prod.is_for_sale === true || 
-                     prod.is_for_sale === 1 || 
-                     prod.is_for_sale === '1' ||
-                     prod.is_for_sale === 'true' ||
-                     String(prod.is_for_sale).toLowerCase() === 'true';
-    
-    if (!isForSaleModal && prod.discount > 0 && prod.price != null && prod.price > 0) {
-        const oldPriceSpan = document.createElement('span');
-        oldPriceSpan.className = 'old-price';
-        oldPriceSpan.textContent = `${prod.price} ₽`;
-        productPagePriceContainer.appendChild(oldPriceSpan);
+    productPagePriceContainer.innerHTML = renderProductPagePricesBlock(prod);
+
+    // Блок доставки: данные из товара (product_delivery с страницы редактирования ИЛИ delivery_time/delivery_price из бота); скрыт, если нет данных
+    const productPageDelivery = document.getElementById('product-page-delivery');
+    if (productPageDelivery) {
+        const deliveryOpt = prod.delivery;
+        const time = prod.delivery_time ?? prod.deliveryTime;
+        const priceSimple = prod.delivery_price ?? prod.deliveryPrice;
+        const hasSimpleTime = time != null && String(time).trim().length > 0;
+        const hasSimplePrice = priceSimple != null && priceSimple !== '' && (Number(priceSimple) === 0 || Number(priceSimple) > 0);
+        const hasEditDelivery = deliveryOpt && (
+            deliveryOpt.is_delivery_enabled === true ||
+            deliveryOpt.is_pickup_enabled === true ||
+            (deliveryOpt.delivery_price != null && deliveryOpt.delivery_price !== '') ||
+            (deliveryOpt.pickup_address != null && String(deliveryOpt.pickup_address).trim().length > 0) ||
+            (deliveryOpt.delivery_time != null && String(deliveryOpt.delivery_time).trim().length > 0)
+        );
+        const hasAny = hasSimpleTime || hasSimplePrice || hasEditDelivery;
+        if (!hasAny) {
+            productPageDelivery.style.display = 'none';
+            productPageDelivery.innerHTML = '';
+        } else {
+            productPageDelivery.style.display = '';
+            const lines = [];
+            const escapeText = (s) => {
+                if (s == null) return '';
+                const div = document.createElement('div');
+                div.textContent = String(s);
+                return div.innerHTML;
+            };
+            if (hasEditDelivery) {
+                if (deliveryOpt.delivery_time != null && String(deliveryOpt.delivery_time).trim()) {
+                    lines.push(`<p>Срок доставки: ${escapeText(deliveryOpt.delivery_time.trim())}</p>`);
+                }
+                if (deliveryOpt.delivery_price != null && deliveryOpt.delivery_price !== '') {
+                    const num = Number(deliveryOpt.delivery_price);
+                    const formatted = Number.isFinite(num) ? (num % 1 === 0 ? String(Math.round(num)) : String(num)) : String(deliveryOpt.delivery_price);
+                    lines.push(`<p>Стоимость доставки: ${formatted} ₽</p>`);
+                }
+                if (deliveryOpt.pickup_address != null && String(deliveryOpt.pickup_address).trim()) {
+                    lines.push(`<p>Адрес самовывоза: ${escapeText(deliveryOpt.pickup_address.trim())}</p>`);
+                }
+            }
+            if (!lines.length && (hasSimpleTime || hasSimplePrice)) {
+                if (hasSimpleTime) lines.push(`<p>Доставка: ${escapeText(time)}</p>`);
+                if (hasSimplePrice) {
+                    const num = Number(priceSimple);
+                    const formatted = Number.isFinite(num) ? (num % 1 === 0 ? String(Math.round(num)) : String(num)) : String(priceSimple);
+                    lines.push(`<p>Стоимость доставки: ${formatted} ₽</p>`);
+                }
+            }
+            productPageDelivery.innerHTML = lines.join('');
+        }
     }
-    
-    productPagePriceContainer.appendChild(priceSpan);
-    
+
+    // Заглушка отзывов (без карточки)
+    const productPageReviews = document.getElementById('product-page-reviews');
+    if (productPageReviews) {
+        productPageReviews.textContent = '⭐ 4.8 · 32 отзыва';
+    }
+
+    // Блок "О товаре": описание + кнопка "Читать далее" / "Свернуть"
+    const productPageDescription = document.getElementById('product-page-description');
+    const productPageAboutSection = document.getElementById('product-page-about-section');
+    const productPageDescriptionToggle = document.getElementById('product-page-description-toggle');
+    if (productPageDescription && productPageAboutSection && productPageDescriptionToggle) {
+        const descText = prod.description && String(prod.description).trim() ? prod.description.trim() : 'Описание появится скоро';
+        productPageDescription.textContent = descText;
+        productPageDescription.style.removeProperty('display');
+        productPageAboutSection.classList.remove('description-expanded');
+        productPageDescription.classList.remove('expanded');
+        productPageDescription.classList.add('collapsed');
+        const needToggle = descText.length > 120;
+        if (needToggle) {
+            productPageDescriptionToggle.style.display = 'inline-block';
+            productPageDescriptionToggle.textContent = 'Читать далее';
+            productPageDescriptionToggle.onclick = () => {
+                const isExpanded = productPageAboutSection.classList.contains('description-expanded');
+                if (isExpanded) {
+                    productPageAboutSection.classList.remove('description-expanded');
+                    productPageDescription.classList.remove('expanded');
+                    productPageDescription.classList.add('collapsed');
+                    productPageDescription.style.removeProperty('display');
+                    productPageDescriptionToggle.textContent = 'Читать далее';
+                } else {
+                    productPageAboutSection.classList.add('description-expanded');
+                    productPageDescription.classList.remove('collapsed');
+                    productPageDescription.classList.add('expanded');
+                    productPageDescription.style.display = 'block';
+                    productPageDescriptionToggle.textContent = 'Свернуть';
+                }
+            };
+        } else {
+            productPageDescriptionToggle.style.display = 'none';
+            productPageDescription.classList.remove('collapsed');
+            productPageDescription.classList.add('expanded');
+        }
+    }
+
+    // Блок "Все характеристики": заполняем из prod.characteristics или скрываем, если пусто
+    const productPageSpecsSection = document.getElementById('product-page-specs-section');
+    const productPageSpecsToggle = document.getElementById('product-page-specs-toggle');
+    const productPageSpecsContent = document.getElementById('product-page-specs-content');
+    if (productPageSpecsSection && productPageSpecsToggle && productPageSpecsContent) {
+        const chars = prod.characteristics && Array.isArray(prod.characteristics) ? prod.characteristics : [];
+        if (chars.length > 0) {
+            productPageSpecsSection.style.display = '';
+            productPageSpecsContent.innerHTML = chars
+                .map(c => {
+                    const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                    return `<div class="product-page-spec-row"><span class="product-page-spec-label">${esc(c.name)}</span><span class="product-page-spec-value">${esc(c.value)}</span></div>`;
+                })
+                .join('');
+        } else {
+            productPageSpecsSection.style.display = 'none';
+        }
+        productPageSpecsSection.classList.remove('expanded');
+        productPageSpecsToggle.setAttribute('aria-expanded', 'false');
+        productPageSpecsToggle.onclick = () => {
+            const isExpanded = productPageSpecsSection.classList.contains('expanded');
+            if (isExpanded) {
+                productPageSpecsSection.classList.remove('expanded');
+                productPageSpecsToggle.setAttribute('aria-expanded', 'false');
+            } else {
+                productPageSpecsSection.classList.add('expanded');
+                productPageSpecsToggle.setAttribute('aria-expanded', 'true');
+            }
+        };
+    }
+
     // Количество товара на странице
     const productPageQuantityDiv = document.getElementById('product-page-quantity');
     if (productPageQuantityDiv) {
@@ -1438,122 +1444,9 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
         }
     }
     
-    // Показываем кнопку резервации только если:
-    // 1. Это не наш магазин (клиент)
-    // 2. Нет активной резервации ИЛИ можно еще резервировать (для товаров с quantity > 1)
-    // 3. Резервация включена в настройках магазина
-    // 4. Количество товаров включено (quantity_enabled)
-    const shopSettings = getCurrentShopSettings();
-    const quantityEnabled = shopSettings ? (shopSettings.quantity_enabled !== false) : true;
-    const reservationsEnabled = shopSettings ? (shopSettings.reservations_enabled === true) : true; // По умолчанию включено
-    
-    // Проверяем, не является ли товар под заказ
-    // Преобразуем в boolean для надежности (может быть true, false, 1, 0, "true", "false", "1", "0")
-    const isMadeToOrder = prod.is_made_to_order === true || 
-                          prod.is_made_to_order === 1 || 
-                          prod.is_made_to_order === '1' ||
-                          prod.is_made_to_order === 'true' ||
-                          String(prod.is_made_to_order).toLowerCase() === 'true';
-    
-    console.log('🔒 Reservation check:', {
-        hasActiveReservation,
-        activeReservationsCount,
-        productQuantity,
-        canStillReserve,
-        role: appContext.role,
-        can_reserve: appContext.permissions.can_reserve,
-        reservationsEnabled,
-        quantityEnabled,
-        is_made_to_order: prod.is_made_to_order,
-        isMadeToOrder: isMadeToOrder
-    });
-    
-    // Проверяем, является ли товар для продажи (is_for_sale) - когда нам продают товар
-    const isForSale = prod.is_for_sale === true || 
-                     prod.is_for_sale === 1 || 
-                     prod.is_for_sale === '1' ||
-                     prod.is_for_sale === 'true' ||
-                     String(prod.is_for_sale).toLowerCase() === 'true';
-    
-    // Проверяем, включена ли продажа товара клиентам (is_sale_enabled) - когда мы продаем товар
-    const isSaleEnabled = prod.is_sale_enabled === true || 
-                         prod.is_sale_enabled === 1 || 
-                         prod.is_sale_enabled === '1' ||
-                         prod.is_sale_enabled === 'true' ||
-                         String(prod.is_sale_enabled).toLowerCase() === 'true';
-    
-    // Для товаров с is_for_sale показываем кнопку "Продать" вместо резервации/заказа
-    if (isForSale && appContext.role === 'client') {
-        const sellBtn = document.createElement('button');
-        sellBtn.className = 'reserve-btn';
-        sellBtn.style.background = 'rgba(255, 149, 0, 0.95)';
-        sellBtn.textContent = '🛒 Продать';
-        sellBtn.onclick = () => {
-            if (showPurchaseModalCallback) {
-                showPurchaseModalCallback(prod);
-            }
-        };
-        productPageReservationButton.appendChild(sellBtn);
-    } else if (isSaleEnabled && appContext.role === 'client') {
-        // Для товаров с is_sale_enabled показываем кнопку "Купить"
-        const buyBtn = document.createElement('button');
-        buyBtn.className = 'reserve-btn';
-        buyBtn.style.background = 'rgba(90, 200, 250, 0.95)';
-        buyBtn.textContent = '🛒 Купить';
-        buyBtn.onclick = () => {
-            console.log('🛒 [BUY BUTTON] Clicked on buy button for product:', prod.id, prod.name);
-            console.log('🛒 [BUY BUTTON] showSaleOrderModalCallback:', showSaleOrderModalCallback);
-            // Показываем форму оформления заказа для покупки
-            if (showSaleOrderModalCallback) {
-                console.log('🛒 [BUY BUTTON] Calling showSaleOrderModalCallback...');
-                showSaleOrderModalCallback(prod);
-            } else {
-                console.error('❌ [BUY BUTTON] showSaleOrderModalCallback is not set!');
-                alert('❌ Ошибка: функция оформления заказа не инициализирована');
-            }
-        };
-        productPageReservationButton.appendChild(buyBtn);
-    } else {
-        // Показываем кнопку резервации, если:
-        // - Нет активной резервации ИЛИ
-        // - Есть активная резервация, но можно еще резервировать (quantity > active_count) - только если quantity_enabled включен
-        // - И резервация включена
-        // - И товар НЕ под заказ (товары под заказ нельзя резервировать)
-        // ВАЖНО: Если quantity_enabled = false, резервация работает, но без показа количества
-        const shouldShowReserveButton = appContext.role === 'client' && 
-                                         appContext.permissions.can_reserve && 
-                                         reservationsEnabled &&
-                                         !isMadeToOrder && // Товары под заказ нельзя резервировать
-                                         (quantityEnabled ? (!hasActiveReservation || canStillReserve) : !hasActiveReservation); // Если quantity_enabled выключен, просто проверяем отсутствие резервации
-        
-        if (shouldShowReserveButton) {
-            const reserveBtn = document.createElement('button');
-            reserveBtn.className = 'reserve-btn';
-            reserveBtn.textContent = '🔒 Зарезервировать';
-            reserveBtn.onclick = () => {
-                if (showReservationModalCallback) {
-                    showReservationModalCallback(prod.id);
-                }
-            };
-            productPageReservationButton.appendChild(reserveBtn);
-        } else if (!reservationsEnabled) {
-            console.log('🔒 Reservations disabled - button not shown');
-        }
-        
-        // Показываем кнопку "Заказать" для товаров под заказ (только для клиентов)
-        if (isMadeToOrder && appContext.role === 'client') {
-            const orderBtn = document.createElement('button');
-            orderBtn.className = 'reserve-btn';
-            orderBtn.style.background = 'rgba(90, 200, 250, 0.95)';
-            orderBtn.textContent = '🛒 Заказать';
-            orderBtn.onclick = () => {
-                if (showOrderModalCallback) {
-                    showOrderModalCallback(prod.id);
-                }
-            };
-            productPageReservationButton.appendChild(orderBtn);
-        }
-    }
+    // КНОПКИ ДЕЙСТВИЙ УДАЛЕНЫ - теперь используется Bottom Sheet
+    // Все действия (Зарезервировать, Заказать, Продать, Купить) выполняются через Bottom Sheet
+    // См. функцию updateProductPageBottomSheet() ниже
     
     // Добавляем кнопку избранного на страницу товара (только для клиентов)
     const productPageImage = document.getElementById('product-page-image');
@@ -1702,12 +1595,21 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
         // Если пользователь не клиент, скрываем кнопку избранного
         productTopMenuFavorite.style.display = 'none';
     }
+
+    // Режим «из детали операции»: только просмотр, без лайка и корзины
+    if (fromOperationDetail) {
+        if (productTopMenuFavorite) productTopMenuFavorite.style.display = 'none';
+        const productPageBottomSheet = document.getElementById('product-page-bottom-sheet');
+        if (productPageBottomSheet) productPageBottomSheet.style.display = 'none';
+    }
     
     // Показываем изображение на странице товара
     showProductPageImage(0);
     
-    // Инициализируем и обновляем bottom sheet для страницы товара
-    updateProductPageBottomSheet(prod);
+    // Не вызывать bottom sheet / ensureProductInCart при открытии со страницы операции (order/purchase/sale)
+    if (!fromOperationDetail) {
+        updateProductPageBottomSheet(prod);
+    }
     
     // Дополнительно сбрасываем скролл после загрузки изображений
     // Используем несколько попыток для надежности
@@ -1736,7 +1638,51 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
 /**
  * Обновление bottom sheet на странице товара (постоянно видимый)
  */
-async function updateProductPageBottomSheet(product) {
+export async function updateProductPageBottomSheet(product) {
+    // ========== ИСПРАВЛЕНИЕ: Получаем СВЕЖИЙ продукт из кэша перед обновлением UI ==========
+    // Используем свежие данные из allProducts, чтобы гарантировать актуальность action_type и can_add_to_cart
+    let freshProduct = product;
+    try {
+        // Пытаемся получить свежий продукт из кэша
+        if (typeof window.getAllProducts === 'function') {
+            const allProducts = window.getAllProducts();
+            if (Array.isArray(allProducts)) {
+                const cachedProduct = allProducts.find(p => 
+                    p && (p.id === product.id || 
+                         (p.sync_product_id && p.sync_product_id === product.id) ||
+                         (product.sync_product_id && p.id === product.sync_product_id))
+                );
+                if (cachedProduct) {
+                    freshProduct = cachedProduct;
+                    console.log(`[PRODUCT MODAL] Using fresh product from cache for ${product.id}, action_type=${cachedProduct.action_type}, can_add_to_cart=${cachedProduct.can_add_to_cart}`);
+                    
+                    // ========== DEBUG: Логирование найденного товара в кэше ==========
+                    const DEBUG_BOTTOM_SHEET_CACHE = true; // Установить в false для отключения
+                    if (DEBUG_BOTTOM_SHEET_CACHE) {
+                        console.log(`[PRODUCT MODAL DEBUG] Found product in cache for ${product.id}:`, {
+                            productId: product.id,
+                            cachedProductId: cachedProduct.id,
+                            action_type: cachedProduct.action_type,
+                            can_add_to_cart: cachedProduct.can_add_to_cart,
+                            is_sale_enabled: cachedProduct.is_sale_enabled,
+                            is_made_to_order: cachedProduct.is_made_to_order,
+                            is_reservation_enabled: cachedProduct.is_reservation_enabled
+                        });
+                    }
+                    // ========== КОНЕЦ DEBUG ==========
+                }
+            }
+        }
+    } catch (cacheError) {
+        // Если не удалось получить из кэша, используем переданный продукт
+        console.warn(`[PRODUCT MODAL] Could not get fresh product from cache:`, {
+            message: cacheError?.message || 'Unknown error',
+            stack: cacheError?.stack || '',
+            productId: product?.id
+        });
+    }
+    // ========== КОНЕЦ ИСПРАВЛЕНИЯ ==========
+    
     const productPageBottomSheet = document.getElementById('product-page-bottom-sheet');
     if (!productPageBottomSheet) {
         console.warn('⚠️ Product page bottom sheet not found');
@@ -1770,7 +1716,7 @@ async function updateProductPageBottomSheet(product) {
     try {
         const { getCartItems } = await import('../cart/cartStore.js');
         const cartItems = getCartItems();
-        const existingItem = cartItems.find(item => item.product.id === product.id);
+        const existingItem = cartItems.find(item => item.product.id === freshProduct.id);
         if (existingItem) {
             currentQuantity = existingItem.quantity || 1;
         }
@@ -1790,10 +1736,10 @@ async function updateProductPageBottomSheet(product) {
     // Изображение товара
     if (productImage) {
         let imageUrl = '';
-        if (product.images_urls && Array.isArray(product.images_urls) && product.images_urls.length > 0) {
-            imageUrl = product.images_urls[0];
-        } else if (product.image_url) {
-            imageUrl = product.image_url;
+        if (freshProduct.images_urls && Array.isArray(freshProduct.images_urls) && freshProduct.images_urls.length > 0) {
+            imageUrl = freshProduct.images_urls[0];
+        } else if (freshProduct.image_url) {
+            imageUrl = freshProduct.image_url;
         }
         
         if (imageUrl) {
@@ -1810,57 +1756,192 @@ async function updateProductPageBottomSheet(product) {
     
     // Название товара
     if (productName) {
-        productName.textContent = product.name || '';
+        productName.textContent = freshProduct.name || '';
     }
     
     // Цена товара
     if (productPrice) {
-        const priceDisplay = getProductPriceDisplay(product);
+        const priceDisplay = getProductPriceDisplay(freshProduct);
         productPrice.textContent = priceDisplay;
     }
     
-    // Количество
+    // Количество - устанавливаем ограничения и значение
     if (quantityInput) {
+        // Устанавливаем минимальное значение
+        quantityInput.min = 1;
+        
+        // Получаем максимальное доступное количество с учетом резерваций
+        const productQuantity = freshProduct.quantity !== undefined && freshProduct.quantity !== null ? freshProduct.quantity : null;
+        const activeReservationsCount = freshProduct.reservation && freshProduct.reservation.active_count 
+            ? freshProduct.reservation.active_count 
+            : 0;
+        const maxQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0
+            ? Math.max(0, productQuantity - activeReservationsCount)
+            : null;
+        
+        // Устанавливаем максимальное значение
+        if (maxQuantity !== null) {
+            quantityInput.max = maxQuantity;
+            // Если текущее количество больше доступного, ограничиваем его
+            if (currentQuantity > maxQuantity) {
+                currentQuantity = maxQuantity;
+            }
+        } else {
+            // Если количество неограниченно, убираем ограничение max
+            quantityInput.removeAttribute('max');
+        }
+        
+        // Устанавливаем временное значение до синхронизации
         quantityInput.value = currentQuantity;
+        
+        // СИНХРОНИЗАЦИЯ: Для резервации и заказа синхронизируем с store при открытии Bottom Sheet
+        // Используем динамический импорт без await, чтобы не блокировать
+        Promise.all([
+            import('../reservationStore.js').catch(() => null),
+            import('../orderStore.js').catch(() => null)
+        ]).then(([reservationStore, orderStore]) => {
+            try {
+                let storedQuantity = currentQuantity;
+                
+                // Проверяем количество для резервации
+                if (reservationStore) {
+                    const reservationQty = reservationStore.getReservationQuantity(freshProduct.id, currentQuantity);
+                    if (reservationQty >= 1 && (maxQuantity === null || reservationQty <= maxQuantity)) {
+                        storedQuantity = reservationQty;
+                    }
+                }
+                
+                // Проверяем количество для заказа (приоритет, если есть)
+                if (orderStore) {
+                    const orderQty = orderStore.getOrderQuantity(freshProduct.id, storedQuantity);
+                    if (orderQty >= 1 && (maxQuantity === null || orderQty <= maxQuantity)) {
+                        storedQuantity = orderQty;
+                    }
+                }
+                
+                // Используем сохраненное количество, если оно валидно
+                // Приоритет: заказ > резервация > корзина
+                if (storedQuantity >= 1 && (maxQuantity === null || storedQuantity <= maxQuantity)) {
+                    // Если сохраненное количество отличается от текущего, обновляем
+                    if (storedQuantity !== currentQuantity) {
+                        currentQuantity = storedQuantity;
+                        quantityInput.value = currentQuantity;
+                    } else {
+                        // Если совпадает, все равно обновляем для уверенности
+                        quantityInput.value = currentQuantity;
+                    }
+                } else {
+                    // Если сохраненное количество невалидно, используем текущее из корзины
+                    quantityInput.value = currentQuantity;
+                }
+                
+                // Сохраняем текущее количество в оба store
+                if (reservationStore) {
+                    reservationStore.setReservationQuantity(freshProduct.id, currentQuantity);
+                }
+                if (orderStore) {
+                    orderStore.setOrderQuantity(freshProduct.id, currentQuantity);
+                }
+            } catch (error) {
+                console.error('❌ Error syncing quantity on open:', error);
+            }
+        }).catch((error) => {
+            console.error('❌ Error importing stores:', error);
+        });
+        
+        // Убираем readonly, чтобы пользователь мог вводить значение
+        quantityInput.removeAttribute('readonly');
     }
     
-    // Определяем тип товара и показываем соответствующие кнопки
-    const isForSale = product.is_for_sale === true || 
-                     product.is_for_sale === 1 || 
-                     product.is_for_sale === '1' ||
-                     product.is_for_sale === 'true' ||
-                     String(product.is_for_sale).toLowerCase() === 'true';
+    // Определяем тип товара через единый helper (КРИТИЧНО для консистентности)
+    // Используем getProductActionType вместо локальной логики
+    let actionType = 'none';
+    let getProductActionType = null;
+    let getActionButtonText = null;
     
-    const isMadeToOrder = product.is_made_to_order === true || 
-                         product.is_made_to_order === 1 || 
-                         product.is_made_to_order === '1' ||
-                         product.is_made_to_order === 'true' ||
-                         String(product.is_made_to_order).toLowerCase() === 'true';
-    
-    // Проверяем настройки резервации
-    const shopSettings = getCurrentShopSettings();
-    const reservationsEnabled = shopSettings ? (shopSettings.reservations_enabled === true) : true;
-    const canReserve = appContext.role === 'client' && 
-                      appContext.permissions && 
-                      appContext.permissions.can_reserve && 
-                      reservationsEnabled &&
-                      !isMadeToOrder;
+    try {
+        // Динамический импорт для избежания проблем с порядком загрузки
+        const actionTypeModule = await import('../utils/productActionType.js');
+        getProductActionType = actionTypeModule.getProductActionType;
+        getActionButtonText = actionTypeModule.getActionButtonText;
+        
+        const shopSettings = getCurrentShopSettings();
+        actionType = getProductActionType(freshProduct, appContext, shopSettings);
+    } catch (error) {
+        console.error('❌ Error loading productActionType helper:', error);
+        // Fallback: используем старую логику только в случае ошибки
+        const isForSale = freshProduct.is_for_sale === true || 
+                         freshProduct.is_for_sale === 1 || 
+                         freshProduct.is_for_sale === '1' ||
+                         freshProduct.is_for_sale === 'true' ||
+                         String(freshProduct.is_for_sale).toLowerCase() === 'true';
+        
+        const isSaleEnabled = freshProduct.is_sale_enabled === true || 
+                             freshProduct.is_sale_enabled === 1 || 
+                             freshProduct.is_sale_enabled === '1' ||
+                             freshProduct.is_sale_enabled === 'true' ||
+                             String(freshProduct.is_sale_enabled).toLowerCase() === 'true';
+        
+        const isClientSale = freshProduct.is_client_sale === true || 
+                            freshProduct.is_client_sale === 1 || 
+                            freshProduct.is_client_sale === '1' ||
+                            freshProduct.is_client_sale === 'true' ||
+                            String(freshProduct.is_client_sale).toLowerCase() === 'true';
+        
+        const isMadeToOrder = freshProduct.is_made_to_order === true || 
+                             freshProduct.is_made_to_order === 1 || 
+                             freshProduct.is_made_to_order === '1' ||
+                             freshProduct.is_made_to_order === 'true' ||
+                             String(freshProduct.is_made_to_order).toLowerCase() === 'true';
+        
+        if (isForSale && appContext.role === 'client') {
+            actionType = 'purchase';
+        } else if ((isSaleEnabled || isClientSale) && appContext.role === 'client') {
+            actionType = 'sale';
+        } else if (isMadeToOrder && appContext.role === 'client') {
+            actionType = 'order';
+        } else {
+            const shopSettings = getCurrentShopSettings();
+            const reservationsEnabled = shopSettings ? (shopSettings.reservations_enabled === true) : true;
+            const canReserve = appContext.role === 'client' && 
+                              appContext.permissions && 
+                              appContext.permissions.can_reserve && 
+                              reservationsEnabled &&
+                              !isMadeToOrder &&
+                              !isSaleEnabled &&
+                              !isClientSale;
+            
+            if (canReserve) {
+                actionType = 'reserve';
+            }
+        }
+    }
     
     // Настраиваем кнопки в зависимости от типа товара
     if (primaryBtn) {
-        if (isForSale && appContext.role === 'client') {
-            primaryBtn.textContent = 'Продать сейчас';
-            primaryBtn.style.display = 'flex';
-        } else if (isMadeToOrder && appContext.role === 'client') {
-            primaryBtn.textContent = 'Заказать сейчас';
-            primaryBtn.style.display = 'flex';
-        } else if (canReserve) {
-            primaryBtn.textContent = 'Резервировать сейчас';
-            primaryBtn.style.display = 'flex';
+        // Используем helper для получения текста кнопки
+        if (getActionButtonText) {
+            primaryBtn.textContent = getActionButtonText(actionType);
         } else {
-            primaryBtn.textContent = 'Готово';
-            primaryBtn.style.display = 'flex';
+            // Fallback текст
+            switch (actionType) {
+                case 'sale':
+                    primaryBtn.textContent = 'Купить сейчас';
+                    break;
+                case 'reserve':
+                    primaryBtn.textContent = 'Резервировать сейчас';
+                    break;
+                case 'order':
+                    primaryBtn.textContent = 'Заказать сейчас';
+                    break;
+                case 'purchase':
+                    primaryBtn.textContent = 'Продать сейчас';
+                    break;
+                default:
+                    primaryBtn.textContent = 'Готово';
+            }
         }
+        primaryBtn.style.display = 'flex';
         
         // Обработчик основной кнопки
         primaryBtn.onclick = async (e) => {
@@ -1868,28 +1949,108 @@ async function updateProductPageBottomSheet(product) {
             e.preventDefault();
             
             try {
-                if (isForSale && appContext.role === 'client') {
-                    if (showSaleOrderModalCallback) {
-                        showSaleOrderModalCallback(product);
+                // ВАЛИДАЦИЯ: Проверяем количество перед действием
+                if (quantityInput) {
+                    let quantity = parseInt(quantityInput.value) || 1;
+                    const productQuantity = freshProduct.quantity !== undefined && freshProduct.quantity !== null ? freshProduct.quantity : null;
+                    const activeReservationsCount = freshProduct.reservation && freshProduct.reservation.active_count 
+                        ? freshProduct.reservation.active_count 
+                        : 0;
+                    const maxQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0
+                        ? Math.max(0, productQuantity - activeReservationsCount)
+                        : null;
+                    
+                    // Если количество превышает доступное, ограничиваем его
+                    if (maxQuantity !== null && quantity > maxQuantity) {
+                        quantity = maxQuantity;
+                        quantityInput.value = quantity;
+                        
+                        // Обновляем количество в корзине с валидированным значением
+                        try {
+                            const { updateCartItemQuantity } = await import('../cart/cartStore.js');
+                            await updateCartItemQuantity(product.id, quantity);
+                            if (window.updateCartButtonsState) {
+                                window.updateCartButtonsState();
+                            }
+                        } catch (error) {
+                            console.error('❌ Error updating cart quantity:', error);
+                        }
                     }
-                } else if (isMadeToOrder && appContext.role === 'client') {
-                    if (showOrderModalCallback) {
-                        showOrderModalCallback(product.id);
-                    }
-                } else if (canReserve) {
-                    if (showReservationModalCallback) {
-                        showReservationModalCallback(product.id);
+                    
+                    // Синхронизируем финальное значение с store перед действием
+                    try {
+                        const { setReservationQuantity } = await import('../reservationStore.js');
+                        setReservationQuantity(product.id, quantity);
+                    } catch (error) {
+                        console.error('❌ Error syncing reservation quantity before action:', error);
                     }
                 }
-                // Для остальных товаров - просто обновляем состояние кнопок
-                if (window.updateCartButtonsState) {
-                    window.updateCartButtonsState();
+                
+                // Выполняем действие в зависимости от типа операции (используем actionType из helper)
+                switch (actionType) {
+                    case 'purchase':
+                        if (showPurchaseModalCallback) {
+                            showPurchaseModalCallback(freshProduct);
+                        }
+                        break;
+                    case 'sale':
+                        if (showSaleOrderModalCallback) {
+                            showSaleOrderModalCallback(freshProduct);
+                        }
+                        break;
+                    case 'order':
+                        if (showOrderModalCallback) {
+                            showOrderModalCallback(freshProduct.id);
+                        }
+                        break;
+                    case 'reserve':
+                        if (showReservationModalCallback) {
+                            showReservationModalCallback(freshProduct.id);
+                        }
+                        break;
+                    default:
+                        // Для остальных товаров - просто обновляем состояние кнопок
+                        if (window.updateCartButtonsState) {
+                            window.updateCartButtonsState();
+                        }
                 }
             } catch (error) {
                 console.error('❌ Error in primary button action:', error);
             }
         };
     }
+    
+    // Вспомогательная функция для получения максимального доступного количества
+    const getMaxAvailableQuantity = (prod) => {
+        if (!prod) return null;
+        const prodQuantity = prod.quantity !== undefined && prod.quantity !== null ? prod.quantity : null;
+        if (prodQuantity === null || prodQuantity === undefined || prodQuantity === 0) {
+            return null; // Неограниченное количество
+        }
+        const activeReservationsCount = prod.reservation && prod.reservation.active_count 
+            ? prod.reservation.active_count 
+            : 0;
+        return Math.max(0, prodQuantity - activeReservationsCount);
+    };
+    
+    // Функция для обновления состояния кнопок количества
+    const updateQuantityButtonsState = () => {
+        if (!product || !plusBtn || !quantityInput) return;
+        const maxQuantity = getMaxAvailableQuantity(product);
+        const currentValue = parseInt(quantityInput.value) || 1;
+        
+        if (maxQuantity !== null && currentValue >= maxQuantity) {
+            plusBtn.disabled = true;
+            plusBtn.style.opacity = '0.5';
+            plusBtn.style.cursor = 'not-allowed';
+            plusBtn.setAttribute('aria-disabled', 'true');
+        } else {
+            plusBtn.disabled = false;
+            plusBtn.style.opacity = '1';
+            plusBtn.style.cursor = 'pointer';
+            plusBtn.removeAttribute('aria-disabled');
+        }
+    };
     
     // Обработчики кнопок количества
     if (minusBtn) {
@@ -1910,6 +2071,21 @@ async function updateProductPageBottomSheet(product) {
                     } catch (error) {
                         console.error('❌ Error updating cart quantity:', error);
                     }
+                    
+                    // Синхронизируем выбранное количество для резервации и заказа (без блокировки)
+                    import('../reservationStore.js').then(({ setReservationQuantity }) => {
+                        setReservationQuantity(product.id, newQuantity);
+                    }).catch((error) => {
+                        console.error('❌ Error syncing reservation quantity:', error);
+                    });
+                    
+                    import('../orderStore.js').then(({ setOrderQuantity }) => {
+                        setOrderQuantity(product.id, newQuantity);
+                    }).catch((error) => {
+                        console.error('❌ Error syncing order quantity:', error);
+                    });
+                    
+                    updateQuantityButtonsState();
                 } else if (currentValue === 1) {
                     // Удаляем товар из корзины
                     quantityInput.value = 0;
@@ -1933,7 +2109,18 @@ async function updateProductPageBottomSheet(product) {
             e.preventDefault();
             if (quantityInput && product) {
                 const currentValue = parseInt(quantityInput.value) || 1;
-                const newQuantity = currentValue + 1;
+                const maxQuantity = getMaxAvailableQuantity(product);
+                
+                // Проверяем ограничение: если есть максимум и текущее значение достигло его, не увеличиваем
+                if (maxQuantity !== null && currentValue >= maxQuantity) {
+                    return; // Уже достигнут максимум
+                }
+                
+                // Увеличиваем количество, но не больше максимума
+                const newQuantity = maxQuantity !== null 
+                    ? Math.min(currentValue + 1, maxQuantity)
+                    : currentValue + 1;
+                
                 quantityInput.value = newQuantity;
                 try {
                     const { updateCartItemQuantity } = await import('../cart/cartStore.js');
@@ -1944,27 +2131,155 @@ async function updateProductPageBottomSheet(product) {
                 } catch (error) {
                     console.error('❌ Error updating cart quantity:', error);
                 }
+                
+                // Синхронизируем выбранное количество для резервации и заказа (без блокировки)
+                import('../reservationStore.js').then(({ setReservationQuantity }) => {
+                    setReservationQuantity(product.id, newQuantity);
+                }).catch((error) => {
+                    console.error('❌ Error syncing reservation quantity:', error);
+                });
+                
+                import('../orderStore.js').then(({ setOrderQuantity }) => {
+                    setOrderQuantity(product.id, newQuantity);
+                }).catch((error) => {
+                    console.error('❌ Error syncing order quantity:', error);
+                });
+                
+                updateQuantityButtonsState();
             }
         };
     }
+    
+    // Обработчик валидации ввода в инпут
+    if (quantityInput) {
+        quantityInput.oninput = () => {
+            const value = parseInt(quantityInput.value) || 1;
+            const maxQuantity = getMaxAvailableQuantity(product);
+            
+            // Валидация: ограничиваем значение максимумом и минимумом 1
+            let validatedValue = value;
+            if (value < 1) {
+                validatedValue = 1;
+            } else if (maxQuantity !== null && value > maxQuantity) {
+                validatedValue = maxQuantity;
+            }
+            
+            if (validatedValue !== value) {
+                quantityInput.value = validatedValue;
+            }
+            
+            // Синхронизируем с единым store при вводе (без блокировки)
+            import('../reservationStore.js').then(({ setReservationQuantity }) => {
+                setReservationQuantity(product.id, validatedValue);
+            }).catch((error) => {
+                console.error('❌ Error syncing reservation quantity on input:', error);
+            });
+            
+            import('../orderStore.js').then(({ setOrderQuantity }) => {
+                setOrderQuantity(product.id, validatedValue);
+            }).catch((error) => {
+                console.error('❌ Error syncing order quantity on input:', error);
+            });
+            
+            updateQuantityButtonsState();
+        };
+        
+        quantityInput.onblur = async () => {
+            const value = parseInt(quantityInput.value) || 1;
+            const maxQuantity = getMaxAvailableQuantity(product);
+            
+            // Финальная валидация при потере фокуса
+            let validatedValue = value;
+            if (value < 1) {
+                validatedValue = 1;
+            } else if (maxQuantity !== null && value > maxQuantity) {
+                validatedValue = maxQuantity;
+            }
+            
+            if (validatedValue !== value) {
+                quantityInput.value = validatedValue;
+            }
+            
+            // Обновляем количество в корзине при потере фокуса
+            if (product && validatedValue > 0) {
+                try {
+                    const { updateCartItemQuantity } = await import('../cart/cartStore.js');
+                    await updateCartItemQuantity(product.id, validatedValue);
+                    if (window.updateCartButtonsState) {
+                        window.updateCartButtonsState();
+                    }
+                } catch (error) {
+                    console.error('❌ Error updating cart quantity:', error);
+                }
+                
+                // Синхронизируем выбранное количество для резервации (без блокировки)
+                import('../reservationStore.js').then(({ setReservationQuantity }) => {
+                    setReservationQuantity(product.id, validatedValue);
+                }).catch((error) => {
+                    console.error('❌ Error syncing reservation quantity:', error);
+                });
+                
+                // Синхронизируем выбранное количество для заказа (без блокировки)
+                import('../orderStore.js').then(({ setOrderQuantity }) => {
+                    setOrderQuantity(product.id, validatedValue);
+                }).catch((error) => {
+                    console.error('❌ Error syncing order quantity:', error);
+                });
+            }
+            
+            updateQuantityButtonsState();
+        };
+    }
+    
+    // Обновляем состояние кнопок после настройки
+    updateQuantityButtonsState();
     
     // Убеждаемся, что bottom sheet видимый
     productPageBottomSheet.style.display = 'flex';
     
     // Также убеждаемся, что товар добавлен в корзину (если его там еще нет)
+    // ВАЖНО: Добавляем только если товар типа 'sale' и can_add_to_cart === true
     try {
-        const { getCartItems, addProductToCart } = await import('../cart/cartStore.js');
-        const cartItems = getCartItems();
-        const existingItem = cartItems.find(item => item.product.id === product.id);
-        if (!existingItem) {
-            // Если товара нет в корзине, добавляем его
-            await addProductToCart(product, currentQuantity);
-            if (window.updateCartButtonsState) {
-                window.updateCartButtonsState();
+        // Проверяем, можно ли добавлять товар в корзину
+        const canAddToCart = freshProduct.can_add_to_cart === true || 
+                            (freshProduct.action_type === 'sale' && freshProduct.can_add_to_cart !== false);
+        
+        if (canAddToCart) {
+            // Безопасно импортируем функции корзины
+            try {
+                const cartModule = await import('../cart/cartStore.js');
+                if (cartModule && cartModule.getCartItems && cartModule.addProductToCart) {
+                    const cartItems = cartModule.getCartItems();
+                    const existingItem = cartItems.find(item => item.product && item.product.id === freshProduct.id);
+                    if (!existingItem) {
+                        // Если товара нет в корзине, добавляем его
+                        await cartModule.addProductToCart(freshProduct, currentQuantity);
+                        if (window.updateCartButtonsState) {
+                            window.updateCartButtonsState();
+                        }
+                    }
+                }
+            } catch (importError) {
+                // Если импорт не удался, просто логируем и продолжаем
+                console.warn(`[PRODUCT MODAL] Could not import cartStore for ensureProductInCart:`, {
+                    message: importError?.message || 'Unknown error',
+                    productId: freshProduct?.id
+                });
             }
         }
     } catch (error) {
-        console.error('❌ Error ensuring product in cart:', error);
+        // ========== ИСПРАВЛЕНИЕ: Детальное логирование ошибки ==========
+        console.error('❌ Error ensuring product in cart:', {
+            message: error?.message || 'Unknown error',
+            stack: error?.stack || '',
+            name: error?.name || 'Error',
+            productId: freshProduct?.id,
+            productName: freshProduct?.name,
+            currentQuantity: currentQuantity,
+            can_add_to_cart: freshProduct?.can_add_to_cart,
+            action_type: freshProduct?.action_type
+        });
+        // ========== КОНЕЦ ИСПРАВЛЕНИЯ ==========
     }
 }
 
@@ -1991,6 +2306,7 @@ export function closeProductPage() {
     const mainContent = document.getElementById('main-content');
     const favoritesPage = document.getElementById('favorites-page');
     const cartPage = document.getElementById('cart-page');
+    const cartPageNew = document.getElementById('cart-page-new');
     const productPageImage = document.getElementById('product-page-image');
     
     if (productPage) {
@@ -2028,6 +2344,7 @@ export function closeProductPage() {
         // Деактивируем блокировку горизонтального скролла
         disableHorizontalScrollBlock();
         
+        productPage.classList.remove('is-admin', 'is-client');
         // Скрываем страницу товара
         productPage.style.display = 'none';
         
@@ -2046,12 +2363,14 @@ export function closeProductPage() {
         }
         
         // Возвращаемся на предыдущую страницу в зависимости от истории навигации
-        // Скрываем все страницы сначала
         if (mainContent) mainContent.style.display = 'none';
         if (favoritesPage) favoritesPage.style.display = 'none';
         if (cartPage) cartPage.style.display = 'none';
+        if (cartPageNew) cartPageNew.style.display = 'none';
         
-        // Показываем нужную страницу
+        const operationDetailPage = document.getElementById('operation-detail-page');
+        if (operationDetailPage) operationDetailPage.style.display = 'none';
+        
         if (navigationHistory === 'admin') {
             // Возвращаемся в админку
             console.log('[PRODUCT PAGE] Returning to admin page, clientId:', adminClientId);
@@ -2084,9 +2403,12 @@ export function closeProductPage() {
             // Сбрасываем историю навигации только если возвращаемся НЕ в админку
             navigationHistory = null;
             adminClientId = null;
-        } else if (navigationHistory === 'cart' && cartPage) {
-            cartPage.style.display = 'block';
-            // Сбрасываем историю навигации только если возвращаемся НЕ в админку
+        } else if (navigationHistory === 'cart' && cartPageNew) {
+            cartPageNew.style.display = 'block';
+            navigationHistory = null;
+            adminClientId = null;
+        } else if (navigationHistory === 'operation-detail' && operationDetailPage) {
+            operationDetailPage.style.display = 'block';
             navigationHistory = null;
             adminClientId = null;
         } else if (mainContent) {

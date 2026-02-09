@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, BigInteger, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, BigInteger, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -36,6 +36,7 @@ class Product(Base):
     is_made_to_order = Column(Boolean, default=False)  # Товар под заказ
     is_for_sale = Column(Boolean, default=False)  # Товар для покупки (с диапазоном цен)
     is_sale_enabled = Column(Boolean, default=False)  # Товар доступен для продажи клиентам (когда мы продаем товар)
+    is_reservation_enabled = Column(Boolean, default=False)  # Товар доступен для резервации (взаимоисключающий с sale/order)
     price_from = Column(Float, nullable=True)  # Цена от (для товаров для покупки с диапазоном)
     price_to = Column(Float, nullable=True)  # Цена до (для товаров для покупки с диапазоном)
     price_fixed = Column(Float, nullable=True)  # Фиксированная цена покупки (для товаров для покупки с фиксированной ценой)
@@ -44,9 +45,78 @@ class Product(Base):
     quantity_unit = Column(String, nullable=True)  # Единица измерения количества (шт или кг)
     quantity_show_enabled = Column(Boolean, nullable=True)  # Индивидуальная настройка показа количества (null = использовать общую настройку магазина)
     is_hidden = Column(Boolean, default=False)  # Скрыт ли товар от клиентов (виден только админу)
-    
+    is_client_sale = Column(Boolean, default=False)  # Товар для продажи клиентом другим клиентам (C2C)
+    seller_id = Column(BigInteger, nullable=True, index=True)  # ID клиента-продавца (для C2C товаров)
+    price_card = Column(Float, nullable=True)  # Цена по карте (для товаров с is_sale_enabled или is_made_to_order)
+    price_cash = Column(Float, nullable=True)  # Цена наличными (для товаров с is_sale_enabled или is_made_to_order)
+    price_old = Column(Float, nullable=True)  # Старая цена (зачёркнутая, для акций)
+    delivery_time = Column(String, nullable=True)  # Срок доставки (текст, например "1–2 дня")
+    delivery_price = Column(Float, nullable=True)  # Стоимость доставки (число, может быть 0)
+
     category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship("Category", back_populates="products")
+    # Характеристики товара (индивидуально для каждого товара)
+    characteristics = relationship(
+        "ProductCharacteristic",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="ProductCharacteristic.sort_order"
+    )
+    # Настройки доставки (one-to-one, для страницы редактирования и синхронизации между ботами)
+    delivery_option = relationship(
+        "ProductDelivery",
+        back_populates="product",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+
+class ProductDelivery(Base):
+    """Настройки доставки товара (доставка/самовывоз). Одна запись на товар."""
+    __tablename__ = "product_delivery"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True, unique=True)
+    is_delivery_enabled = Column(Boolean, default=False)
+    is_pickup_enabled = Column(Boolean, default=False)
+    delivery_time = Column(String, nullable=True)  # Срок доставки (текст, например "1–2 дня")
+    delivery_price = Column(Float, nullable=True)
+    pickup_address = Column(String, nullable=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    product = relationship("Product", back_populates="delivery_option")
+
+
+class ProductCharacteristic(Base):
+    """Характеристика товара (пара название + значение). Индивидуально для каждого товара."""
+    __tablename__ = "product_characteristics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(Text, nullable=False)
+    value = Column(Text, nullable=False)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    product = relationship("Product", back_populates="characteristics")
+
+
+class CharacteristicName(Base):
+    """Справочник названий характеристик для быстрого выбора при создании товара.
+    Уникальность: (user_id, bot_id, name) — в рамках магазина/бота не дублируем названия."""
+    __tablename__ = "characteristic_names"
+    __table_args__ = (
+        UniqueConstraint("user_id", "bot_id", "name", name="uq_characteristic_names_user_bot_name"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(Text, nullable=False)
+    user_id = Column(BigInteger, nullable=True, index=True)
+    bot_id = Column(Integer, ForeignKey("bots.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 class Channel(Base):
     __tablename__ = "channels"
@@ -141,7 +211,9 @@ class Order(Base):
     delivery_method = Column(String, nullable=True)  # Способ доставки (delivery/pickup)
     status = Column(String, default='pending')  # Статус заказа (pending/completed/cancelled)
     snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент заказа
-    
+    # Уникальный человекочитаемый номер заказа (ORD-YYYYMMDD-HHMM-XXXX); для старых записей может быть NULL
+    order_number = Column(String(64), unique=True, nullable=True, index=True)
+
     product = relationship("Product", backref="orders")
 
 class Sale(Base):
@@ -194,7 +266,9 @@ class Purchase(Base):
     video_url = Column(String, nullable=True)  # URL видео (1 видео)
     status = Column(String, default='pending')  # Статус покупки (pending/completed/cancelled)
     snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент покупки
-    
+    # Уникальный человекочитаемый номер операции (PUR-YYYYMMDD-HHMM-XXXX); для старых записей может быть NULL
+    order_number = Column(String(64), unique=True, nullable=True, index=True)
+
     product = relationship("Product", backref="purchases")
 
 class SaleOrder(Base):
@@ -218,10 +292,65 @@ class SaleOrder(Base):
     notes = Column(Text, nullable=True)  # Примечание
     delivery_method = Column(String, nullable=True)  # Способ доставки (delivery/pickup)
     payment_method = Column(String, nullable=True)  # Способ оплаты (online/crypto/cash)
+    delivery_fee = Column(Float, default=0, nullable=True)  # Стоимость доставки
+    items_amount = Column(Float, nullable=True)  # Сумма по товарам без доставки
+    total_amount = Column(Float, nullable=True)  # items_amount + delivery_fee (финальная сумма)
     status = Column(String, default='pending')  # Статус заказа (pending/completed/cancelled)
     snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент заказа
-    
+    # Уникальный человекочитаемый номер заказа (SLO-YYYYMMDD-HHMM-XXXX); для старых записей может быть NULL
+    order_number = Column(String(64), unique=True, nullable=True, index=True)
+
     product = relationship("Product", backref="sale_orders")
+
+
+class Deal(Base):
+    """
+    Сделка (покупка из корзины): одна сделка = 1..N товаров.
+    Статусы: draft (после start), active (после confirm), completed, cancelled.
+    """
+    __tablename__ = "deals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_number = Column(String(64), unique=True, nullable=True, index=True)  # Читаемый номер (11 цифр), присваивается при confirm
+    buyer_user_id = Column(BigInteger, index=True)  # ID покупателя (клиента)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    # draft -> после checkout/start; active -> после checkout/confirm; completed, cancelled
+    status = Column(String(32), default='draft', index=True)
+    total_items_count = Column(Integer, default=0)
+    total_amount = Column(Float, nullable=True)
+    currency = Column(String(8), nullable=True)
+
+    # Данные оформления (заполняются при confirm)
+    payment_method = Column(String(32), nullable=True)   # card, cash, transfer, other
+    delivery_method = Column(String(32), nullable=True) # pickup, courier, none
+    delivery_fee = Column(Float, default=0, nullable=True)  # Стоимость доставки (при courier)
+    items_amount = Column(Float, nullable=True)  # Сумма по товарам без доставки (фиксируется при confirm)
+    customer_name = Column(String(255), nullable=True)
+    customer_phone = Column(String(64), nullable=True)
+    delivery_address = Column(Text, nullable=True)
+    customer_comment = Column(Text, nullable=True)
+    seller_comment = Column(Text, nullable=True)  # Внутренняя заметка продавца (опционально)
+
+    items = relationship("DealItem", back_populates="deal", cascade="all, delete-orphan")
+
+
+class DealItem(Base):
+    """Позиция в сделке: один товар с snapshot."""
+    __tablename__ = "deal_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_id = Column(Integer, ForeignKey("deals.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+    snapshot_id = Column(String, nullable=True, index=True)  # ID snapshot товара на момент сделки
+    seller_user_id = Column(BigInteger, index=True)  # ID владельца магазина (продавца)
+    quantity = Column(Integer, default=1)
+    price_per_unit = Column(Float, nullable=True)  # Цена за единицу на момент сделки
+    line_total = Column(Float, nullable=True)  # quantity * price_per_unit
+
+    deal = relationship("Deal", back_populates="items")
+    product = relationship("Product", backref="deal_items")
+
 
 class WebAppContext(Base):
     __tablename__ = "webapp_contexts"

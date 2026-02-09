@@ -14,7 +14,16 @@ import { showProductModal } from './products_modal.js'; // Импортируе�
 // ========== END REFACTORING STEP 3.1 ==========
 // favorites.js - необязательный модуль, используется через динамический импорт
 import { createImageSlider } from '../utils/imageSlider.js';
-import { getProductPriceDisplay } from '../utils/priceUtils.js';
+import {
+    getBasePrice,
+    getFinalCardPrice,
+    getFinalCashPrice,
+    getOldPriceForDisplay,
+    getProductPriceDisplay,
+    hasDiscount
+} from '../utils/priceUtils.js';
+import { getActionIcon, getProductActionType } from '../utils/productActionType.js';
+import { renderProductInfoBlock } from '../utils/productCardParts.js';
 import { isMobileDevice } from '../utils/products_utils.js';
 
 // Зависимости, которые будут переданы из products.js через initRenderProductsDependencies
@@ -372,83 +381,218 @@ export async function renderProducts(products) {
             });
         }
         
-        // Создаем кнопку корзины (левый нижний угол) - только для клиентов и только на странице избранного
-        let cartButton = null;
+        // Создаем кнопку действия (левый нижний угол) - только для клиентов и только на странице избранного
+        let actionButton = null;
         // Проверяем, находимся ли мы на странице избранного
         const favoritesPage = document.getElementById('favorites-page');
         const isOnFavoritesPage = favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex');
         
         if (isClient && isOnFavoritesPage) {
-            cartButton = document.createElement('button');
-            cartButton.className = 'cart-button-card';
-            cartButton.setAttribute('aria-label', 'Добавить в корзину');
-            cartButton.dataset.productId = prod.id;
+            // ========== ПРИОРИТЕТ: Используем action_type от бэка, если доступен ==========
+            let actionType = null;
+            if (prod.action_type && typeof prod.action_type === 'string') {
+                actionType = prod.action_type;
+                // ========== DEBUG: Логирование использования action_type от бэка ==========
+                const DEBUG_PRODUCTS_RENDER = true; // Установить в false для отключения
+                if (DEBUG_PRODUCTS_RENDER) {
+                    console.log(`[PRODUCTS RENDER] Using backend action_type for product ${prod.id}: ${actionType}`);
+                }
+                // ========== КОНЕЦ DEBUG ==========
+            } else {
+                // Fallback: вычисляем на фронте (для обратной совместимости)
+                const currentAppContextForAction = appContextGetter ? appContextGetter() : null;
+                const shopSettings = getCurrentShopSettings();
+                actionType = getProductActionType(prod, currentAppContextForAction, shopSettings);
+            }
+            // ========== КОНЕЦ ПРИОРИТЕТА ==========
+            const actionIcon = getActionIcon(actionType);
             
-            // SVG иконка корзины (тележка) с индикатором количества
-            cartButton.innerHTML = `
-                <svg viewBox="0 0 24 24" class="cart-icon" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path class="cart-icon-outline" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
-                </svg>
-                <span class="cart-icon-badge" style="display: none;">0</span>
-            `;
-            
-            // Проверяем, есть ли товар в корзине, и устанавливаем активное состояние с количеством
-            // Делаем это асинхронно после создания всех кнопок
-            setTimeout(() => {
-                import('../cart/cartStore.js').then(({ isProductInCart, getProductQuantityInCart }) => {
-                    const quantity = getProductQuantityInCart(prod.id);
-                    if (quantity > 0) {
-                        cartButton.classList.add('cart-active');
-                        const badge = cartButton.querySelector('.cart-icon-badge');
-                        if (badge) {
-                            badge.textContent = quantity > 99 ? '99+' : quantity.toString();
-                            badge.style.display = 'flex';
+            // Показываем кнопку только если есть действие
+            if (actionIcon) {
+                actionButton = document.createElement('button');
+                actionButton.className = 'cart-button-card';
+                actionButton.setAttribute('aria-label', 'Действие с товаром');
+                actionButton.dataset.productId = prod.id;
+                actionButton.dataset.actionType = actionType; // Сохраняем тип для отладки
+                
+                // ========== DEBUG: Логирование типа при рендере ==========
+                const DEBUG_PRODUCTS_RENDER = true; // Установить в false для отключения
+                if (DEBUG_PRODUCTS_RENDER) {
+                    console.log(`[PRODUCTS RENDER DEBUG] Rendering action button for product ${prod.id}:`, {
+                        productId: prod.id,
+                        actionType,
+                        action_type_backend: prod.action_type,
+                        can_add_to_cart_backend: prod.can_add_to_cart,
+                        actionIcon,
+                        is_for_sale: prod.is_for_sale,
+                        is_sale_enabled: prod.is_sale_enabled,
+                        is_made_to_order: prod.is_made_to_order,
+                        is_reservation_enabled: prod.is_reservation_enabled
+                    });
+                }
+                // ========== КОНЕЦ DEBUG ==========
+                
+                // ========== DEBUG: Логирование выбранного текста кнопки ==========
+                const DEBUG_BUTTON_TEXT = true; // Установить в false для отключения
+                if (DEBUG_BUTTON_TEXT) {
+                    // Используем динамический импорт без await (не блокируем рендеринг)
+                    import('../utils/productActionType.js').then(({ getActionButtonText }) => {
+                        const buttonText = getActionButtonText(actionType);
+                        console.log(`[PRODUCTS RENDER DEBUG] Action button for product ${prod.id}:`, {
+                            productId: prod.id,
+                            actionType,
+                            actionIcon,
+                            buttonText,
+                            action_type_backend: prod.action_type,
+                            can_add_to_cart_backend: prod.can_add_to_cart
+                        });
+                    }).catch(() => {
+                        // Игнорируем ошибки импорта
+                    });
+                }
+                // ========== КОНЕЦ DEBUG ==========
+                
+                // Иконка действия в зависимости от типа (эмодзи)
+                actionButton.innerHTML = `
+                    <span class="action-icon" style="font-size: 24px; line-height: 1;">${actionIcon}</span>
+                    <span class="cart-icon-badge" style="display: none;">0</span>
+                `;
+                
+                // Для типа 'sale' показываем badge с количеством из корзины
+                if (actionType === 'sale') {
+                    // Проверяем, есть ли товар в корзине, и устанавливаем активное состояние с количеством
+                    // Делаем это асинхронно после создания всех кнопок
+                    setTimeout(() => {
+                        import('../cart/cartStore.js').then(({ isProductInCart, getProductQuantityInCart }) => {
+                            const quantity = getProductQuantityInCart(prod.id);
+                            if (quantity > 0) {
+                                actionButton.classList.add('cart-active');
+                                const badge = actionButton.querySelector('.cart-icon-badge');
+                                if (badge) {
+                                    badge.textContent = quantity > 99 ? '99+' : quantity.toString();
+                                    badge.style.display = 'flex';
+                                }
+                            }
+                        }).catch(() => {
+                            // Игнорируем ошибки импорта
+                        });
+                    }, 0);
+                }
+                
+                // Обработчик клика на кнопку действия - показываем bottom sheet только на странице избранного
+                actionButton.addEventListener('click', async (e) => {
+                    e.stopPropagation(); // Предотвращаем открытие модального окна товара
+                    e.preventDefault(); // Предотвращаем стандартное поведение
+                    
+                    // Проверяем, что мы все еще на странице избранного
+                    const favoritesPage = document.getElementById('favorites-page');
+                    const isOnFavoritesPage = favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex');
+                    
+                    if (!isOnFavoritesPage) {
+                        return; // Не показываем bottom sheet, если не на странице избранного
+                    }
+                    
+                    try {
+                        // ========== ПОЛУЧЕНИЕ АКТУАЛЬНОГО ПРОДУКТА ИЗ КЭША ==========
+                        // Получаем актуальный продукт из allProducts кэша (может быть обновлен после редактирования)
+                        let actualProduct = prod;
+                        if (appContextGetter) {
+                            const allProducts = window.getAllProducts ? window.getAllProducts() : null;
+                            if (Array.isArray(allProducts)) {
+                                const freshProduct = allProducts.find(p => p && p.id === prod.id);
+                                if (freshProduct) {
+                                    actualProduct = freshProduct;
+                                    console.log(`[PRODUCTS RENDER] Using fresh product from cache for ${prod.id}`);
+                                }
+                            }
                         }
+                        // Также проверяем window.getAllProducts как fallback
+                        if (!actualProduct || actualProduct === prod) {
+                            const allProducts = window.getAllProducts ? window.getAllProducts() : null;
+                            if (Array.isArray(allProducts)) {
+                                const freshProduct = allProducts.find(p => p && p.id === prod.id);
+                                if (freshProduct) {
+                                    actualProduct = freshProduct;
+                                    console.log(`[PRODUCTS RENDER] Using fresh product from window.getAllProducts for ${prod.id}`);
+                                }
+                            }
+                        }
+                        // ========== КОНЕЦ ПОЛУЧЕНИЯ АКТУАЛЬНОГО ПРОДУКТА ==========
+                        
+                        // ========== DEBUG: Логирование продукта в обработчике клика ==========
+                        const DEBUG_CLICK_HANDLER = true; // Установить в false для отключения
+                        if (DEBUG_CLICK_HANDLER) {
+                            const allProducts = window.getAllProducts ? window.getAllProducts() : null;
+                            console.log(`[PRODUCTS RENDER DEBUG] Click handler for product ${prod.id}:`, {
+                                productId: prod.id,
+                                prodFromClosure: {
+                                    id: prod.id,
+                                    action_type: prod.action_type,
+                                    can_add_to_cart: prod.can_add_to_cart
+                                },
+                                actualProductFromCache: {
+                                    id: actualProduct.id,
+                                    action_type: actualProduct.action_type,
+                                    can_add_to_cart: actualProduct.can_add_to_cart
+                                },
+                                isSameObject: prod === actualProduct,
+                                allProductsLength: allProducts?.length || 0
+                            });
+                        }
+                        // ========== КОНЕЦ DEBUG ==========
+                        
+                        // Получаем тип операции через единый helper с АКТУАЛЬНЫМ продуктом
+                        const appContext = window.getAppContext ? window.getAppContext() : null;
+                        const shopSettings = window.getCurrentShopSettings ? window.getCurrentShopSettings() : null;
+                        const { getProductActionType, canAddToCart } = await import('../utils/productActionType.js');
+                        const actionType = getProductActionType(actualProduct, appContext, shopSettings);
+                        
+                        // ========== DEBUG: Логирование попытки добавления в корзину ==========
+                        console.log(`[PRODUCTS RENDER DEBUG] Action button clicked for product ${prod.id}:`, {
+                            productId: prod.id,
+                            actionType,
+                            action_type_backend: actualProduct.action_type,
+                            can_add_to_cart_backend: actualProduct.can_add_to_cart,
+                            reason_not_sale: actualProduct.reason_not_sale,
+                            isSaleAction: actionType === 'sale',
+                            is_for_sale: actualProduct.is_for_sale,
+                            is_sale_enabled: actualProduct.is_sale_enabled,
+                            is_made_to_order: actualProduct.is_made_to_order,
+                            is_reservation_enabled: actualProduct.is_reservation_enabled
+                        });
+                        // ========== КОНЕЦ DEBUG ==========
+                        
+                        // Для типа 'sale' добавляем товар в корзину, если его там нет
+                        // ВАЛИДАЦИЯ: Используем can_add_to_cart от бэка или вычисляем
+                        const canAdd = canAddToCart(actualProduct, appContext, shopSettings);
+                        if (canAdd) {
+                            const { isProductInCart, getProductQuantityInCart } = await import('../cart/cartStore.js');
+                            const isInCart = isProductInCart(actualProduct.id);
+                            const currentQuantity = getProductQuantityInCart(actualProduct.id);
+                            
+                            if (!isInCart || currentQuantity === 0) {
+                                const { addProductToCart } = await import('../cart/cartNew.js');
+                                await addProductToCart(actualProduct, 1);
+                            }
+                        } else {
+                            // Если тип не sale - не добавляем в корзину, просто открываем bottom sheet
+                            console.log(`[PRODUCTS RENDER] Skipping add-to-cart for product ${prod.id}: can_add_to_cart=false, actionType=${actionType}, reason=${actualProduct.reason_not_sale || 'unknown'}`);
+                        }
+                        
+                        // Открываем bottom sheet с АКТУАЛЬНЫМ продуктом (он сам определит правильную кнопку через helper)
+                        const { showCartBottomSheet } = await import('../cart/cartBottomSheet.js');
+                        await showCartBottomSheet(actualProduct);
+                        
+                        // Обновляем состояние кнопок корзины
+                        if (window.updateCartButtonsState) {
+                            window.updateCartButtonsState();
+                        }
+                    } catch (error) {
+                        console.error('❌ Error showing bottom sheet:', error);
+                        alert('Ошибка: ' + (error.message || 'Неизвестная ошибка'));
                     }
-                }).catch(() => {
-                    // Игнорируем ошибки импорта
                 });
-            }, 0);
-            
-            // Обработчик клика на кнопку корзины - показываем bottom sheet только на странице избранного
-            cartButton.addEventListener('click', async (e) => {
-                e.stopPropagation(); // Предотвращаем открытие модального окна товара
-                e.preventDefault(); // Предотвращаем стандартное поведение
-                
-                // Проверяем, что мы все еще на странице избранного
-                const favoritesPage = document.getElementById('favorites-page');
-                const isOnFavoritesPage = favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex');
-                
-                if (!isOnFavoritesPage) {
-                    return; // Не показываем bottom sheet, если не на странице избранного
-                }
-                
-                try {
-                    // Проверяем, есть ли товар уже в корзине
-                    const { isProductInCart, getProductQuantityInCart } = await import('../cart/cartStore.js');
-                    const isInCart = isProductInCart(prod.id);
-                    const currentQuantity = getProductQuantityInCart(prod.id);
-                    
-                    // Если товара нет в корзине, добавляем его с количеством 1
-                    if (!isInCart || currentQuantity === 0) {
-                        const { addProductToCart } = await import('../cart/cartNew.js');
-                        await addProductToCart(prod, 1);
-                    }
-                    // Если товар уже есть в корзине, просто открываем bottom sheet без добавления
-                    
-                    // Открываем bottom sheet только на странице избранного
-                    const { showCartBottomSheet } = await import('../cart/cartBottomSheet.js');
-                    showCartBottomSheet(prod);
-                    
-                    // Обновляем состояние кнопок корзины
-                    if (window.updateCartButtonsState) {
-                        window.updateCartButtonsState();
-                    }
-                } catch (error) {
-                    console.error('❌ Error adding product to cart or showing bottom sheet:', error);
-                    alert('Ошибка при добавлении товара в корзину: ' + (error.message || 'Неизвестная ошибка'));
-                }
-            });
+            }
         }
         
         // Создаем badge скрытого товара (только для админа)
@@ -660,9 +804,9 @@ export async function renderProducts(products) {
             if (favoriteButton) {
                 imageDiv.appendChild(favoriteButton);
             }
-            // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
-            if (cartButton) {
-                imageDiv.appendChild(cartButton);
+            // Добавляем кнопку действия на фото (левый нижний угол) - только для клиентов
+            if (actionButton) {
+                imageDiv.appendChild(actionButton);
             }
             
             // Добавляем badge резервации в нижней части фото
@@ -704,9 +848,9 @@ export async function renderProducts(products) {
             if (favoriteButton) {
                 imageDiv.appendChild(favoriteButton);
             }
-            // Добавляем кнопку корзины на фото (левый нижний угол) - только для клиентов
-            if (cartButton) {
-                imageDiv.appendChild(cartButton);
+            // Добавляем кнопку действия на фото (левый нижний угол) - только для клиентов
+            if (actionButton) {
+                imageDiv.appendChild(actionButton);
             }
             
             // Добавляем badge резервации в нижней части фото даже если нет изображения
@@ -720,108 +864,14 @@ export async function renderProducts(products) {
             card.appendChild(indicatorsContainer);
         }
         
-        // Название
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'product-name';
-        nameDiv.textContent = prod.name;
-        
-        // Описание товара (ограничено до 50 символов)
-        let descriptionDiv = null;
-        if (prod.description) {
-            descriptionDiv = document.createElement('div');
-            descriptionDiv.className = 'product-description';
-            let descriptionText = prod.description.trim();
-            if (descriptionText.length > 50) {
-                descriptionText = descriptionText.substring(0, 50) + '...';
-            }
-            descriptionDiv.textContent = descriptionText;
-        }
-        
-        // Используем функцию из priceUtils.js для форматирования цены
+        // Инфо-блок карточки: название, описание, цены + иконки (общий helper)
+        card.insertAdjacentHTML('beforeend', renderProductInfoBlock(prod, { mode: 'grid' }));
+
+        // Для режима списка ниже нужны priceDisplay и isForSaleCard
         const priceDisplay = getProductPriceDisplay(prod);
-        
-        // Старая цена при скидке (только для обычных товаров)
-        const isForSaleCard = prod.is_for_sale === true || 
-                         prod.is_for_sale === 1 || 
-                         prod.is_for_sale === '1' ||
-                         prod.is_for_sale === 'true' ||
-                         String(prod.is_for_sale).toLowerCase() === 'true';
-        
-        // Добавляем элементы в правильном порядке: название, описание, старая цена, цена по карте, цена наличными
-        card.appendChild(nameDiv);
-        
-        // Добавляем описание после названия, если оно есть
-        if (descriptionDiv) {
-            card.appendChild(descriptionDiv);
-        }
-        
-        // Старая цена (зачеркнутая серая) - если есть скидка
-        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
-            const oldPriceDiv = document.createElement('div');
-            oldPriceDiv.className = 'old-price-container';
-            const oldPriceSpan = document.createElement('span');
-            oldPriceSpan.className = 'old-price';
-            // Форматируем старую цену с пробелами между тысячами
-            oldPriceSpan.textContent = `${Number(prod.price).toLocaleString('ru-RU')}₽`;
-            oldPriceDiv.appendChild(oldPriceSpan);
-            card.appendChild(oldPriceDiv);
-        }
-        
-        // Цена по карте (со скидкой) - если есть скидка
-        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
-            const cardPriceDiv = document.createElement('div');
-            cardPriceDiv.className = 'product-price-container';
-            const priceSpan = document.createElement('span');
-            priceSpan.className = 'product-price';
-            priceSpan.textContent = priceDisplay;
-            
-            // Добавляем иконку карточки красного цвета рядом с ценой по карте
-            const cardIcon = document.createElement('span');
-            cardIcon.className = 'product-card-icon';
-            cardIcon.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="5" width="20" height="14" rx="2" stroke="#E35E45" stroke-width="2"/>
-                    <path d="M2 10H22" stroke="#E35E45" stroke-width="2"/>
-                    <path d="M6 15H10" stroke="#E35E45" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-            `;
-            priceSpan.appendChild(cardIcon);
-            cardPriceDiv.appendChild(priceSpan);
-            card.appendChild(cardPriceDiv);
-        } else {
-            // Если нет скидки, просто добавляем обычную цену
-            const priceDiv = document.createElement('div');
-            priceDiv.className = 'product-price-container';
-            const priceSpan = document.createElement('span');
-            priceSpan.className = 'product-price';
-            priceSpan.textContent = priceDisplay;
-            priceDiv.appendChild(priceSpan);
-            card.appendChild(priceDiv);
-        }
-        
-        // Цена наличными (без скидки) - если есть скидка
-        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
-            const cashPriceDiv = document.createElement('div');
-            cashPriceDiv.className = 'product-cash-price-container';
-            const cashPriceSpan = document.createElement('span');
-            cashPriceSpan.className = 'product-cash-price';
-            // Форматируем цену наличными с пробелами между тысячами
-            cashPriceSpan.textContent = `${Number(prod.price).toLocaleString('ru-RU')}₽`;
-            
-            // Добавляем иконку наличных зеленого цвета рядом с ценой наличными
-            const cashIcon = document.createElement('span');
-            cashIcon.className = 'product-cash-icon';
-            cashIcon.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="5" width="20" height="14" rx="2" stroke="#00A82E" stroke-width="2"/>
-                    <circle cx="12" cy="12" r="3" stroke="#00A82E" stroke-width="2"/>
-                </svg>
-            `;
-            cashPriceSpan.appendChild(cashIcon);
-            cashPriceDiv.appendChild(cashPriceSpan);
-            card.appendChild(cashPriceDiv);
-        }
-        
+        const isForSaleCard = prod.is_for_sale === true || prod.is_for_sale === 1 ||
+            prod.is_for_sale === '1' || String(prod.is_for_sale || '').toLowerCase() === 'true';
+
         // Количество товара под ценой (текст без блока)
         if (quantityBadge) {
             // Убираем абсолютное позиционирование, так как теперь это обычный блок
@@ -894,57 +944,66 @@ export async function renderProducts(products) {
         const listPricesContainer = document.createElement('div');
         listPricesContainer.className = 'product-list-prices';
         
-        // Старая цена (зачеркнутая серая) - если есть скидка, на отдельной строке
-        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
-            const oldPriceDivList = document.createElement('div');
-            oldPriceDivList.className = 'product-list-old-price';
-            oldPriceDivList.textContent = `${Number(prod.price).toLocaleString('ru-RU')}₽`;
-            listPricesContainer.appendChild(oldPriceDivList);
-        }
-        
-        // Цена по карте (со скидкой) - если есть скидка, на отдельной строке
-        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
-            const cardPriceDivList = document.createElement('div');
-            cardPriceDivList.className = 'product-list-card-price';
-            cardPriceDivList.textContent = priceDisplay;
-            
-            // Добавляем иконку карточки красного цвета рядом с ценой по карте
-            const cardIconList = document.createElement('span');
-            cardIconList.className = 'product-card-icon';
-            cardIconList.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="5" width="20" height="14" rx="2" stroke="#E35E45" stroke-width="2"/>
-                    <path d="M2 10H22" stroke="#E35E45" stroke-width="2"/>
-                    <path d="M6 15H10" stroke="#E35E45" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-            `;
-            cardPriceDivList.appendChild(cardIconList);
-            listPricesContainer.appendChild(cardPriceDivList);
+        // Для обычных товаров (не "на покупку"): строка 1 — наличные (если есть), строка 2 — карта + / + старая (если скидка)
+        if (!isForSaleCard) {
+            const basePrice = getBasePrice(prod);
+            const hasActiveDiscount = hasDiscount(prod);
+            const finalCardPrice = getFinalCardPrice(prod);
+            const finalCashPrice = getFinalCashPrice(prod);
+            const oldPrice = getOldPriceForDisplay(prod);
+            const hasCashPriceList = prod.price_cash != null && prod.price_cash !== '' && prod.price_cash !== undefined &&
+                !isNaN(Number(prod.price_cash)) && Number(prod.price_cash) > 0;
+
+            // Строка 1: цена наличными + иконка (если есть)
+            if (hasCashPriceList && finalCashPrice !== null) {
+                const cashPriceDivList = document.createElement('div');
+                cashPriceDivList.className = 'product-list-cash-price';
+                const cashPriceSpan = document.createElement('span');
+                cashPriceSpan.textContent = `${finalCashPrice.toLocaleString('ru-RU')}₽`;
+                const cashIconList = document.createElement('span');
+                cashIconList.className = 'product-cash-icon';
+                cashIconList.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="2" y="5" width="20" height="14" rx="2" stroke="#00A82E" stroke-width="2"/>
+                        <circle cx="12" cy="12" r="3" stroke="#00A82E" stroke-width="2"/>
+                    </svg>
+                `;
+                cashPriceDivList.appendChild(cashPriceSpan);
+                cashPriceDivList.appendChild(cashIconList);
+                listPricesContainer.appendChild(cashPriceDivList);
+            }
+
+            // Строка 2: цена по карте + иконка + старая (если скидка), без слэша
+            if (finalCardPrice !== null) {
+                const cardPriceDivList = document.createElement('div');
+                cardPriceDivList.className = 'product-list-card-price';
+                const cardPriceSpan = document.createElement('span');
+                cardPriceSpan.textContent = priceDisplay;
+                cardPriceDivList.appendChild(cardPriceSpan);
+                const cardIconList = document.createElement('span');
+                cardIconList.className = 'product-card-icon';
+                cardIconList.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="2" y="5" width="20" height="14" rx="2" stroke="#E35E45" stroke-width="2"/>
+                        <path d="M2 10H22" stroke="#E35E45" stroke-width="2"/>
+                        <path d="M6 15H10" stroke="#E35E45" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                `;
+                cardPriceDivList.appendChild(cardIconList);
+                if (hasActiveDiscount && oldPrice !== null) {
+                    const oldSpan = document.createElement('span');
+                    oldSpan.className = 'product-list-old-price';
+                    oldSpan.textContent = `${oldPrice.toLocaleString('ru-RU')}₽`;
+                    cardPriceDivList.appendChild(oldSpan);
+                }
+                listPricesContainer.appendChild(cardPriceDivList);
+            }
         } else {
-            // Если нет скидки, просто добавляем обычную цену на отдельной строке
+            // Для товаров "на покупку" просто показываем цену на отдельной строке
             const priceDivList = document.createElement('div');
             priceDivList.className = 'product-list-price-single';
             priceDivList.textContent = priceDisplay;
             listPricesContainer.appendChild(priceDivList);
-        }
-        
-        // Цена наличными (без скидки) - если есть скидка, на отдельной строке
-        if (!isForSaleCard && prod.discount > 0 && prod.price != null && prod.price > 0) {
-            const cashPriceDivList = document.createElement('div');
-            cashPriceDivList.className = 'product-list-cash-price';
-            cashPriceDivList.textContent = `${Number(prod.price).toLocaleString('ru-RU')}₽`;
-            
-            // Добавляем иконку наличных зеленого цвета рядом с ценой наличными
-            const cashIconList = document.createElement('span');
-            cashIconList.className = 'product-cash-icon';
-            cashIconList.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="5" width="20" height="14" rx="2" stroke="#00A82E" stroke-width="2"/>
-                    <circle cx="12" cy="12" r="3" stroke="#00A82E" stroke-width="2"/>
-                </svg>
-            `;
-            cashPriceDivList.appendChild(cashIconList);
-            listPricesContainer.appendChild(cashPriceDivList);
         }
         
         // Правая часть: контейнер для корзины и статуса
@@ -1101,95 +1160,138 @@ export async function renderProducts(products) {
         }
         card.appendChild(listPricesRightContainer);
         
-        // Создаем кнопку корзины для режима списка (над статусом в правой части) - только для клиентов и только на странице избранного
-        let cartButtonList = null;
+        // Создаем кнопку действия для режима списка (над статусом в правой части) - только для клиентов и только на странице избранного
+        let actionButtonList = null;
         // Проверяем, находимся ли мы на странице избранного
         const favoritesPageForList = document.getElementById('favorites-page');
         const isOnFavoritesPageForList = favoritesPageForList && (favoritesPageForList.style.display === 'block' || favoritesPageForList.style.display === 'flex');
         
         if (isClient && isOnFavoritesPageForList) {
-            cartButtonList = document.createElement('button');
-            cartButtonList.className = 'cart-button-card cart-button-list';
-            cartButtonList.setAttribute('aria-label', 'Добавить в корзину');
-            cartButtonList.dataset.productId = prod.id;
+            // Получаем тип операции через единый helper
+            const currentAppContextForActionList = appContextGetter ? appContextGetter() : null;
+            const shopSettings = getCurrentShopSettings();
+            // ========== ПРИОРИТЕТ: Используем action_type от бэка, если доступен ==========
+            let actionType = null;
+            if (prod.action_type && typeof prod.action_type === 'string') {
+                actionType = prod.action_type;
+                // ========== DEBUG: Логирование использования action_type от бэка ==========
+                const DEBUG_PRODUCTS_RENDER = true; // Установить в false для отключения
+                if (DEBUG_PRODUCTS_RENDER) {
+                    console.log(`[PRODUCTS RENDER] Using backend action_type (list mode) for product ${prod.id}: ${actionType}`);
+                }
+                // ========== КОНЕЦ DEBUG ==========
+            } else {
+                // Fallback: вычисляем на фронте (для обратной совместимости)
+                actionType = getProductActionType(prod, currentAppContextForActionList, shopSettings);
+            }
+            // ========== КОНЕЦ ПРИОРИТЕТА ==========
+            const actionIcon = getActionIcon(actionType);
             
-            // SVG иконка корзины (тележка) с индикатором количества
-            cartButtonList.innerHTML = `
-                <svg viewBox="0 0 24 24" class="cart-icon" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path class="cart-icon-outline" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
-                </svg>
-                <span class="cart-icon-badge" style="display: none;">0</span>
-            `;
-            
-            // Проверяем, есть ли товар в корзине, и устанавливаем активное состояние с количеством
-            // Делаем это асинхронно после создания всех кнопок
-            setTimeout(() => {
-                import('../cart/cartStore.js').then(({ isProductInCart, getProductQuantityInCart }) => {
-                    const quantity = getProductQuantityInCart(prod.id);
-                    if (quantity > 0) {
-                        cartButtonList.classList.add('cart-active');
-                        const badge = cartButtonList.querySelector('.cart-icon-badge');
-                        if (badge) {
-                            badge.textContent = quantity > 99 ? '99+' : quantity.toString();
-                            badge.style.display = 'flex';
-                        }
-                    }
-                }).catch(() => {
-                    // Игнорируем ошибки импорта
-                });
-            }, 0);
-            
-            // Обработчик клика на кнопку корзины в режиме списка - показываем bottom sheet только на странице избранного
-            cartButtonList.addEventListener('click', async (e) => {
-                e.stopPropagation(); // Предотвращаем открытие модального окна товара
-                e.preventDefault(); // Предотвращаем стандартное поведение
+            // Показываем кнопку только если есть действие
+            if (actionIcon) {
+                actionButtonList = document.createElement('button');
+                actionButtonList.className = 'cart-button-card cart-button-list';
+                actionButtonList.setAttribute('aria-label', 'Действие с товаром');
+                actionButtonList.dataset.productId = prod.id;
+                actionButtonList.dataset.actionType = actionType;
                 
-                // Проверяем, что мы все еще на странице избранного
-                const favoritesPageForList = document.getElementById('favorites-page');
-                const isOnFavoritesPageForList = favoritesPageForList && (favoritesPageForList.style.display === 'block' || favoritesPageForList.style.display === 'flex');
+                // Иконка действия в зависимости от типа (эмодзи)
+                actionButtonList.innerHTML = `
+                    <span class="action-icon" style="font-size: 24px; line-height: 1;">${actionIcon}</span>
+                    <span class="cart-icon-badge" style="display: none;">0</span>
+                `;
                 
-                if (!isOnFavoritesPageForList) {
-                    return; // Не показываем bottom sheet, если не на странице избранного
+                // Для типа 'sale' показываем badge с количеством из корзины
+                if (actionType === 'sale') {
+                    // Проверяем, есть ли товар в корзине, и устанавливаем активное состояние с количеством
+                    // Делаем это асинхронно после создания всех кнопок
+                    setTimeout(() => {
+                        import('../cart/cartStore.js').then(({ isProductInCart, getProductQuantityInCart }) => {
+                            const quantity = getProductQuantityInCart(prod.id);
+                            if (quantity > 0) {
+                                actionButtonList.classList.add('cart-active');
+                                const badge = actionButtonList.querySelector('.cart-icon-badge');
+                                if (badge) {
+                                    badge.textContent = quantity > 99 ? '99+' : quantity.toString();
+                                    badge.style.display = 'flex';
+                                }
+                            }
+                        }).catch(() => {
+                            // Игнорируем ошибки импорта
+                        });
+                    }, 0);
                 }
                 
-                try {
-                    // Проверяем, есть ли товар уже в корзине
-                    const { isProductInCart, getProductQuantityInCart } = await import('../cart/cartStore.js');
-                    const isInCart = isProductInCart(prod.id);
-                    const currentQuantity = getProductQuantityInCart(prod.id);
+                // Обработчик клика на кнопку действия в режиме списка - показываем bottom sheet только на странице избранного
+                actionButtonList.addEventListener('click', async (e) => {
+                    e.stopPropagation(); // Предотвращаем открытие модального окна товара
+                    e.preventDefault(); // Предотвращаем стандартное поведение
                     
-                    // Если товара нет в корзине, добавляем его с количеством 1
-                    if (!isInCart || currentQuantity === 0) {
-                        const { addProductToCart } = await import('../cart/cartNew.js');
-                        await addProductToCart(prod, 1);
+                    // Проверяем, что мы все еще на странице избранного
+                    const favoritesPageForList = document.getElementById('favorites-page');
+                    const isOnFavoritesPageForList = favoritesPageForList && (favoritesPageForList.style.display === 'block' || favoritesPageForList.style.display === 'flex');
+                    
+                    if (!isOnFavoritesPageForList) {
+                        return; // Не показываем bottom sheet, если не на странице избранного
                     }
-                    // Если товар уже есть в корзине, просто открываем bottom sheet без добавления
                     
-                    // Импортируем функцию показа bottom sheet
-                    const { showCartBottomSheet } = await import('../cart/cartBottomSheet.js');
-                    showCartBottomSheet(prod);
-                    
-                    // Обновляем состояние кнопок корзины
-                    if (window.updateCartButtonsState) {
-                        window.updateCartButtonsState();
-                    }
-                } catch (error) {
-                    console.error('❌ Error showing cart bottom sheet:', error);
-                    // Fallback: добавляем напрямую в корзину
                     try {
-                        const { addProductToCart } = await import('../cart/cartNew.js');
-                        await addProductToCart(prod, 1);
+                        // ========== ПОЛУЧЕНИЕ АКТУАЛЬНОГО ПРОДУКТА ИЗ КЭША ==========
+                        let actualProduct = prod;
+                        if (appContextGetter) {
+                            const allProducts = window.getAllProducts ? window.getAllProducts() : null;
+                            if (Array.isArray(allProducts)) {
+                                const freshProduct = allProducts.find(p => p && p.id === prod.id);
+                                if (freshProduct) actualProduct = freshProduct;
+                            }
+                        }
+                        if (!actualProduct || actualProduct === prod) {
+                            const allProducts = window.getAllProducts ? window.getAllProducts() : null;
+                            if (Array.isArray(allProducts)) {
+                                const freshProduct = allProducts.find(p => p && p.id === prod.id);
+                                if (freshProduct) actualProduct = freshProduct;
+                            }
+                        }
+                        // ========== КОНЕЦ ПОЛУЧЕНИЯ АКТУАЛЬНОГО ПРОДУКТА ==========
+                        
+                        // Получаем тип операции через единый helper с АКТУАЛЬНЫМ продуктом
+                        const appContext = window.getAppContext ? window.getAppContext() : null;
+                        const shopSettings = window.getCurrentShopSettings ? window.getCurrentShopSettings() : null;
+                        const { getProductActionType, canAddToCart } = await import('../utils/productActionType.js');
+                        const actionType = getProductActionType(actualProduct, appContext, shopSettings);
+                        
+                        // ВАЛИДАЦИЯ: Используем can_add_to_cart от бэка или вычисляем
+                        const canAdd = canAddToCart(actualProduct, appContext, shopSettings);
+                        if (canAdd) {
+                            const { isProductInCart, getProductQuantityInCart } = await import('../cart/cartStore.js');
+                            const isInCart = isProductInCart(actualProduct.id);
+                            const currentQuantity = getProductQuantityInCart(actualProduct.id);
+                            
+                            if (!isInCart || currentQuantity === 0) {
+                                const { addProductToCart } = await import('../cart/cartNew.js');
+                                await addProductToCart(actualProduct, 1);
+                            }
+                        } else {
+                            console.log(`[PRODUCTS RENDER] Skipping add-to-cart (list mode) for product ${prod.id}: can_add_to_cart=false, actionType=${actionType}, reason=${actualProduct.reason_not_sale || 'unknown'}`);
+                        }
+                        
+                        // Открываем bottom sheet с АКТУАЛЬНЫМ продуктом
+                        const { showCartBottomSheet } = await import('../cart/cartBottomSheet.js');
+                        await showCartBottomSheet(actualProduct);
+                        
+                        // Обновляем состояние кнопок корзины
                         if (window.updateCartButtonsState) {
                             window.updateCartButtonsState();
                         }
-                    } catch (addError) {
-                        alert('Ошибка при добавлении товара в корзину: ' + (addError.message || 'Неизвестная ошибка'));
+                    } catch (error) {
+                        console.error('❌ Error showing bottom sheet:', error);
+                        alert('Ошибка: ' + (error.message || 'Неизвестная ошибка'));
                     }
-                }
-            });
-            
-            // Добавляем кнопку корзины в правую часть (над статусом)
-            rightSideContainer.insertBefore(cartButtonList, rightSideContainer.firstChild);
+                });
+                
+                // Добавляем кнопку действия в правую часть (над статусом)
+                rightSideContainer.insertBefore(actionButtonList, rightSideContainer.firstChild);
+            }
         }
         
         // Добавляем кнопку избранного в правый верхний угол карточки (для режима списка) - только для клиентов

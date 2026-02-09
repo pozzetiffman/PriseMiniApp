@@ -317,7 +317,7 @@ async def cmd_post(message: Message, state: FSMContext):
     await clear_state_if_needed(message, state)
     chat_type = message.chat.type
     chat_id = message.chat.id
-    logging.info(f"/post command received - chat_type: {chat_type}, chat_id: {chat_id}, user_id: {message.from_user.id}")
+    logging.debug(f"/post command received - chat_type: {chat_type}, chat_id: {chat_id}, user_id: {message.from_user.id}")
     
     user_id = message.from_user.id
     share_url = f"{WEBAPP_URL}?user_id={user_id}"
@@ -354,7 +354,7 @@ async def cmd_post(message: Message, state: FSMContext):
             msg += "💡 **Совет:** Конвертируйте группу в супергруппу, чтобы магазин открывался сразу внутри Telegram"
         try:
             sent = await message.answer(msg, reply_markup=builder.as_markup(), parse_mode="Markdown")
-            logging.info(f"Successfully posted store message to {chat_type}, message_id: {sent.message_id}")
+            logging.debug(f"Successfully posted store message to {chat_type}, message_id: {sent.message_id}")
             return
         except Exception as e:
             error_msg = str(e)
@@ -368,7 +368,7 @@ async def cmd_post(message: Message, state: FSMContext):
         try:
             chat_info = await bot.get_chat(chat_id)
             real_chat_type = chat_info.type
-            logging.info(f"Chat {chat_id} - message type: {chat_type}, real type: {real_chat_type}")
+            logging.debug(f"Chat {chat_id} - message type: {chat_type}, real type: {real_chat_type}")
         except Exception as e:
             logging.warning(f"Could not get chat info: {e}")
             real_chat_type = chat_type
@@ -382,7 +382,7 @@ async def cmd_post(message: Message, state: FSMContext):
             )
             return
         
-        logging.info(f"Using WebApp URL for supergroup: {share_url}")
+        logging.debug(f"Using WebApp URL for supergroup: {share_url}")
         
         # Проверяем, что URL правильный и доступен
         if not share_url.startswith("https://"):
@@ -391,7 +391,7 @@ async def cmd_post(message: Message, state: FSMContext):
         
         # Проверяем, что WebApp настроен в BotFather
         # Если URL не проходит валидацию, это может быть причиной BUTTON_TYPE_INVALID
-        logging.info(f"WebApp URL validation: {share_url}")
+        logging.debug(f"WebApp URL validation: {share_url}")
         
         # ВАЖНО: WebApp кнопки работают ТОЛЬКО в личных чатах, НЕ в группах/каналах
         # Это ограничение Telegram API, а не баг
@@ -408,7 +408,7 @@ async def cmd_post(message: Message, state: FSMContext):
         
         try:
             sent = await send_shop_message(message, message, msg, builder.as_markup(), user_id)
-            logging.info(f"✅ Successfully posted store message to supergroup with deep link, message_id: {sent.message_id}")
+            logging.debug(f"✅ Successfully posted store message to supergroup with deep link, message_id: {sent.message_id}")
             return
         except Exception as e:
             error_msg = str(e)
@@ -426,7 +426,7 @@ async def cmd_post(message: Message, state: FSMContext):
     
     try:
         sent = await send_shop_message(message, message, msg, builder_url.as_markup(), user_id)
-        logging.info(f"Successfully posted store message with URL, message_id: {sent.message_id}, chat_id: {chat_id}")
+        logging.debug(f"Successfully posted store message with URL, message_id: {sent.message_id}, chat_id: {chat_id}")
     except Exception as e:
         error_msg = str(e)
         logging.error(f"Error in /post: {error_msg}, chat_type: {chat_type}, chat_id: {chat_id}")
@@ -485,7 +485,7 @@ async def _cmd_mylink_impl(message: Message):
                     # Используем direct_link_name из базы (хранит название Web App) или "shop" по умолчанию
                     direct_link_name_from_db = bot.get("direct_link_name")
                     web_app_name = direct_link_name_from_db if direct_link_name_from_db else "shop"
-                    logging.info(f"Bot {bot_username}: direct_link_name from DB = {direct_link_name_from_db}, using = {web_app_name}")
+                    logging.debug(f"Bot {bot_username}: direct_link_name from DB = {direct_link_name_from_db}, using = {web_app_name}")
                     
                     if is_active:
                         # Формируем Web App ссылку в формате t.me/{bot_username}/{web_app_name}

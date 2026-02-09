@@ -24,6 +24,7 @@ class SaleOrder(SaleOrderBase):
     user_id: int  # Владелец магазина
     ordered_by_user_id: int  # Кто заказал (купил)
     created_at: datetime
+    order_number: Optional[str] = None  # Уникальный номер заказа (SLO-...); для старых записей может отсутствовать
     is_completed: bool
     is_cancelled: bool
     promo_code: Optional[str] = None
@@ -35,6 +36,9 @@ class SaleOrder(SaleOrderBase):
     notes: Optional[str] = None
     delivery_method: Optional[str] = None
     payment_method: Optional[str] = None
+    delivery_fee: Optional[float] = None  # Стоимость доставки
+    items_amount: Optional[float] = None  # Сумма по товарам
+    total_amount: Optional[float] = None  # Итого с доставкой
     status: Optional[str] = 'pending'
     product: Optional[ProductInfo] = None  # Информация о товаре
 

@@ -6,6 +6,27 @@
 // 3. При изменении количества в bottom sheet (плюс/минус) количество ОБНОВЛЯЕТСЯ в корзине в реальном времени
 // 4. При нажатии на кнопку "Готово" bottom sheet просто закрывается
 
+// Импорт единого helper для определения типа операции (динамический для избежания проблем с порядком загрузки)
+let getProductActionType = null;
+let getActionButtonText = null;
+
+// Загружаем helper при первом использовании
+async function loadProductActionTypeHelper() {
+    if (!getProductActionType || !getActionButtonText) {
+        try {
+            const module = await import('../utils/productActionType.js');
+            getProductActionType = module.getProductActionType;
+            getActionButtonText = module.getActionButtonText;
+        } catch (error) {
+            console.error('❌ Error loading productActionType helper:', error);
+            // Fallback функции
+            getProductActionType = () => 'none';
+            getActionButtonText = () => 'Готово';
+        }
+    }
+    return { getProductActionType, getActionButtonText };
+}
+
 let currentProduct = null;
 let currentQuantity = 1;
 let isDragging = false;
@@ -18,6 +39,57 @@ let isBottomSheetOpen = false; // Флаг открытого состояния
 let scrollHandler = null; // Обработчик прокрутки страницы
 let clickHandler = null; // Обработчик клика на товары/кнопки
 let lastScrollY = 0; // Последняя позиция прокрутки
+
+/**
+ * Получить максимальное доступное количество товара с учетом резерваций
+ * @param {Object} product - Объект товара
+ * @returns {number|null} - Максимальное доступное количество или null если неограниченно
+ */
+function getMaxAvailableQuantity(product) {
+    if (!product) return null;
+    
+    // Если quantity не указан или равен 0, считаем товар неограниченным
+    const productQuantity = product.quantity !== undefined && product.quantity !== null ? product.quantity : null;
+    if (productQuantity === null || productQuantity === undefined || productQuantity === 0) {
+        return null; // Неограниченное количество
+    }
+    
+    // Учитываем активные резервации
+    const activeReservationsCount = product.reservation && product.reservation.active_count 
+        ? product.reservation.active_count 
+        : 0;
+    
+    const availableCount = Math.max(0, productQuantity - activeReservationsCount);
+    return availableCount;
+}
+
+/**
+ * Обновить состояние кнопок количества (блокировка + при достижении максимума)
+ */
+function updateQuantityButtonsState() {
+    if (!sheetContent || !currentProduct) return;
+    
+    const plusBtn = sheetContent.querySelector('.cart-bottom-sheet-quantity-btn.plus');
+    const quantityInput = sheetContent.querySelector('.cart-bottom-sheet-quantity-input');
+    
+    if (!plusBtn || !quantityInput) return;
+    
+    const maxQuantity = getMaxAvailableQuantity(currentProduct);
+    const currentValue = parseInt(quantityInput.value) || 1;
+    
+    // Если есть ограничение и текущее значение достигло максимума, блокируем кнопку +
+    if (maxQuantity !== null && currentValue >= maxQuantity) {
+        plusBtn.disabled = true;
+        plusBtn.style.opacity = '0.5';
+        plusBtn.style.cursor = 'not-allowed';
+        plusBtn.setAttribute('aria-disabled', 'true');
+    } else {
+        plusBtn.disabled = false;
+        plusBtn.style.opacity = '1';
+        plusBtn.style.cursor = 'pointer';
+        plusBtn.removeAttribute('aria-disabled');
+    }
+}
 
 /**
  * Инициализация bottom sheet
@@ -211,16 +283,33 @@ function setupQuantityControls() {
                     currentQuantity = currentValue - 1;
                     input.value = currentQuantity;
                     
-                    // НОВАЯ ЛОГИКА: Обновляем количество в корзине
-                    try {
-                        const { updateCartItemQuantity } = await import('./cartStore.js');
-                        await updateCartItemQuantity(currentProduct.id, currentQuantity);
-                        if (window.updateCartButtonsState) {
-                            window.updateCartButtonsState();
-                        }
-                    } catch (error) {
-                        console.error('❌ Error updating cart quantity:', error);
+                // НОВАЯ ЛОГИКА: Обновляем количество в корзине
+                try {
+                    const { updateCartItemQuantity } = await import('./cartStore.js');
+                    await updateCartItemQuantity(currentProduct.id, currentQuantity);
+                    if (window.updateCartButtonsState) {
+                        window.updateCartButtonsState();
                     }
+                } catch (error) {
+                    console.error('❌ Error updating cart quantity:', error);
+                }
+                
+                // Синхронизируем выбранное количество для резервации (без блокировки)
+                import('../reservationStore.js').then(({ setReservationQuantity }) => {
+                    setReservationQuantity(currentProduct.id, currentQuantity);
+                }).catch((error) => {
+                    console.error('❌ Error syncing reservation quantity:', error);
+                });
+                
+                // Синхронизируем выбранное количество для заказа (без блокировки)
+                import('../orderStore.js').then(({ setOrderQuantity }) => {
+                    setOrderQuantity(currentProduct.id, currentQuantity);
+                }).catch((error) => {
+                    console.error('❌ Error syncing order quantity:', error);
+                });
+                
+                // Обновляем состояние кнопок после изменения количества
+                updateQuantityButtonsState();
                 } else if (currentValue === 1) {
                     // Если количество было 1, уменьшаем до 0 - товар удаляется из корзины
                     currentQuantity = 0;
@@ -247,7 +336,20 @@ function setupQuantityControls() {
             const input = sheetContent.querySelector('.cart-bottom-sheet-quantity-input');
             if (input && currentProduct) {
                 const currentValue = parseInt(input.value) || 1;
-                currentQuantity = currentValue + 1;
+                const maxQuantity = getMaxAvailableQuantity(currentProduct);
+                
+                // Проверяем ограничение: если есть максимум и текущее значение достигло его, не увеличиваем
+                if (maxQuantity !== null && currentValue >= maxQuantity) {
+                    // Уже достигнут максимум, не увеличиваем
+                    return;
+                }
+                
+                // Увеличиваем количество, но не больше максимума
+                const newQuantity = maxQuantity !== null 
+                    ? Math.min(currentValue + 1, maxQuantity)
+                    : currentValue + 1;
+                
+                currentQuantity = newQuantity;
                 input.value = currentQuantity;
                 
                 // НОВАЯ ЛОГИКА: Обновляем количество в корзине
@@ -260,8 +362,96 @@ function setupQuantityControls() {
                 } catch (error) {
                     console.error('❌ Error updating cart quantity:', error);
                 }
+                
+                // Синхронизируем выбранное количество для резервации (без блокировки)
+                import('../reservationStore.js').then(({ setReservationQuantity }) => {
+                    setReservationQuantity(currentProduct.id, currentQuantity);
+                }).catch((error) => {
+                    console.error('❌ Error syncing reservation quantity:', error);
+                });
+                
+                // Синхронизируем выбранное количество для заказа (без блокировки)
+                import('../orderStore.js').then(({ setOrderQuantity }) => {
+                    setOrderQuantity(currentProduct.id, currentQuantity);
+                }).catch((error) => {
+                    console.error('❌ Error syncing order quantity:', error);
+                });
+                
+                // Обновляем состояние кнопок после изменения количества
+                updateQuantityButtonsState();
             }
         });
+        
+        // Добавляем обработчик для валидации ввода в инпут
+        if (quantityInput) {
+            // Удаляем старый обработчик, если есть
+            const inputClone = quantityInput.cloneNode(true);
+            quantityInput.parentNode.replaceChild(inputClone, quantityInput);
+            
+            inputClone.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value) || 1;
+                const maxQuantity = getMaxAvailableQuantity(currentProduct);
+                
+                // Валидация: ограничиваем значение максимумом и минимумом 1
+                let validatedValue = value;
+                if (value < 1) {
+                    validatedValue = 1;
+                } else if (maxQuantity !== null && value > maxQuantity) {
+                    validatedValue = maxQuantity;
+                }
+                
+                if (validatedValue !== value) {
+                    e.target.value = validatedValue;
+                }
+                
+                currentQuantity = validatedValue;
+                
+                // Обновляем состояние кнопок
+                updateQuantityButtonsState();
+            });
+            
+            inputClone.addEventListener('blur', async (e) => {
+                const value = parseInt(e.target.value) || 1;
+                const maxQuantity = getMaxAvailableQuantity(currentProduct);
+                
+                // Финальная валидация при потере фокуса
+                let validatedValue = value;
+                if (value < 1) {
+                    validatedValue = 1;
+                } else if (maxQuantity !== null && value > maxQuantity) {
+                    validatedValue = maxQuantity;
+                }
+                
+                if (validatedValue !== value) {
+                    e.target.value = validatedValue;
+                }
+                
+                currentQuantity = validatedValue;
+                
+                // Обновляем количество в корзине при потере фокуса
+                if (currentProduct && validatedValue > 0) {
+                    try {
+                        const { updateCartItemQuantity } = await import('./cartStore.js');
+                        await updateCartItemQuantity(currentProduct.id, validatedValue);
+                        if (window.updateCartButtonsState) {
+                            window.updateCartButtonsState();
+                        }
+                    } catch (error) {
+                        console.error('❌ Error updating cart quantity:', error);
+                    }
+                    
+                    // Синхронизируем выбранное количество для резервации (без блокировки)
+                    import('../reservationStore.js').then(({ setReservationQuantity }) => {
+                        setReservationQuantity(currentProduct.id, validatedValue);
+                    }).catch((error) => {
+                        console.error('❌ Error syncing reservation quantity:', error);
+                    });
+                }
+                
+                // Обновляем состояние кнопок
+                updateQuantityButtonsState();
+            });
+        }
     } catch (error) {
         console.error('❌ Error setting up quantity controls:', error);
     }
@@ -300,83 +490,142 @@ function setupActionButtons() {
         const appContext = window.getAppContext ? window.getAppContext() : null;
         if (!appContext) return;
         
-        // Определяем тип товара
-        const isForSale = currentProduct.is_for_sale === true || 
-                         currentProduct.is_for_sale === 1 || 
-                         currentProduct.is_for_sale === '1' ||
-                         currentProduct.is_for_sale === 'true' ||
-                         String(currentProduct.is_for_sale).toLowerCase() === 'true';
+        // ========== ПОЛУЧЕНИЕ АКТУАЛЬНОГО ПРОДУКТА ИЗ КЭША ==========
+        // Получаем актуальный продукт из allProducts кэша (может быть обновлен после редактирования)
+        let actualProduct = currentProduct;
+        try {
+            const allProducts = window.getAllProducts ? window.getAllProducts() : null;
+            if (Array.isArray(allProducts)) {
+                const freshProduct = allProducts.find(p => p && p.id === currentProduct.id);
+                if (freshProduct) {
+                    actualProduct = freshProduct;
+                    console.log(`[CART BOTTOM SHEET] Using fresh product from cache for ${currentProduct.id}`);
+                }
+            }
+        } catch (e) {
+            console.warn(`[CART BOTTOM SHEET] Could not get fresh product from cache:`, e);
+        }
+        // ========== КОНЕЦ ПОЛУЧЕНИЯ АКТУАЛЬНОГО ПРОДУКТА ==========
         
-        const isMadeToOrder = currentProduct.is_made_to_order === true || 
-                             currentProduct.is_made_to_order === 1 || 
-                             currentProduct.is_made_to_order === '1' ||
-                             currentProduct.is_made_to_order === 'true' ||
-                             String(currentProduct.is_made_to_order).toLowerCase() === 'true';
+        // Загружаем helper если еще не загружен
+        await loadProductActionTypeHelper();
         
-        // Проверяем настройки резервации
+        // Получаем тип операции через единый helper с АКТУАЛЬНЫМ продуктом
         const shopSettings = window.getCurrentShopSettings ? window.getCurrentShopSettings() : null;
-        const reservationsEnabled = shopSettings ? (shopSettings.reservations_enabled === true) : true;
-        const canReserve = appContext.role === 'client' && 
-                          appContext.permissions && 
-                          appContext.permissions.can_reserve && 
-                          reservationsEnabled &&
-                          !isMadeToOrder;
+        const actionType = getProductActionType(actualProduct, appContext, shopSettings);
+        
+        // ========== DEBUG: Логирование типа при клике на кнопку ==========
+        console.log(`[CART BOTTOM SHEET DEBUG] Primary button clicked for product ${currentProduct.id}:`, {
+            productId: currentProduct.id,
+            actionType,
+            action_type_backend: actualProduct.action_type,
+            can_add_to_cart_backend: actualProduct.can_add_to_cart,
+            reason_not_sale: actualProduct.reason_not_sale,
+            is_for_sale: actualProduct.is_for_sale,
+            is_sale_enabled: actualProduct.is_sale_enabled,
+            is_made_to_order: actualProduct.is_made_to_order,
+            is_reservation_enabled: actualProduct.is_reservation_enabled
+        });
+        // ========== КОНЕЦ DEBUG ==========
         
         try {
             // Получаем актуальное количество из инпута
             const quantityInput = sheetContent.querySelector('.cart-bottom-sheet-quantity-input');
-            const quantity = quantityInput ? parseInt(quantityInput.value) || currentQuantity : currentQuantity;
+            let quantity = quantityInput ? parseInt(quantityInput.value) || currentQuantity : currentQuantity;
             
-            // В зависимости от типа товара выполняем разные действия
-            // Приоритет: Продать > Заказать > Резервировать > Готово
-            if (isForSale && appContext.role === 'client') {
-                // Тип 1: Продать - когда клиент продает нам
-                // Открываем модальное окно продажи
-                closeBottomSheet();
-                try {
-                    const { showPurchaseModal } = await import('../purchases.js');
-                    showPurchaseModal(currentProduct);
-                } catch (error) {
-                    console.error('❌ Error importing showPurchaseModal:', error);
-                    // Fallback: используем прямое открытие модального окна
+            // ВАЛИДАЦИЯ: Проверяем, что количество не превышает доступное
+            const maxQuantity = getMaxAvailableQuantity(actualProduct);
+            if (maxQuantity !== null && quantity > maxQuantity) {
+                // Если количество превышает доступное, ограничиваем его
+                quantity = maxQuantity;
+                if (quantityInput) {
+                    quantityInput.value = quantity;
+                }
+                currentQuantity = quantity;
+                
+                // Обновляем количество в корзине с валидированным значением (только для типа 'sale')
+                // Используем can_add_to_cart от бэка для проверки
+                const { canAddToCart } = await import('../utils/productActionType.js');
+                const canAdd = canAddToCart(actualProduct, appContext, shopSettings);
+                if (canAdd) {
                     try {
-                        const purchaseModal = document.getElementById('purchase-modal');
-                        if (purchaseModal) {
-                            purchaseModal.style.display = 'block';
-                        } else {
-                            alert('Ошибка при открытии формы продажи');
+                        const { updateCartItemQuantity } = await import('./cartStore.js');
+                        await updateCartItemQuantity(actualProduct.id, quantity);
+                        if (window.updateCartButtonsState) {
+                            window.updateCartButtonsState();
                         }
-                    } catch (fallbackError) {
-                        alert('Ошибка при открытии формы продажи');
+                    } catch (error) {
+                        console.error('❌ Error updating cart quantity:', error);
                     }
                 }
-            } else if (isMadeToOrder && appContext.role === 'client') {
-                // Тип 2: Заказать - когда клиент делает заказ
-                closeBottomSheet();
-                try {
-                    const { showOrderModal } = await import('../orders.js');
-                    showOrderModal(currentProduct.id);
-                } catch (error) {
-                    console.error('❌ Error importing showOrderModal:', error);
-                    alert('Ошибка при открытии формы заказа');
-                }
-            } else if (canReserve) {
-                // Тип 3: Резервировать - когда клиент делает резервацию
-                closeBottomSheet();
-                try {
-                    const { showReservationModal } = await import('../reservations.js');
-                    showReservationModal(currentProduct.id);
-                } catch (error) {
-                    console.error('❌ Error importing showReservationModal:', error);
-                    alert('Ошибка при открытии формы резервации');
-                }
-            } else {
-                // Для остальных товаров - просто закрываем bottom sheet
-                // Количество уже обновлено при изменении в bottom sheet
-                closeBottomSheet();
-                if (window.updateCartButtonsState) {
-                    window.updateCartButtonsState();
-                }
+            }
+            
+            // Выполняем действие в зависимости от типа операции
+            closeBottomSheet();
+            
+            switch (actionType) {
+                case 'purchase':
+                    // Продать - когда клиент продает нам
+                    try {
+                        const { showPurchasePage } = await import('../purchases.js');
+                        closeBottomSheet();
+                        showPurchasePage(actualProduct); // Используем актуальный продукт
+                    } catch (error) {
+                        console.error('❌ Error importing showPurchasePage:', error);
+                        alert('Ошибка при открытии формы продажи');
+                    }
+                    break;
+                    
+                case 'sale':
+                    // Купить — единый поток через Deal: start -> deal-checkout-page -> confirm (как из корзины)
+                    try {
+                        const { startDealCheckoutAPI } = await import('../api/deals.js');
+                        const { openDealCheckoutPage } = await import('../dealCheckout.js');
+                        const quantity = quantityInput ? Math.max(1, parseInt(quantityInput.value) || 1) : currentQuantity;
+                        const result = await startDealCheckoutAPI({
+                            items: [{ product_id: actualProduct.id, quantity }], // Используем актуальный продукт
+                        });
+                        openDealCheckoutPage(result.deal_id, {
+                            total_items_count: result.total_items_count,
+                            total_amount: result.total_amount,
+                            currency: result.currency,
+                        }, { source: 'single' });
+                    } catch (error) {
+                        console.error('❌ Error starting deal checkout (buy from card):', error);
+                        alert('Ошибка при оформлении: ' + (error.message || 'не удалось начать оформление'));
+                    }
+                    break;
+                    
+                case 'order':
+                    // Заказать - когда клиент делает заказ
+                    try {
+                        const { showOrderPage } = await import('../orders.js');
+                        closeBottomSheet();
+                        showOrderPage(actualProduct.id, false); // Используем актуальный продукт
+                    } catch (error) {
+                        console.error('❌ Error importing showOrderPage:', error);
+                        alert('Ошибка при открытии формы заказа');
+                    }
+                    break;
+                    
+                case 'reserve':
+                    // Резервировать - когда клиент делает резервацию
+                    try {
+                        const { showReservationModal } = await import('../reservations.js');
+                        showReservationModal(actualProduct.id); // Используем актуальный продукт
+                    } catch (error) {
+                        console.error('❌ Error importing showReservationModal:', error);
+                        alert('Ошибка при открытии формы резервации');
+                    }
+                    break;
+                    
+                default:
+                    // Для остальных товаров - просто закрываем bottom sheet
+                    // Количество уже обновлено при изменении в bottom sheet
+                    if (window.updateCartButtonsState) {
+                        window.updateCartButtonsState();
+                    }
+                    break;
             }
         } catch (error) {
             console.error('❌ Error in primary button action:', error);
@@ -413,8 +662,26 @@ export async function showCartBottomSheet(product) {
     
     currentProduct = product;
     
-    // НОВАЯ ЛОГИКА: Получаем текущее количество товара в корзине
+    // ========== ПОЛУЧЕНИЕ АКТУАЛЬНОГО ПРОДУКТА ИЗ КЭША ПРИ ОТКРЫТИИ ==========
+    // Получаем актуальный продукт из allProducts кэша (может быть обновлен после редактирования)
     try {
+        const allProducts = window.getAllProducts ? window.getAllProducts() : null;
+        if (Array.isArray(allProducts)) {
+            const freshProduct = allProducts.find(p => p && p.id === product.id);
+            if (freshProduct) {
+                currentProduct = freshProduct;
+                console.log(`[CART BOTTOM SHEET] Using fresh product from cache on open for ${product.id}`);
+            }
+        }
+    } catch (e) {
+        console.warn(`[CART BOTTOM SHEET] Could not get fresh product from cache on open:`, e);
+    }
+    // ========== КОНЕЦ ПОЛУЧЕНИЯ АКТУАЛЬНОГО ПРОДУКТА ==========
+    
+    // НОВАЯ ЛОГИКА: Получаем текущее количество товара в корзине
+    // Используем await для синхронного получения количества
+    try {
+        // Получаем количество из корзины
         const { getCartItems } = await import('./cartStore.js');
         const cartItems = getCartItems();
         const existingItem = cartItems.find(item => item.product.id === product.id);
@@ -432,10 +699,74 @@ export async function showCartBottomSheet(product) {
         currentQuantity = 1;
     }
     
-    // Обновляем значение в инпуте
+    // Обновляем значение в инпуте и устанавливаем ограничения
     const quantityInput = sheetContent.querySelector('.cart-bottom-sheet-quantity-input');
     if (quantityInput) {
+        // Устанавливаем минимальное значение
+        quantityInput.min = 1;
+        
+        // Устанавливаем максимальное значение на основе доступного количества
+        const maxQuantity = getMaxAvailableQuantity(product);
+        if (maxQuantity !== null) {
+            quantityInput.max = maxQuantity;
+            // Если текущее количество больше доступного, ограничиваем его
+            if (currentQuantity > maxQuantity) {
+                currentQuantity = maxQuantity;
+            }
+        } else {
+            // Если количество неограниченно, убираем ограничение max
+            quantityInput.removeAttribute('max');
+        }
+        
+        // Для резервации и заказа: синхронизируем с store при открытии Bottom Sheet
+        // Используем динамический импорт без await, чтобы не блокировать
+        Promise.all([
+            import('../reservationStore.js').catch(() => null),
+            import('../orderStore.js').catch(() => null)
+        ]).then(([reservationStore, orderStore]) => {
+            try {
+                let storedQuantity = currentQuantity;
+                
+                // Проверяем количество для резервации
+                if (reservationStore) {
+                    const reservationQty = reservationStore.getReservationQuantity(product.id, currentQuantity);
+                    if (reservationQty >= 1 && (maxQuantity === null || reservationQty <= maxQuantity)) {
+                        storedQuantity = reservationQty;
+                    }
+                }
+                
+                // Проверяем количество для заказа (приоритет, если есть)
+                if (orderStore) {
+                    const orderQty = orderStore.getOrderQuantity(product.id, storedQuantity);
+                    if (orderQty >= 1 && (maxQuantity === null || orderQty <= maxQuantity)) {
+                        storedQuantity = orderQty;
+                    }
+                }
+                
+                // Используем сохраненное количество, если оно валидно
+                if (storedQuantity !== currentQuantity && storedQuantity >= 1 && (maxQuantity === null || storedQuantity <= maxQuantity)) {
+                    currentQuantity = storedQuantity;
+                    quantityInput.value = currentQuantity;
+                }
+                
+                // Сохраняем текущее количество в оба store
+                if (reservationStore) {
+                    reservationStore.setReservationQuantity(product.id, currentQuantity);
+                }
+                if (orderStore) {
+                    orderStore.setOrderQuantity(product.id, currentQuantity);
+                }
+            } catch (error) {
+                console.error('❌ Error syncing quantity on open:', error);
+            }
+        }).catch((error) => {
+            console.error('❌ Error importing stores:', error);
+        });
+        
         quantityInput.value = currentQuantity;
+        
+        // Убираем readonly, чтобы пользователь мог вводить значение
+        quantityInput.removeAttribute('readonly');
     }
     
     // Получаем контекст приложения
@@ -482,49 +813,17 @@ export async function showCartBottomSheet(product) {
         quantityInput.value = currentQuantity;
     }
     
-    // Определяем тип товара и показываем соответствующие кнопки
-    const isForSale = product.is_for_sale === true || 
-                     product.is_for_sale === 1 || 
-                     product.is_for_sale === '1' ||
-                     product.is_for_sale === 'true' ||
-                     String(product.is_for_sale).toLowerCase() === 'true';
+    // Загружаем helper если еще не загружен
+    await loadProductActionTypeHelper();
     
-    const isMadeToOrder = product.is_made_to_order === true || 
-                         product.is_made_to_order === 1 || 
-                         product.is_made_to_order === '1' ||
-                         product.is_made_to_order === 'true' ||
-                         String(product.is_made_to_order).toLowerCase() === 'true';
-    
-    // Проверяем настройки резервации
+    // Получаем тип операции через единый helper
     const shopSettings = window.getCurrentShopSettings ? window.getCurrentShopSettings() : null;
-    const reservationsEnabled = shopSettings ? (shopSettings.reservations_enabled === true) : true;
-    const canReserve = appContext.role === 'client' && 
-                      appContext.permissions && 
-                      appContext.permissions.can_reserve && 
-                      reservationsEnabled &&
-                      !isMadeToOrder;
+    const actionType = getProductActionType(product, appContext, shopSettings);
     
-    // Настраиваем кнопки в зависимости от типа товара
-    // Приоритет: Продать > Заказать > Резервировать > Готово
+    // Настраиваем primary-кнопку в зависимости от типа операции
     if (primaryBtn) {
-        if (isForSale && appContext.role === 'client') {
-            // Тип 1: Продать - когда клиент продает нам
-            primaryBtn.textContent = 'Продать сейчас';
-            primaryBtn.style.display = 'flex';
-        } else if (isMadeToOrder && appContext.role === 'client') {
-            // Тип 2: Заказать - когда клиент делает заказ
-            primaryBtn.textContent = 'Заказать сейчас';
-            primaryBtn.style.display = 'flex';
-        } else if (canReserve) {
-            // Тип 3: Резервировать - когда клиент делает резервацию
-            primaryBtn.textContent = 'Резервировать сейчас';
-            primaryBtn.style.display = 'flex';
-        } else {
-            // Для остальных товаров - просто закрываем bottom sheet
-            // Товар уже добавлен в корзину, количество обновляется автоматически
-            primaryBtn.textContent = 'Готово';
-            primaryBtn.style.display = 'flex';
-        }
+        primaryBtn.textContent = getActionButtonText(actionType);
+        primaryBtn.style.display = 'flex';
     }
     
     // Вторичная кнопка не используется (скрыта)
@@ -535,6 +834,9 @@ export async function showCartBottomSheet(product) {
     // Переустанавливаем обработчики кнопок и количества для текущего товара
     setupQuantityControls();
     setupActionButtons();
+    
+    // Обновляем состояние кнопок после настройки
+    updateQuantityButtonsState();
     
     // Показываем bottom sheet с z-index выше карточек, но ниже меню
     // НИКОГДА не устанавливаем z-index выше 10010, чтобы меню всегда было поверх
@@ -551,6 +853,11 @@ export async function showCartBottomSheet(product) {
     requestAnimationFrame(() => {
         sheetContent.style.transform = 'translateY(0)';
     });
+}
+
+/** ID товара в открытом bottom sheet (для обновления UI после редактирования) */
+export function getCurrentBottomSheetProductId() {
+    return isBottomSheetOpen && currentProduct ? currentProduct.id : null;
 }
 
 /**

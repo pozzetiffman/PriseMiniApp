@@ -15,7 +15,7 @@ from ..utils.telegram_auth import validate_init_data_multi_bot
 
 async def create_product(
     name: str,
-    price: float,
+    price: Optional[float],  # Опционально - используется только как fallback для старых товаров
     category_id: int,
     user_id: int,
     description: Optional[str],
@@ -34,7 +34,16 @@ async def create_product(
     bot_id: Optional[int],
     x_telegram_init_data: Optional[str],
     images: List[UploadFile],
-    db: Session
+    db: Session,
+    is_sale_enabled: Optional[str] = None,
+    is_client_sale: Optional[str] = None,
+    seller_id: Optional[int] = None,
+    price_card: Optional[float] = None,  # Базовая цена (обязательна для новых товаров с is_sale_enabled или is_made_to_order)
+    price_cash: Optional[float] = None,
+    price_old: Optional[float] = None,
+    characteristics: Optional[str] = None,  # JSON: [{"name":"Размер","value":"XL"},...]
+    delivery_time: Optional[str] = None,
+    delivery_price: Optional[float] = None,
 ):
     """
     Создание нового товара
@@ -69,6 +78,21 @@ async def create_product(
     is_hot_offer_bool = str_to_bool(is_hot_offer)
     is_made_to_order_bool = str_to_bool(is_made_to_order)
     is_for_sale_bool = str_to_bool(is_for_sale)
+    is_sale_enabled_bool = str_to_bool(is_sale_enabled) if is_sale_enabled else False
+    is_client_sale_bool = str_to_bool(is_client_sale) if is_client_sale else False
+    
+    # Для C2C товаров: если is_client_sale=true, автоматически устанавливаем is_sale_enabled=true
+    if is_client_sale_bool:
+        is_sale_enabled_bool = True
+        # Если seller_id не указан, пытаемся получить его из initData
+        if seller_id is None and x_telegram_init_data:
+            try:
+                from ..routers.context import get_validated_user
+                validated_user = await get_validated_user(x_telegram_init_data, db)
+                seller_id = validated_user.id
+                print(f"✅ Determined seller_id={seller_id} from initData for C2C product")
+            except:
+                print(f"⚠️ Could not determine seller_id from initData for C2C product")
     
     # Конвертируем quantity_show_enabled (может быть None, "true" или "false")
     quantity_show_enabled_bool = None
@@ -167,9 +191,44 @@ async def create_product(
     # Нормализуем category_id для гарантии инварианта product.bot_id === category.bot_id
     normalized_category_id = normalize_category_id(category_id, final_bot_id, user_id, db)
 
+    # ВАЛИДАЦИЯ И ЛОГИКА ЦЕН:
+    # Новая модель: price_card - базовая цена (для новых товаров)
+    # Старая модель: price - используется как fallback для старых товаров
+    # 
+    # Правила:
+    # 1. Если указан price_card - используем его как price (для обратной совместимости со старым кодом)
+    # 2. Если не указан price_card, но указан price - используем price (для старых товаров)
+    # 3. Для товаров с is_sale_enabled или is_made_to_order (не is_for_sale) требуется хотя бы price_card или price
+    # 4. Для товаров is_for_sale цена не требуется (используется price_from/price_to/price_fixed)
+    
+    final_price = None
+    if price_card is not None:
+        # Новая модель: используем price_card как price для обратной совместимости
+        final_price = price_card
+        print(f"✅ Using price_card={price_card} as price (new model)")
+    elif price is not None:
+        # Старая модель: используем price как есть
+        final_price = price
+        print(f"✅ Using price={price} (old model fallback)")
+    
+    # Валидация: для товаров с is_sale_enabled или is_made_to_order требуется цена
+    if not is_for_sale_bool and (is_sale_enabled_bool or is_made_to_order_bool):
+        if final_price is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Price is required for products with is_sale_enabled or is_made_to_order. Provide either price_card (new model) or price (old model)."
+            )
+    
+    # Для товаров is_for_sale цена не требуется, но если указана - сохраняем
+    # (может использоваться для обратной совместимости или как fallback)
+
+    # ВАЖНО: Сохраняем price_card и price_cash напрямую, независимо от логики price
+    # price используется только как fallback для обратной совместимости
+    print(f"💾 [CREATE PRODUCT] Saving prices: price={final_price}, price_card={price_card}, price_cash={price_cash}, discount={discount}")
+
     db_product = models.Product(
         name=name,
-        price=price,
+        price=final_price,  # Используем финальное значение цены (для обратной совместимости)
         category_id=normalized_category_id,
         user_id=user_id,
         bot_id=final_bot_id,  # Если bot_id указан - создаем для независимого магазина бота
@@ -179,6 +238,9 @@ async def create_product(
         quantity=quantity,
         is_made_to_order=is_made_to_order_bool,
         is_for_sale=is_for_sale_bool,
+        is_sale_enabled=is_sale_enabled_bool,
+        is_client_sale=is_client_sale_bool,
+        seller_id=seller_id,
         price_from=price_from,
         price_to=price_to,
         price_fixed=price_fixed,
@@ -186,13 +248,58 @@ async def create_product(
         quantity_from=quantity_from,
         quantity_unit=quantity_unit,
         quantity_show_enabled=quantity_show_enabled_bool,
+        price_card=price_card,  # Сохраняем price_card напрямую (новая модель)
+        price_cash=price_cash,  # Сохраняем price_cash напрямую (новая модель)
+        price_old=price_old,
+        delivery_time=delivery_time,
+        delivery_price=delivery_price,
         image_url=image_url,
         images_urls=images_urls_json,
         sync_product_id=None  # Будет установлен после получения ID
     )
     db.add(db_product)
     db.flush()  # Получаем ID товара, но не коммитим
-    
+
+    # Сохранение характеристик товара (ПОСЛЕ db.flush(), когда уже есть db_product.id)
+    # Характеристики приходят как JSON: [{"name":"Размер","value":"XL"},...]
+    if characteristics:
+        try:
+            chars_list = json.loads(characteristics) if isinstance(characteristics, str) else characteristics
+            if isinstance(chars_list, list) and len(chars_list) > 0:
+                seen_names = set()
+                for idx, item in enumerate(chars_list):
+                    if isinstance(item, dict):
+                        name = (item.get("name") or "").strip()
+                        value = (item.get("value") or "").strip()
+                        if name and value:
+                            # Вставляем в product_characteristics
+                            pc = models.ProductCharacteristic(
+                                product_id=db_product.id,
+                                name=name,
+                                value=value,
+                                sort_order=idx
+                            )
+                            db.add(pc)
+                            # Get-or-create в справочник названий (по user_id + bot_id)
+                            if name not in seen_names:
+                                seen_names.add(name)
+                                existing_name = db.query(models.CharacteristicName).filter(
+                                    models.CharacteristicName.user_id == user_id,
+                                    models.CharacteristicName.name == name,
+                                    models.CharacteristicName.bot_id == final_bot_id
+                                ).first()
+                                if not existing_name:
+                                    cn = models.CharacteristicName(
+                                        name=name,
+                                        user_id=user_id,
+                                        bot_id=final_bot_id
+                                    )
+                                    db.add(cn)
+                db.flush()
+                print(f"DEBUG: Saved {len(chars_list)} characteristics for product {db_product.id}")
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"WARN: Invalid characteristics JSON: {e}")
+
     # Устанавливаем sync_product_id:
     # - Для товара в основном магазине (bot_id=None) - sync_product_id = id (сам на себя)
     # - Для товара в магазине бота - sync_product_id будет установлен при синхронизации
@@ -211,12 +318,14 @@ async def create_product(
     db.refresh(db_product)
     
     print(f"DEBUG: Product created in DB: id={db_product.id}, name={db_product.name}, images_count={len(images_urls)}")
+    print(f"💾 [CREATE PRODUCT] Saved in DB: price={db_product.price}, price_card={db_product.price_card}, price_cash={db_product.price_cash}, discount={db_product.discount}")
     
     # Преобразуем относительные пути в полные HTTPS URL
     images_urls_full = [make_full_url(img_url) for img_url in images_urls]
     image_url_full = make_full_url(db_product.image_url) if db_product.image_url else None
     
     # Возвращаем продукт с images_urls как список полных HTTPS URL
+    # ВАЖНО: возвращаем все поля цен для поддержки новой модели
     return {
         "id": db_product.id,
         "name": db_product.name,
@@ -228,7 +337,16 @@ async def create_product(
         "category_id": db_product.category_id,
         "user_id": db_product.user_id,
         "is_hot_offer": getattr(db_product, 'is_hot_offer', False),
-        "quantity": getattr(db_product, 'quantity', 0)
+        "quantity": getattr(db_product, 'quantity', 0),
+        "price_card": getattr(db_product, 'price_card', None),
+        "price_cash": getattr(db_product, 'price_cash', None),
+        "price_old": getattr(db_product, 'price_old', None),
+        "is_sale_enabled": getattr(db_product, 'is_sale_enabled', False),
+        "is_made_to_order": getattr(db_product, 'is_made_to_order', False),
+        "is_for_sale": getattr(db_product, 'is_for_sale', False),
+        "is_client_sale": getattr(db_product, 'is_client_sale', False),
+        "delivery_time": getattr(db_product, 'delivery_time', None),
+        "delivery_price": getattr(db_product, 'delivery_price', None),
     }
 
 

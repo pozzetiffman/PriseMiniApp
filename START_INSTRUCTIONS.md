@@ -5,8 +5,18 @@
 ### Терминал 1 — Бекенд (запустить первым)
 
 ```bash
+cd /Users/admin/Desktop/PriseMiniApp/backend && source ../.venv/bin/activate && python run.py
+```
+
+**Альтернатива (uvicorn напрямую):**
+```bash
 cd /Users/admin/Desktop/PriseMiniApp/backend && source ../.venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+**Env для логов:**
+- `UVICORN_ACCESS_LOG=1` — включить access log (GET ... 200 OK). По умолчанию выключен.
+- `LOG_LEVEL=WARNING` — минимум логов. `LOG_LEVEL=DEBUG` — подробности.
+- `DISABLE_PY_PRINT=0` — разрешить print(). По умолчанию print глушится.
 
 **Что должно появиться:**
 - `INFO: Application startup complete.`

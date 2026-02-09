@@ -20,20 +20,22 @@ export const API_BASE = "https://unmaneuvered-chronogrammatically-otelia.ngrok-f
 // ========== END REFACTORING STEP 1.1 ==========
 
 // ========== REFACTORING STEP 1.2: getBaseHeadersNoAuth() ==========
-// Базовые заголовки без авторизации (для просмотра товаров/категорий)
+// Базовые заголовки для read-only endpoints. ВСЕГДА добавляем initData для корреляции/логов.
+// Раньше "NoAuth" означало без initData — теперь каждый запрос несёт initData.
+import { getInitData } from '../telegram.js';
 export function getBaseHeadersNoAuth() {
-    return {
+    const headers = {
         "ngrok-skip-browser-warning": "69420",
         "Content-Type": "application/json"
     };
+    const initData = getInitData();
+    if (initData) headers["X-Telegram-Init-Data"] = initData;
+    return headers;
 }
 
 // ========== END REFACTORING STEP 1.2 ==========
 
 // ========== REFACTORING STEP 1.3: getBaseHeaders() ==========
-// Импорт необходимых зависимостей для функции авторизации
-import { getInitData } from '../telegram.js';
-
 // Базовые опции для запросов с авторизацией
 export function getBaseHeaders() {
     const headers = {

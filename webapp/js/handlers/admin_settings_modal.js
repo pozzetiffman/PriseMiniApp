@@ -6,6 +6,8 @@ import {
     handleAllProductsMadeToOrderToggle as handleAllProductsMadeToOrderToggleHandler
 } from './admin_settings.js';
 import { getCurrentShopSettings, loadShopSettings } from '../utils/admin_utils.js';
+import { hideAllPages } from '../operationsBase.js';
+import { setupPageScrollHandler } from '../operationsBase.js';
 
 let shopSettings = null;
 let quantityEnabledToggle = null;
@@ -13,92 +15,82 @@ let reservationsToggle = null;
 let allProductsMadeToOrderToggle = null;
 
 /**
- * Инициализация модального окна настроек
+ * Инициализация модального окна настроек (переключатели находятся на settings-page)
  */
 export function initSettingsModal() {
-    console.log('⚙️ Initializing settings modal...');
-    
-    const settingsModal = document.getElementById('settings-modal');
-    if (!settingsModal) {
-        console.error('❌ Settings modal not found');
-        return;
-    }
-    
-    // Настройка закрытия модального окна
-    const settingsClose = document.querySelector('.settings-close');
-    if (settingsClose) {
-        settingsClose.onclick = () => {
-            settingsModal.style.display = 'none';
-        };
-    }
-    
-    // Закрытие при клике вне модального окна
-    settingsModal.onclick = (e) => {
-        if (e.target === settingsModal) {
-            settingsModal.style.display = 'none';
-        }
-    };
-    
-    // Инициализация переключателей
+    console.log('⚙️ Initializing settings...');
     quantityEnabledToggle = document.getElementById('quantity-enabled-toggle');
     reservationsToggle = document.getElementById('reservations-toggle');
     allProductsMadeToOrderToggle = document.getElementById('all-products-made-to-order-toggle');
-    
     if (quantityEnabledToggle) {
         quantityEnabledToggle.onchange = () => {
             handleQuantityEnabledToggle(quantityEnabledToggle.checked);
         };
     }
-    
     if (reservationsToggle) {
         reservationsToggle.onchange = () => {
             handleReservationsToggle(reservationsToggle.checked);
         };
     }
-    
     if (allProductsMadeToOrderToggle) {
         allProductsMadeToOrderToggle.onchange = () => {
             handleAllProductsMadeToOrderToggle(allProductsMadeToOrderToggle.checked);
         };
     }
-    
-    console.log('✅ Settings modal initialized');
+    console.log('✅ Settings initialized');
 }
 
 /**
- * Открытие модального окна настроек
+ * Закрытие страницы настроек, возврат на profile-page
  */
-export async function openSettings() {
-    const settingsModal = document.getElementById('settings-modal');
-    if (!settingsModal) {
-        console.error('❌ Settings modal not found');
+export function closeSettingsPage() {
+    const settingsPage = document.getElementById('settings-page');
+    const profilePage = document.getElementById('profile-page');
+    if (settingsPage) settingsPage.style.display = 'none';
+    if (profilePage) profilePage.style.display = 'block';
+}
+
+/**
+ * Открытие страницы настроек (вместо модального окна). «←» возвращает в profile-page.
+ */
+export async function openSettingsPage() {
+    const settingsPage = document.getElementById('settings-page');
+    if (!settingsPage) {
+        console.error('❌ Settings page not found');
         return;
     }
-    
     try {
-        // Загружаем настройки магазина
         await loadShopSettings();
         shopSettings = getCurrentShopSettings();
-        
-        // Обновляем состояние переключателей
+        if (!quantityEnabledToggle) quantityEnabledToggle = document.getElementById('quantity-enabled-toggle');
+        if (!reservationsToggle) reservationsToggle = document.getElementById('reservations-toggle');
+        if (!allProductsMadeToOrderToggle) allProductsMadeToOrderToggle = document.getElementById('all-products-made-to-order-toggle');
         if (quantityEnabledToggle && shopSettings) {
             quantityEnabledToggle.checked = shopSettings.quantity_enabled !== false;
         }
-        
         if (reservationsToggle && shopSettings) {
             reservationsToggle.checked = shopSettings.reservations_enabled === true;
         }
-        
         if (allProductsMadeToOrderToggle && shopSettings) {
             allProductsMadeToOrderToggle.checked = shopSettings.all_products_made_to_order === true;
         }
-        
-        // Показываем модальное окно
-        settingsModal.style.display = 'flex';
+        hideAllPages();
+        settingsPage.style.display = 'block';
+        settingsPage.scrollTop = 0;
+        const backBtn = document.getElementById('settings-page-back');
+        if (backBtn) backBtn.onclick = closeSettingsPage;
+        setupPageScrollHandler(settingsPage);
     } catch (error) {
         console.error('❌ Error loading shop settings:', error);
         alert('Не удалось загрузить настройки магазина: ' + error.message);
     }
+}
+
+/**
+ * Открытие модального окна настроек (устарело: используется openSettingsPage)
+ */
+export async function openSettings() {
+    await openSettingsPage();
 }
 
 /**

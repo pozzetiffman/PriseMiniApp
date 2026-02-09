@@ -60,14 +60,14 @@ async def share_store(message: Message, state: FSMContext):
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{API_URL}/channels/"
-            logging.info(f"Requesting channels from {url} with user_id={user_id}")
+            logging.debug(f"Requesting channels from {url} with user_id={user_id}")
             async with session.get(url, params={"user_id": user_id}) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
                     logging.error(f"Error getting channels: status={resp.status}, error={error_text}")
                     return await message.answer(f"❌ Ошибка при получении списка каналов (статус: {resp.status})")
                 channels = await resp.json()
-                logging.info(f"Successfully got {len(channels)} channels")
+                logging.debug(f"Successfully got {len(channels)} channels")
     except Exception as e:
         logging.error(f"Exception getting channels: {e}")
         return await message.answer(f"❌ Ошибка подключения к серверу: {str(e)}")
@@ -110,14 +110,14 @@ async def manage_channels(message: Message, state: FSMContext = None):
     try:
         async with aiohttp.ClientSession() as session:
             url = f"{API_URL}/channels/"
-            logging.info(f"Requesting channels from {url} with user_id={user_id}")
+            logging.debug(f"Requesting channels from {url} with user_id={user_id}")
             async with session.get(url, params={"user_id": user_id}) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
                     logging.error(f"Error getting channels: status={resp.status}, error={error_text}")
                     return await message.answer(f"❌ Ошибка при получении списка каналов (статус: {resp.status})")
                 channels = await resp.json()
-                logging.info(f"Successfully got {len(channels)} channels")
+                logging.debug(f"Successfully got {len(channels)} channels")
     except Exception as e:
         logging.error(f"Exception getting channels: {e}")
         return await message.answer(f"❌ Ошибка подключения к серверу: {str(e)}")
@@ -273,12 +273,12 @@ async def send_store_to_channel(callback: types.CallbackQuery):
     try:
         chat_info = await bot.get_chat(channel['chat_id'])
         chat_type = chat_info.type
-        logging.info(f"📤 Sending store to {chat_type} {channel['chat_id']}")
+        logging.debug(f"📤 Sending store to {chat_type} {channel['chat_id']}")
     except Exception as e:
         logging.warning(f"Could not get chat info for {channel['chat_id']}: {e}")
         # Используем значение из базы данных или 'unknown'
         chat_type = channel.get('chat_type', 'unknown')
-        logging.info(f"📤 Sending store to {chat_type} {channel['chat_id']} (from DB)")
+        logging.debug(f"📤 Sending store to {chat_type} {channel['chat_id']} (from DB)")
     
     msg = f"**{shop_name_display}**\n\n"
     if welcome_description:
@@ -301,7 +301,7 @@ async def send_store_to_channel(callback: types.CallbackQuery):
             text=button_text,
             web_app=WebAppInfo(url=share_url)
         ))
-        logging.info(f"✅ Using WebApp button for private chat (opens inside bot)")
+        logging.debug(f"✅ Using WebApp button for private chat (opens inside bot)")
     else:
         # В группах и каналах WebApp кнопки не работают
         # Используем deep link на бота, который откроет магазин внутри бота
@@ -310,7 +310,7 @@ async def send_store_to_channel(callback: types.CallbackQuery):
             text=button_text,
             url=bot_link
         ))
-        logging.info(f"✅ Using deep link for {chat_type} (opens bot, then store inside)")
+        logging.debug(f"✅ Using deep link for {chat_type} (opens bot, then store inside)")
     
     builder_markup = builder.as_markup()
     
@@ -324,7 +324,7 @@ async def send_store_to_channel(callback: types.CallbackQuery):
                     photo=welcome_image_url,
                     parse_mode="Markdown"
                 )
-                logging.info(f"📷 Sent welcome image to {chat_type or 'unknown'} {channel['chat_id']}")
+                logging.debug(f"📷 Sent welcome image to {chat_type or 'unknown'} {channel['chat_id']}")
             except Exception as photo_err:
                 logging.warning(f"⚠️ Could not send welcome image: {photo_err}")
         
@@ -335,7 +335,7 @@ async def send_store_to_channel(callback: types.CallbackQuery):
             reply_markup=builder_markup,
             parse_mode="Markdown"
         )
-        logging.info(f"✅ Successfully sent store to {chat_type or 'unknown'} {channel['chat_id']}, message_id: {sent_msg.message_id}")
+        logging.debug(f"✅ Successfully sent store to {chat_type or 'unknown'} {channel['chat_id']}, message_id: {sent_msg.message_id}")
         await callback.answer(f"✅ Витрина отправлена в '{channel['title']}'!")
     except Exception as e:
         error_msg = str(e)

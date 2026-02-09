@@ -76,6 +76,15 @@ export async function fetchProducts(shopOwnerId, categoryId = null, botId = null
 
 // ========== END REFACTORING STEP 4.1 ==========
 
+// Получить товар по ID (для обновления UI после редактирования)
+export async function getProductByIdAPI(productId) {
+    const url = `${API_BASE}/api/products/${productId}`;
+    const data = await apiRequest(url, {
+        headers: getBaseHeaders()
+    });
+    return data;
+}
+
 // ========== REFACTORING STEP 4.2: getSoldProductsAPI() ==========
 // Получить список проданных товаров
 export async function getSoldProductsAPI(shopOwnerId) {

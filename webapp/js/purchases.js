@@ -10,6 +10,8 @@ import { createPurchaseAPI } from './api/purchases.js';
 // НОВЫЙ ИМПОРТ из модуля api/purchases.js
 import { cancelPurchaseAPI } from './api/purchases.js';
 // ========== END REFACTORING STEP 9.3 ==========
+import { hideAllPages } from './operationsBase.js';
+import { setupPageScrollHandler } from './operationsBase.js';
 
 // Зависимости, которые будут переданы из app.js
 let appContextGetter = null; // Функция-геттер для получения appContext
@@ -71,21 +73,40 @@ function setupGlobalFunctions() {
     };
 }
 
-// Показ модального окна продажи
-export function showPurchaseModal(prod) {
+/**
+ * Закрытие страницы заявки на продажу, возврат на product-page
+ */
+export function closePurchasePage() {
+    const purchasePage = document.getElementById('purchase-page');
+    const productPage = document.getElementById('product-page');
+    if (purchasePage) purchasePage.style.display = 'none';
+    if (productPage) productPage.style.display = 'block';
+}
+
+/**
+ * Показ страницы заявки на продажу (вместо модального окна)
+ */
+export function showPurchasePage(prod) {
     const appContext = appContextGetter ? appContextGetter() : null;
-    
     if (!appContext) {
         alert('❌ Ошибка: контекст не загружен');
         return;
     }
-    
-    const purchaseModal = document.getElementById('purchase-modal');
-    if (!purchaseModal) {
-        alert('❌ Модальное окно покупки не найдено');
+    const purchasePage = document.getElementById('purchase-page');
+    if (!purchasePage) {
+        alert('❌ Страница заявки на продажу не найдена');
         return;
     }
-    
+    hideAllPages();
+    purchasePage.style.display = 'block';
+    purchasePage.scrollTop = 0;
+    const backBtn = document.getElementById('purchase-page-back');
+    if (backBtn) backBtn.onclick = closePurchasePage;
+    setupPageScrollHandler(purchasePage);
+    setupPurchaseForm(prod);
+}
+
+function setupPurchaseForm(prod) {
     // Очищаем форму
     document.getElementById('purchase-last-name').value = '';
     document.getElementById('purchase-first-name').value = '';
@@ -147,29 +168,33 @@ export function showPurchaseModal(prod) {
         }
     };
     
-    // Обработчик закрытия
-    const closeBtn = document.querySelector('.purchase-close');
-    if (closeBtn) {
-        closeBtn.onclick = () => {
-            purchaseModal.style.display = 'none';
-        };
-    }
-    
-    purchaseModal.onclick = (e) => {
-        if (e.target === purchaseModal) {
-            purchaseModal.style.display = 'none';
-        }
-    };
-    
     // Обработчик отправки формы
     const submitBtn = document.getElementById('purchase-submit');
     const newSubmitBtn = submitBtn.cloneNode(true);
     submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
-    
     newSubmitBtn.onclick = async () => {
         await submitPurchaseForm(prod.id);
     };
-    
+}
+
+// Показ модального окна продажи (устарело: используется showPurchasePage)
+export function showPurchaseModal(prod) {
+    const appContext = appContextGetter ? appContextGetter() : null;
+    if (!appContext) {
+        alert('❌ Ошибка: контекст не загружен');
+        return;
+    }
+    const purchaseModal = document.getElementById('purchase-modal');
+    if (!purchaseModal) {
+        alert('❌ Модальное окно покупки не найдено');
+        return;
+    }
+    setupPurchaseForm(prod);
+    const closeBtn = document.querySelector('.purchase-close');
+    if (closeBtn) closeBtn.onclick = () => { purchaseModal.style.display = 'none'; };
+    purchaseModal.onclick = (e) => {
+        if (e.target === purchaseModal) purchaseModal.style.display = 'none';
+    };
     purchaseModal.style.display = 'flex';
 }
 
@@ -227,12 +252,14 @@ export async function submitPurchaseForm(productId) {
         const { safeAlert } = await import('./telegram.js');
         await safeAlert('✅ Заявка на продажу успешно отправлена!');
         
-        // Закрываем модальные окна (продажи и товара), как для заказов
-        const purchaseModal = document.getElementById('purchase-modal');
-        if (purchaseModal) {
-            purchaseModal.style.display = 'none';
+        // Закрываем страницу или модальное окно заявки на продажу
+        const purchasePage = document.getElementById('purchase-page');
+        if (purchasePage && (purchasePage.style.display === 'block' || purchasePage.style.display === 'flex')) {
+            closePurchasePage();
+        } else {
+            const purchaseModal = document.getElementById('purchase-modal');
+            if (purchaseModal) purchaseModal.style.display = 'none';
         }
-        // Закрываем также модальное окно товара, чтобы вернуться на общий экран с товарами
         if (modalElement) {
             modalElement.style.display = 'none';
         }
@@ -246,6 +273,9 @@ export async function submitPurchaseForm(productId) {
             if (updateCartUICallback) {
                 await updateCartUICallback();
             }
+            // Обновляем индикаторы активности
+            const { updateActivityCounts } = await import('./activityIndicators.js');
+            await updateActivityCounts();
             
             // Если корзина открыта и пользователь находится на вкладке продаж, обновляем продажи
             const cartModal = document.getElementById('cart-modal');
@@ -297,6 +327,9 @@ export async function cancelPurchase(purchaseId) {
             if (updateCartUICallback) {
                 await updateCartUICallback();
             }
+            // Обновляем индикаторы активности
+            const { updateActivityCounts } = await import('./activityIndicators.js');
+            await updateActivityCounts();
         }, 500);
     } catch (e) {
         console.error('Cancel purchase error:', e);

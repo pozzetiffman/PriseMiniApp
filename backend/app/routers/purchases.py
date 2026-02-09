@@ -8,10 +8,12 @@ from sqlalchemy import and_, or_
 from typing import List, Optional
 from datetime import datetime
 from dotenv import load_dotenv
+from sqlalchemy.exc import IntegrityError
 from ..db import models, database
 from ..models import purchase as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
 from ..utils.product_snapshot import create_product_snapshot, get_product_display_info_from_snapshot
+from ..utils.order_number import generate_order_number_11
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
@@ -71,119 +73,14 @@ def get_bot_token_for_notifications(shop_owner_id: int, db: Session) -> str:
     print(f"ℹ️ No connected bot found for user {shop_owner_id}, using main bot token")
     return TELEGRAM_BOT_TOKEN
 
-def get_product_info_for_response(purchase: models.Purchase, db: Session) -> Optional[dict]:
-    """
-    Получает информацию о товаре для ответа API.
-    ВСЕГДА использует snapshot если он есть - для изоляции данных товара на момент покупки.
-    """
-    # ВСЕГДА используем snapshot если он есть - для изоляции данных товара на момент покупки
-    # Это предотвращает изменения названия/цены товара от влияния на уже созданные покупки
-    if purchase.snapshot_id:
-        snapshot = db.query(models.UserProductSnapshot).filter(
-            models.UserProductSnapshot.snapshot_id == purchase.snapshot_id
-        ).first()
-        
-        if snapshot:
-            product_info = get_product_display_info_from_snapshot(snapshot)
-            if product_info:
-                # Вычисляем правильную цену используя ту же логику, что и для существующих товаров
-                calculated_price = get_product_price_from_dict(product_info)
-                product_info["price"] = calculated_price
-                # ВАЖНО: Обнуляем discount, так как цена уже вычислена со скидкой
-                # Это предотвращает двойное применение скидки на фронтенде
-                product_info["discount"] = 0
-                # ВАЖНО: Для purchases товар доступен (он был создан для покупки, когда был доступен)
-                product_info["is_unavailable"] = False
-                # Преобразуем images_urls в полные URL
-                if product_info.get("images_urls"):
-                    product_info["images_urls"] = [make_full_url(img_url) for img_url in product_info["images_urls"]]
-                if product_info.get("image_url"):
-                    product_info["image_url"] = make_full_url(product_info["image_url"])
-                return product_info
-            else:
-                # Snapshot существует, но не удалось получить информацию - fallback к актуальному товару
-                if purchase.product:
-                    product = purchase.product
-                    images_urls_list = None
-                    if product.images_urls:
-                        try:
-                            images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
-                        except (json.JSONDecodeError, TypeError):
-                            images_urls_list = []
-                    
-                    calculated_price = get_product_price_for_display(product)
-                    return {
-                        "id": product.id,
-                        "name": product.name,
-                        "price": calculated_price,
-                        "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
-                        "image_url": make_full_url(product.image_url) if product.image_url else None,
-                        "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else None,
-                        "is_for_sale": product.is_for_sale,
-                        "price_from": product.price_from,
-                        "price_to": product.price_to,
-                        "price_fixed": product.price_fixed,
-                        "price_type": product.price_type,
-                        "is_unavailable": False
-                    }
-        else:
-            # Snapshot не найден - fallback к актуальному товару
-            if purchase.product:
-                product = purchase.product
-                images_urls_list = None
-                if product.images_urls:
-                    try:
-                        images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
-                    except (json.JSONDecodeError, TypeError):
-                        images_urls_list = []
-                
-                calculated_price = get_product_price_for_display(product)
-                return {
-                    "id": product.id,
-                    "name": product.name,
-                    "price": calculated_price,
-                    "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
-                    "image_url": make_full_url(product.image_url) if product.image_url else None,
-                    "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else None,
-                    "is_for_sale": product.is_for_sale,
-                    "price_from": product.price_from,
-                    "price_to": product.price_to,
-                    "price_fixed": product.price_fixed,
-                    "price_type": product.price_type,
-                    "is_unavailable": False
-                }
-    
-    # Нет snapshot - используем актуальный товар (для старых покупок без snapshot)
-    if purchase.product:
-        product = purchase.product
-        images_urls_list = None
-        if product.images_urls:
-            try:
-                images_urls_list = json.loads(product.images_urls) if isinstance(product.images_urls, str) else product.images_urls
-            except (json.JSONDecodeError, TypeError):
-                images_urls_list = []
-        
-        calculated_price = get_product_price_for_display(product)
-        return {
-            "id": product.id,
-            "name": product.name,
-            "price": calculated_price,
-            "discount": 0,  # Обнуляем discount, так как цена уже вычислена со скидкой
-            "image_url": make_full_url(product.image_url) if product.image_url else None,
-            "images_urls": [make_full_url(img_url) for img_url in images_urls_list] if images_urls_list else None,
-            "is_for_sale": product.is_for_sale,
-            "price_from": product.price_from,
-            "price_to": product.price_to,
-            "price_fixed": product.price_fixed,
-            "price_type": product.price_type,
-            "is_unavailable": False
-        }
-    
-    # Товар удален и нет snapshot - возвращаем заглушку
+def _minimal_product_no_snapshot(product_id: Optional[int], product_exists: bool) -> dict:
+    """Минимальный объект товара для операции без snapshot. НЕ использует данные живого Product."""
     return {
-        "id": purchase.product_id or 0,
-        "name": "Товар недоступен",
+        "id": product_id or 0,
+        "name": "Товар недоступен" if not product_exists else "Товар",
         "price": None,
+        "price_card": None,
+        "price_cash": None,
         "discount": 0,
         "image_url": None,
         "images_urls": [],
@@ -192,8 +89,41 @@ def get_product_info_for_response(purchase: models.Purchase, db: Session) -> Opt
         "price_to": None,
         "price_fixed": None,
         "price_type": "range",
-        "is_unavailable": True
+        "is_unavailable": not product_exists,
     }
+
+
+def get_product_info_for_response(purchase: models.Purchase, db: Session) -> Optional[dict]:
+    """
+    Получает информацию о товаре для ответа API.
+    ТОЛЬКО из snapshot_json. Никаких цен/описания из живого Product.
+    """
+    if purchase.snapshot_id:
+        snapshot = db.query(models.UserProductSnapshot).filter(
+            models.UserProductSnapshot.snapshot_id == purchase.snapshot_id
+        ).first()
+        
+        if snapshot:
+            product_info = get_product_display_info_from_snapshot(snapshot)
+            if product_info:
+                calculated_price = get_product_price_from_dict(product_info)
+                product_info["price"] = calculated_price
+                product_info["discount"] = 0
+                product_info["is_unavailable"] = False
+                if product_info.get("images_urls"):
+                    product_info["images_urls"] = [make_full_url(img_url) for img_url in product_info["images_urls"]]
+                if product_info.get("image_url"):
+                    product_info["image_url"] = make_full_url(product_info["image_url"])
+                if product_info.get("price_card") is not None:
+                    print(f"   📸 [PURCHASES] item.product.price_card from snapshot_json (purchase_id={purchase.id})")
+                return product_info
+            # Snapshot есть, но парсинг не удался — не подмешиваем живой товар
+            return _minimal_product_no_snapshot(purchase.product_id, purchase.product is not None)
+        # Snapshot не найден — не подмешиваем живой товар
+        return _minimal_product_no_snapshot(purchase.product_id, purchase.product is not None)
+    
+    # Нет snapshot (старые покупки) — не подтягиваем цены из живого товара
+    return _minimal_product_no_snapshot(purchase.product_id, purchase.product is not None)
 
 def get_product_price_for_display(product: models.Product) -> Optional[float]:
     """
@@ -353,7 +283,7 @@ async def create_purchase(
         operation_type='buy'
     )
     
-    # Создаем заявку на покупку
+    # Создаем заявку на покупку (order_number задаём в цикле из-за уникальности в БД)
     db_purchase = models.Purchase(
         product_id=product_id,
         snapshot_id=snapshot_id,
@@ -372,10 +302,17 @@ async def create_purchase(
         video_url=video_url,
         status='pending'
     )
-    
     db.add(db_purchase)
-    db.commit()
-    db.refresh(db_purchase)
+    for _ in range(5):
+        db_purchase.order_number = generate_order_number_11()  # 11 цифр, уникальность + retry в БД
+        try:
+            db.commit()
+            db.refresh(db_purchase)
+            break
+        except IntegrityError:
+            db.rollback()
+    else:
+        raise HTTPException(status_code=500, detail="Не удалось сгенерировать уникальный номер операции")
     
     # Отправляем уведомление владельцу магазина
     try:

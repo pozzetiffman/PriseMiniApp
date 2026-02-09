@@ -3,6 +3,8 @@
 // Дата начала: 2024-12-19
 // Статус: В процессе
 
+import { hideAllPages } from '../operationsBase.js';
+
 /**
  * Инициализация админки
  * @param {Object} dependencies - Объект с зависимостями
@@ -331,13 +333,7 @@ export async function openAdmin(dependencies) {
     
     console.log('🔧 Opening admin panel...');
     
-    // Получаем страницу админки
     const adminPage = document.getElementById('admin-page');
-    const mainContent = document.getElementById('main-content');
-    const productPage = document.getElementById('product-page');
-    const cartPage = document.getElementById('cart-page');
-    const favoritesPage = document.getElementById('favorites-page');
-    
     if (!adminPage) {
         console.error('❌ Admin page not found');
         return;
@@ -364,12 +360,9 @@ export async function openAdmin(dependencies) {
         }
         if (reservationsToggle) {
             reservationsToggle.checked = shopSettings.reservations_enabled === true;
-            // Резервация может работать независимо от quantity_enabled
-            // Если quantity_enabled = false, резервация работает, но без показа количества
             reservationsToggle.disabled = false;
         }
         
-        // Проверяем состояние товаров и устанавливаем тумблер "Все товары под заказ"
         if (allProductsMadeToOrderToggle) {
             try {
                 const allMadeToOrder = await checkAllProductsMadeToOrder();
@@ -381,13 +374,8 @@ export async function openAdmin(dependencies) {
             }
         }
         
-        // Скрываем другие страницы
-        if (mainContent) mainContent.style.display = 'none';
-        if (productPage) productPage.style.display = 'none';
-        if (cartPage) cartPage.style.display = 'none';
-        if (favoritesPage) favoritesPage.style.display = 'none';
-        
-        // Показываем страницу админки
+        // Единый способ: скрыть все страницы, затем показать админку
+        hideAllPages();
         adminPage.style.display = 'block';
         
         // Настраиваем кнопку "Назад"

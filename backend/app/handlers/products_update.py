@@ -5,13 +5,39 @@ import os
 import requests
 from typing import Optional
 from fastapi import HTTPException, Header
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import distinct
 from ..db import models
 from ..models import product as schemas
 from ..utils.products_sync import sync_product_to_all_bots, sync_product_to_all_bots_with_rename
-from ..utils.products_utils import get_bot_token_for_notifications
+from ..utils.products_utils import get_bot_token_for_notifications, normalize_action_flags
 from ..utils.telegram_auth import validate_init_data_multi_bot
+
+
+def _get_sync_siblings(db: Session, db_product: models.Product):
+    """
+    Возвращает список sync-копий товара (другой bot_id или main), чтобы применить к ним
+    те же флаги action type. Иначе клиент на витрине видит копию с устаревшими флагами.
+    """
+    user_id = db_product.user_id
+    sync_id = getattr(db_product, "sync_product_id", None) or db_product.id
+    out = []
+    # Главная копия (main bot): id == sync_id, если мы редактировали копию в боте
+    if sync_id != db_product.id:
+        main = db.query(models.Product).filter(
+            models.Product.id == sync_id,
+            models.Product.user_id == user_id,
+        ).first()
+        if main:
+            out.append(main)
+    # Все копии, привязанные к этому товару (sync_product_id == id текущего), кроме самого себя
+    others = db.query(models.Product).filter(
+        models.Product.user_id == user_id,
+        models.Product.sync_product_id == db_product.id,
+        models.Product.id != db_product.id,
+    ).all()
+    out.extend(others)
+    return out
 
 
 def update_product(
@@ -129,10 +155,21 @@ def update_price_discount(
     
     # Сохраняем старые значения для сравнения
     old_price = db_product.price
+    old_price_card = getattr(db_product, 'price_card', None)
+    old_price_cash = getattr(db_product, 'price_cash', None)
     old_discount = db_product.discount
     
-    # Обновляем значения
-    db_product.price = price_discount_update.price
+    # Обновляем цены: price_card/price_cash (витрина), legacy price для обратной совместимости
+    if price_discount_update.price_card is not None:
+        db_product.price_card = price_discount_update.price_card
+        db_product.price = price_discount_update.price_card
+    else:
+        if price_discount_update.price is not None:
+            db_product.price = price_discount_update.price
+            if db_product.price_card is None:
+                db_product.price_card = price_discount_update.price
+    if hasattr(price_discount_update, 'price_cash') and getattr(price_discount_update, 'model_fields_set', None) and 'price_cash' in price_discount_update.model_fields_set:
+        db_product.price_cash = price_discount_update.price_cash
     db_product.discount = price_discount_update.discount
     db.flush()
     
@@ -142,8 +179,12 @@ def update_price_discount(
     db.commit()
     db.refresh(db_product)
     
-    # Определяем, что изменилось
-    price_changed = old_price != price_discount_update.price
+    # Определяем, что изменилось (для уведомлений)
+    price_changed = (
+        old_price != (price_discount_update.price_card if price_discount_update.price_card is not None else price_discount_update.price)
+        or old_price_card != price_discount_update.price_card
+        or old_price_cash != price_discount_update.price_cash
+    )
     discount_changed = old_discount != price_discount_update.discount
     
     # Отправляем уведомления пользователям, которые посещали магазин
@@ -325,9 +366,21 @@ def update_name_description(
     old_name = db_product.name
     old_price = db_product.price  # Также сохраняем цену для более точного поиска
     
+    # Фильтрация UI-текста из description: если description содержит текст настроек количества,
+    # это явно ошибка (UI-текст попал в поле описания товара) — очищаем его.
+    description_to_save = name_description_update.description
+    if description_to_save and (
+        'Показывать количество товара на витрине' in description_to_save or
+        '• Использовать настройку магазина' in description_to_save or
+        '• Показывать - всегда показывать количество' in description_to_save or
+        '• Не показывать - скрыть количество' in description_to_save
+    ):
+        print(f"[DESCRIPTION FILTER] Filtered UI text from description for product_id={product_id}, original_length={len(description_to_save)}")
+        description_to_save = None  # Очищаем description от UI-текста
+    
     # Обновляем значения
     db_product.name = name_description_update.name
-    db_product.description = name_description_update.description
+    db_product.description = description_to_save
     db.flush()
     
     # Синхронизируем обновление товара во все боты
@@ -413,6 +466,9 @@ def update_made_to_order(
     Raises:
         HTTPException: Если товар не найден
     """
+    # Логирование входа в handler для диагностики отсутствующих PATCH запросов
+    print(f"[ACTION FLAG PATCH HIT] endpoint=update-made-to-order product_id={product_id} user_id={user_id} raw_body={made_to_order_update.model_dump()}")
+    
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -422,17 +478,24 @@ def update_made_to_order(
     
     # Обновляем статус 'под заказ'
     db_product.is_made_to_order = bool(made_to_order_update.is_made_to_order)
+    # Железобетонная нормализация на бэкенде: при is_made_to_order=True сбрасываем sale и reservation,
+    # иначе при нескольких PATCH подряд клиент может видеть старый is_sale_enabled → приоритет sale → "Купить"/🛒.
+    normalize_action_flags(db_product)
+    for sibling in _get_sync_siblings(db, db_product):
+        sibling.is_sale_enabled = db_product.is_sale_enabled
+        sibling.is_made_to_order = db_product.is_made_to_order
+        sibling.is_reservation_enabled = getattr(db_product, "is_reservation_enabled", False)
+        normalize_action_flags(sibling)
     db.flush()
-    
     # Синхронизируем обновление товара во все боты
     sync_product_to_all_bots(db_product, db, action="update")
-    
     db.commit()
     db.refresh(db_product)
-    
-    # Отладочный вывод
-    print(f"DEBUG: update_made_to_order - product_id={product_id}, user_id={user_id}, is_made_to_order={made_to_order_update.is_made_to_order}, saved={db_product.is_made_to_order}")
-    
+    # DEBUG: итоговое состояние после нормализации (чтобы по логам видеть консистентность)
+    print(
+        f"[ACTION FLAG RESULT] product_id={product_id} sale={getattr(db_product, 'is_sale_enabled', False)} "
+        f"made_to_order={getattr(db_product, 'is_made_to_order', False)} reservation={getattr(db_product, 'is_reservation_enabled', False)}"
+    )
     return {
         "id": db_product.id,
         "is_made_to_order": bool(db_product.is_made_to_order),  # Явное преобразование в bool
@@ -518,6 +581,9 @@ def update_sale_enabled(
     Raises:
         HTTPException: Если товар не найден
     """
+    # Логирование входа в handler для диагностики отсутствующих PATCH запросов
+    print(f"[ACTION FLAG PATCH HIT] endpoint=update-sale-enabled product_id={product_id} user_id={user_id} raw_body={sale_enabled_update.model_dump()}")
+    
     db_product = db.query(models.Product).filter(
         models.Product.id == product_id,
         models.Product.user_id == user_id
@@ -527,21 +593,66 @@ def update_sale_enabled(
     
     # Обновляем статус 'продажа'
     db_product.is_sale_enabled = bool(sale_enabled_update.is_sale_enabled)
+    # Нормализация взаимоисключающих флагов на бэкенде (sale → сброс order и reservation).
+    normalize_action_flags(db_product)
+    for sibling in _get_sync_siblings(db, db_product):
+        sibling.is_sale_enabled = db_product.is_sale_enabled
+        sibling.is_made_to_order = db_product.is_made_to_order
+        sibling.is_reservation_enabled = getattr(db_product, "is_reservation_enabled", False)
+        normalize_action_flags(sibling)
     db.flush()
-    
     # Синхронизируем обновление товара во все боты
     sync_product_to_all_bots(db_product, db, action="update")
-    
     db.commit()
     db.refresh(db_product)
-    
-    # Отладочный вывод
-    print(f"DEBUG: update_sale_enabled - product_id={product_id}, user_id={user_id}, is_sale_enabled={sale_enabled_update.is_sale_enabled}, saved={db_product.is_sale_enabled}")
-    
+    print(
+        f"[ACTION FLAG RESULT] product_id={product_id} sale={getattr(db_product, 'is_sale_enabled', False)} "
+        f"made_to_order={getattr(db_product, 'is_made_to_order', False)} reservation={getattr(db_product, 'is_reservation_enabled', False)}"
+    )
     return {
         "id": db_product.id,
         "is_sale_enabled": bool(db_product.is_sale_enabled),  # Явное преобразование в bool
         "message": "Статус 'продажа' обновлен"
+    }
+
+
+def update_reservation_enabled(
+    product_id: int,
+    reservation_enabled_update: schemas.ReservationEnabledUpdate,
+    user_id: int,
+    db: Session
+):
+    """Обновление статуса 'резервация' для товара (без уведомлений). Взаимоисключение с sale/order на фронте."""
+    # Логирование входа в handler для диагностики отсутствующих PATCH запросов
+    print(f"[ACTION FLAG PATCH HIT] endpoint=update-reservation-enabled product_id={product_id} user_id={user_id} raw_body={reservation_enabled_update.model_dump()}")
+    
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    db_product.is_reservation_enabled = bool(reservation_enabled_update.is_reservation_enabled)
+    # Нормализация взаимоисключающих флагов на бэкенде (reservation → сброс sale и order).
+    normalize_action_flags(db_product)
+    for sibling in _get_sync_siblings(db, db_product):
+        sibling.is_sale_enabled = db_product.is_sale_enabled
+        sibling.is_made_to_order = db_product.is_made_to_order
+        sibling.is_reservation_enabled = getattr(db_product, "is_reservation_enabled", False)
+        normalize_action_flags(sibling)
+    db.flush()
+    sync_product_to_all_bots(db_product, db, action="update")
+    db.commit()
+    db.refresh(db_product)
+    print(
+        f"[ACTION FLAG RESULT] product_id={product_id} sale={getattr(db_product, 'is_sale_enabled', False)} "
+        f"made_to_order={getattr(db_product, 'is_made_to_order', False)} reservation={getattr(db_product, 'is_reservation_enabled', False)}"
+    )
+    return {
+        "id": db_product.id,
+        "is_reservation_enabled": bool(db_product.is_reservation_enabled),
+        "message": "Статус 'резервация' обновлен"
     }
 
 
@@ -727,5 +838,183 @@ def update_hidden(
         "id": db_product.id,
         "is_hidden": db_product.is_hidden,
         "message": "Статус скрытия товара обновлен"
+    }
+
+
+def update_product_characteristics(
+    product_id: int,
+    payload: schemas.ProductCharacteristicsUpdateIn,
+    user_id: int,
+    db: Session
+):
+    """
+    Обновление характеристик товара: замена списком (replace).
+    - Удаляются все характеристики, которых нет в payload.
+    - Для записей с id — обновляется value и sort_order.
+    - Для записей без id — создаётся новая характеристика.
+    - Новые названия добавляются в справочник characteristic_names (get-or-create).
+    - После commit перезагружаем товар с selectinload и синхронизируем во все боты.
+    """
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    user_id_val = db_product.user_id
+    bot_id_val = db_product.bot_id
+    payload_count = len([c for c in payload.characteristics if (c.name or "").strip() and (c.value or "").strip()])
+    print(f"📋 [PATCH CHARS] product_id={product_id} payload_chars={payload_count}")
+
+    # Идентификаторы в payload — эти оставляем/обновляем
+    payload_ids = {c.id for c in payload.characteristics if c.id is not None}
+
+    # Удаляем характеристики, которых нет в payload
+    for pc in list(db_product.characteristics):
+        if pc.id not in payload_ids:
+            db.delete(pc)
+    db.flush()
+
+    # Обновляем/создаём по порядку
+    seen_names = set()
+    for idx, item in enumerate(payload.characteristics):
+        name = (item.name or "").strip()
+        value = (item.value or "").strip()
+        if not name or not value:
+            continue
+
+        if item.id is not None:
+            # Обновляем существующую
+            pc = db.query(models.ProductCharacteristic).filter(
+                models.ProductCharacteristic.id == item.id,
+                models.ProductCharacteristic.product_id == product_id
+            ).first()
+            if pc:
+                pc.value = value
+                pc.sort_order = idx
+                pc.name = name  # разрешаем менять название
+        else:
+            # Создаём новую
+            pc = models.ProductCharacteristic(
+                product_id=product_id,
+                name=name,
+                value=value,
+                sort_order=idx
+            )
+            db.add(pc)
+
+        # Get-or-create в справочник названий (по user_id + bot_id)
+        if name not in seen_names:
+            seen_names.add(name)
+            existing_name = db.query(models.CharacteristicName).filter(
+                models.CharacteristicName.user_id == user_id_val,
+                models.CharacteristicName.name == name,
+                models.CharacteristicName.bot_id == bot_id_val
+            ).first()
+            if not existing_name:
+                cn = models.CharacteristicName(
+                    name=name,
+                    user_id=user_id_val,
+                    bot_id=bot_id_val
+                )
+                db.add(cn)
+
+    db.flush()
+    db.commit()
+    actual_count = db.query(models.ProductCharacteristic).filter(
+        models.ProductCharacteristic.product_id == product_id
+    ).count()
+    print(f"📋 [PATCH CHARS] after commit product_id={product_id} actual_chars={actual_count}")
+
+    # Перезагружаем товар с characteristics (selectinload), чтобы sync_product_to_all_bots получил свежие данные
+    current_product = db.query(models.Product).options(
+        selectinload(models.Product.characteristics)
+    ).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if current_product:
+        sync_product_to_all_bots(current_product, db, action="update")
+        db.commit()
+        main_count = db.query(models.Product).filter(
+            models.Product.user_id == user_id,
+            models.Product.sync_product_id == (current_product.sync_product_id or current_product.id)
+        ).count()
+        print(f"📋 [PATCH CHARS] sync done product_id={product_id} siblings_count={main_count}")
+    return {"id": product_id, "message": "Характеристики обновлены"}
+
+
+def update_product_delivery(
+    product_id: int,
+    payload: schemas.ProductDeliveryUpdateIn,
+    user_id: int,
+    db: Session
+):
+    """
+    Обновление настроек доставки товара (upsert одной записи).
+    После commit перезагружаем товар с selectinload(delivery_option) и синхронизируем во все боты.
+    """
+    db_product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    print(f"📦 [PATCH DELIVERY] product_id={product_id} payload={payload.model_dump()}")
+
+    delivery = db_product.delivery_option
+    pickup_addr = (payload.pickup_address or "").strip() or None
+    delivery_time_val = (payload.delivery_time or "").strip() or None
+    if delivery is None:
+        delivery = models.ProductDelivery(
+            product_id=product_id,
+            is_delivery_enabled=payload.is_delivery_enabled,
+            is_pickup_enabled=payload.is_pickup_enabled,
+            delivery_time=delivery_time_val,
+            delivery_price=payload.delivery_price,
+            pickup_address=pickup_addr,
+            sort_order=0
+        )
+        db.add(delivery)
+    else:
+        delivery.is_delivery_enabled = payload.is_delivery_enabled
+        delivery.is_pickup_enabled = payload.is_pickup_enabled
+        delivery.delivery_time = delivery_time_val
+        delivery.delivery_price = payload.delivery_price
+        delivery.pickup_address = pickup_addr
+
+    db.flush()
+    db.commit()
+    db.refresh(delivery)
+    print(f"📦 [PATCH DELIVERY] after commit product_id={product_id} is_delivery_enabled={delivery.is_delivery_enabled} delivery_price={delivery.delivery_price}")
+
+    # Перезагружаем товар с delivery_option и синхронизируем
+    current_product = db.query(models.Product).options(
+        selectinload(models.Product.delivery_option)
+    ).filter(
+        models.Product.id == product_id,
+        models.Product.user_id == user_id
+    ).first()
+    if current_product:
+        sync_product_to_all_bots(current_product, db, action="update")
+        db.commit()
+        siblings = db.query(models.Product).filter(
+            models.Product.user_id == user_id,
+            models.Product.sync_product_id == (current_product.sync_product_id or current_product.id)
+        ).count()
+        print(f"📦 [PATCH DELIVERY] sync done product_id={product_id} siblings_count={siblings}")
+
+    return {
+        "id": product_id,
+        "message": "Настройки доставки обновлены",
+        "delivery": {
+            "is_delivery_enabled": delivery.is_delivery_enabled,
+            "is_pickup_enabled": delivery.is_pickup_enabled,
+            "delivery_time": getattr(delivery, "delivery_time", None),
+            "delivery_price": delivery.delivery_price,
+            "pickup_address": delivery.pickup_address,
+        }
     }
 

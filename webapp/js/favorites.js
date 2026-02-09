@@ -1,6 +1,13 @@
 // Модуль для работы с избранным
 import { API_BASE, getBaseHeaders } from './api.js';
+import { hideAllPages } from './operationsBase.js';
 import { renderProducts, showProductModal } from './products.js';
+import {
+    getBasePrice,
+    getFinalCardPrice,
+    getOldPriceForDisplay,
+    hasDiscount
+} from './utils/priceUtils.js';
 
 // Кэш избранных товаров
 let favoritesCache = new Set();
@@ -219,15 +226,10 @@ function updateFavoritesCountUI() {
  */
 export function initFavorites() {
     console.log('✅ [FAVORITES] Initializing favorites module');
-    
-    // Настраиваем кнопку избранного
+    window.loadFavoritesPage = loadFavoritesPage;
     setupFavoritesButton();
-    
-    // Синхронизируем кэш
     setTimeout(() => {
-        syncFavoritesCache().catch(() => {
-            // Игнорируем ошибки при синхронизации
-        });
+        syncFavoritesCache().catch(() => {});
     }, 500);
 }
 
@@ -249,14 +251,14 @@ function setupFavoritesButton() {
 export async function openFavoritesPage() {
     try {
         const favoritesPage = document.getElementById('favorites-page');
-        const mainContent = document.getElementById('main-content');
-        const cartPage = document.getElementById('cart-page');
-        const productPage = document.getElementById('product-page');
-        
         if (!favoritesPage) {
             console.error('❌ Favorites page not found');
             return;
         }
+        
+        // Единый способ: скрыть все страницы, затем показать избранное
+        hideAllPages();
+        favoritesPage.style.display = 'block';
         
         // Настраиваем кнопку "Назад" при открытии страницы (старая кнопка, если есть)
         const favoritesPageBack = document.getElementById('favorites-page-back');
@@ -280,14 +282,6 @@ export async function openFavoritesPage() {
         
         // Обновляем счетчик в шапке при открытии страницы
         updateFavoritesCountUI();
-        
-        // Скрываем другие страницы
-        if (mainContent) mainContent.style.display = 'none';
-        if (cartPage) cartPage.style.display = 'none';
-        if (productPage) productPage.style.display = 'none';
-        
-        // Показываем страницу избранного
-        favoritesPage.style.display = 'block';
         
         // Загружаем избранные товары
         await loadFavoritesPage();
@@ -607,9 +601,9 @@ function updateFavoriteButtonState(button, favorite) {
 
 
 /**
- * Загрузить и отобразить избранные товары на странице
+ * Загрузить и отобразить избранные товары на странице (экспорт для обновления UI после редактирования товара)
  */
-async function loadFavoritesPage() {
+export async function loadFavoritesPage() {
     try {
         const favoritesGrid = document.getElementById('favorites-items');
         if (!favoritesGrid) {
@@ -749,29 +743,47 @@ async function loadFavoritesPage() {
                         e.preventDefault(); // Предотвращаем стандартное поведение
                         
                         try {
-                            // Проверяем, есть ли товар уже в корзине
-                            const { isProductInCart, getProductQuantityInCart } = await import('./cart/cartStore.js');
-                            const isInCart = isProductInCart(prod.id);
-                            const currentQuantity = getProductQuantityInCart(prod.id);
-                            
-                            // Если товара нет в корзине, добавляем его с количеством 1
-                            if (!isInCart || currentQuantity === 0) {
-                                const { addProductToCart } = await import('./cart/cartNew.js');
-                                await addProductToCart(prod, 1);
+                            // ========== ПОЛУЧЕНИЕ АКТУАЛЬНОГО ПРОДУКТА ИЗ КЭША ==========
+                            let actualProduct = prod;
+                            const allProducts = window.getAllProducts ? window.getAllProducts() : null;
+                            if (Array.isArray(allProducts)) {
+                                const freshProduct = allProducts.find(p => p && p.id === prod.id);
+                                if (freshProduct) actualProduct = freshProduct;
                             }
-                            // Если товар уже есть в корзине, просто открываем bottom sheet без добавления
+                            // ========== КОНЕЦ ПОЛУЧЕНИЯ АКТУАЛЬНОГО ПРОДУКТА ==========
                             
-                            // Открываем bottom sheet
+                            // Получаем тип операции через единый helper с АКТУАЛЬНЫМ продуктом
+                            const appContext = window.getAppContext ? window.getAppContext() : null;
+                            const shopSettings = window.getCurrentShopSettings ? window.getCurrentShopSettings() : null;
+                            const { getProductActionType, canAddToCart } = await import('./utils/productActionType.js');
+                            const actionType = getProductActionType(actualProduct, appContext, shopSettings);
+                            
+                            // ВАЛИДАЦИЯ: Используем can_add_to_cart от бэка или вычисляем
+                            const canAdd = canAddToCart(actualProduct, appContext, shopSettings);
+                            if (canAdd) {
+                                const { isProductInCart, getProductQuantityInCart } = await import('./cart/cartStore.js');
+                                const isInCart = isProductInCart(actualProduct.id);
+                                const currentQuantity = getProductQuantityInCart(actualProduct.id);
+                                
+                                if (!isInCart || currentQuantity === 0) {
+                                    const { addProductToCart } = await import('./cart/cartNew.js');
+                                    await addProductToCart(actualProduct, 1);
+                                }
+                            } else {
+                                console.log(`[FAVORITES] Skipping add-to-cart for product ${prod.id}: can_add_to_cart=false, actionType=${actionType}, reason=${actualProduct.reason_not_sale || 'unknown'}`);
+                            }
+                            
+                            // Открываем bottom sheet с АКТУАЛЬНЫМ продуктом
                             const { showCartBottomSheet } = await import('./cart/cartBottomSheet.js');
-                            showCartBottomSheet(prod);
+                            await showCartBottomSheet(actualProduct);
                             
                             // Обновляем состояние кнопок корзины
                             if (window.updateCartButtonsState) {
                                 window.updateCartButtonsState();
                             }
                         } catch (error) {
-                            console.error('❌ Error adding product to cart or showing bottom sheet:', error);
-                            alert('Ошибка при добавлении товара в корзину: ' + (error.message || 'Неизвестная ошибка'));
+                            console.error('❌ Error showing bottom sheet:', error);
+                            alert('Ошибка: ' + (error.message || 'Неизвестная ошибка'));
                         }
                     });
                 }
@@ -802,26 +814,42 @@ async function loadFavoritesPage() {
                 favoritesGrid.appendChild(clonedCard);
             });
             
-            // Обновляем состояние всех кнопок корзины на странице избранного
+            // Обновляем состояние всех кнопок действий на странице избранного
+            // Badge показывается только для типа 'sale'
             setTimeout(() => {
-                import('./cart/cartStore.js').then(({ getProductQuantityInCart }) => {
-                    const allCartButtons = favoritesGrid.querySelectorAll('.cart-button-card[data-product-id]');
-                    allCartButtons.forEach(button => {
+                Promise.all([
+                    import('./cart/cartStore.js'),
+                    import('./utils/productActionType.js')
+                ]).then(([cartStore, actionTypeModule]) => {
+                    const allActionButtons = favoritesGrid.querySelectorAll('.cart-button-card[data-product-id]');
+                    const appContext = window.getAppContext ? window.getAppContext() : null;
+                    const shopSettings = window.getCurrentShopSettings ? window.getCurrentShopSettings() : null;
+                    
+                    allActionButtons.forEach(button => {
                         const productId = parseInt(button.dataset.productId);
                         if (productId && !isNaN(productId)) {
-                            const quantity = getProductQuantityInCart(productId);
-                            const badge = button.querySelector('.cart-icon-badge');
-                            
-                            if (quantity > 0) {
-                                button.classList.add('cart-active');
-                                if (badge) {
-                                    badge.textContent = quantity > 99 ? '99+' : quantity.toString();
-                                    badge.style.display = 'flex';
-                                }
-                            } else {
-                                button.classList.remove('cart-active');
-                                if (badge) {
-                                    badge.style.display = 'none';
+                            // Находим товар в мапе
+                            const prod = productsMap.get(productId);
+                            if (prod) {
+                                const actionType = actionTypeModule.getProductActionType(prod, appContext, shopSettings);
+                                
+                                // Badge показывается только для типа 'sale'
+                                if (actionType === 'sale') {
+                                    const quantity = cartStore.getProductQuantityInCart(productId);
+                                    const badge = button.querySelector('.cart-icon-badge');
+                                    
+                                    if (quantity > 0) {
+                                        button.classList.add('cart-active');
+                                        if (badge) {
+                                            badge.textContent = quantity > 99 ? '99+' : quantity.toString();
+                                            badge.style.display = 'flex';
+                                        }
+                                    } else {
+                                        button.classList.remove('cart-active');
+                                        if (badge) {
+                                            badge.style.display = 'none';
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -884,18 +912,20 @@ function createProductCard(product) {
     const baseUrl = window.BASE_URL || '';
     const fullImageUrl = imageUrl.startsWith('http') ? imageUrl : (baseUrl + imageUrl);
     
-    // Расчет цены со скидкой
-    const hasDiscount = product.discount > 0;
-    const finalPrice = hasDiscount ? Math.round(product.price * (1 - product.discount / 100)) : product.price;
+    // Используем новую логику цен
+    const basePrice = getBasePrice(product);
+    const hasActiveDiscount = hasDiscount(product);
+    const finalPrice = getFinalCardPrice(product);
+    const oldPrice = getOldPriceForDisplay(product);
     
     card.innerHTML = `
         <div class="product-image" style="background-image: url('${fullImageUrl}'); background-size: cover;">
-            ${hasDiscount ? `<div class="discount-badge">-${product.discount}%</div>` : ''}
+            ${hasActiveDiscount ? `<div class="discount-badge">-${product.discount}%</div>` : ''}
         </div>
         <div class="product-name">${product.name}</div>
         <div class="product-price-container">
-            <span class="product-price">${finalPrice} ₽</span>
-            ${hasDiscount ? `<span class="old-price">${product.price} ₽</span>` : ''}
+            <span class="product-price">${finalPrice !== null ? `${finalPrice.toLocaleString('ru-RU')} ₽` : 'Цена по запросу'}</span>
+            ${hasActiveDiscount && oldPrice !== null ? `<span class="old-price">${oldPrice.toLocaleString('ru-RU')} ₽</span>` : ''}
         </div>
     `;
     

@@ -11,6 +11,7 @@ from ..db import models, database
 from ..utils.telegram_auth import validate_init_data_multi_bot
 from ..utils.product_snapshot import get_product_display_info_from_snapshot
 from ..utils.products_utils import make_full_url
+from ..utils.order_number import generate_order_number_11
 import os
 import requests
 import re
@@ -1124,7 +1125,8 @@ async def update_my_contact_info(
             is_completed=True,
             status='completed',
             city=city_value,
-            address=address_value
+            address=address_value,
+            order_number=generate_order_number_11(),  # 11 цифр, единообразие с остальными Purchase
         )
         db.add(new_purchase)
         db.flush()
@@ -1262,7 +1264,8 @@ async def update_client_contact(
             is_completed=True,  # Помечаем как выполненный, чтобы не мешал
             status='completed',
             city=city_value,
-            address=address_value
+            address=address_value,
+            order_number=generate_order_number_11(),  # 11 цифр, единообразие с остальными Purchase
         )
         db.add(new_purchase)
         db.flush()  # Получаем ID

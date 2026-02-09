@@ -204,7 +204,7 @@ export async function fetchCategories(shopOwnerId, botId = null, flat = false) {
 // НОВЫЙ КОД (используется сейчас)
 // Импорт уже добавлен в начале файла
 // Реэкспорт для обратной совместимости
-export { fetchProducts, getSoldProductsAPI } from './api/products_read.js';
+export { fetchProducts, getProductByIdAPI, getSoldProductsAPI } from './api/products_read.js';
 
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 /*
@@ -682,7 +682,7 @@ export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMade
 // ========== REFACTORING STEP 5.6: updateProductQuantityShowEnabledAPI() ==========
 // НОВЫЙ КОД (используется сейчас)
 // Реэкспорт для обратной совместимости
-export { updateProductHiddenAPI, updateProductQuantityShowEnabledAPI, updateProductSaleEnabledAPI } from './api/products_update.js';
+export { getCharacteristicNamesAPI, updateProductCharacteristicsAPI, updateProductDeliveryAPI, updateProductHiddenAPI, updateProductQuantityShowEnabledAPI, updateProductReservationEnabledAPI, updateProductSaleEnabledAPI } from './api/products_update.js';
 
 // СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 /*

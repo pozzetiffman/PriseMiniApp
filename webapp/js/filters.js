@@ -485,6 +485,22 @@ export async function applyFilters() {
         });
     }
     
+    // ========== DEBUG: Логирование перед рендерингом ==========
+    const DEBUG_FILTERS_RENDER = true; // Установить в false для отключения
+    if (DEBUG_FILTERS_RENDER && filteredProducts.length > 0) {
+        console.log(`[FILTERS DEBUG] Rendering ${filteredProducts.length} products`);
+        // Логируем первые 2 товара
+        filteredProducts.slice(0, 2).forEach((p, idx) => {
+            console.log(`[FILTERS DEBUG] Product ${idx + 1} before render:`, {
+                id: p.id,
+                name: p.name?.substring(0, 30),
+                action_type: p.action_type,
+                can_add_to_cart: p.can_add_to_cart
+            });
+        });
+    }
+    // ========== КОНЕЦ DEBUG ==========
+    
     // Рендерим отфильтрованные товары
     if (renderProductsCallback) {
         await renderProductsCallback(filteredProducts);

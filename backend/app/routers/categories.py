@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..db import models, database
 from ..models import category as schemas
+from ..utils.logging_config import get_logger
 
+log = get_logger(__name__)
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
 def sync_category_to_all_bots(db_category: models.Category, db: Session, action: str = "create"):
@@ -59,10 +61,10 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                         parent_id=synced_parent_id
                     )
                     db.add(new_category)
-                    print(f"🔄 Synced category '{db_category.name}' to bot {bot.id} (CREATE)")
+                    log.debug("Synced category '%s' to bot %s (CREATE)", db_category.name, bot.id)
                 else:
                     # Категория уже существует в этом боте - это нормально
-                    print(f"ℹ️ Category '{db_category.name}' already exists in bot {bot.id}, skipping creation")
+                    log.debug("Category '%s' already exists in bot %s, skipping", db_category.name, bot.id)
             
             elif action == "update":
                 # Находим соответствующую категорию и обновляем ее
@@ -74,7 +76,7 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                 
                 if matching:
                     matching.name = db_category.name
-                    print(f"🔄 Synced category '{db_category.name}' to bot {bot.id} (UPDATE)")
+                    log.debug("Synced category '%s' to bot %s (UPDATE)", db_category.name, bot.id)
             
             elif action == "delete":
                 # Удаляем соответствующую категорию
@@ -86,7 +88,7 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                 
                 if matching:
                     db.delete(matching)
-                    print(f"🔄 Synced deletion of category '{db_category.name}' to bot {bot.id} (DELETE)")
+                    log.debug("Synced deletion of category '%s' to bot %s (DELETE)", db_category.name, bot.id)
     
     else:
         # Категория в подключенном боте - синхронизируем в основной бот И во все другие подключенные боты
@@ -129,7 +131,7 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                 print(f"🔄 Synced category '{db_category.name}' to main bot (CREATE)")
             else:
                 # Категория уже существует в основном боте - это нормально
-                print(f"ℹ️ Category '{db_category.name}' already exists in main bot, skipping creation")
+                log.debug("Category '%s' already exists in main bot, skipping", db_category.name)
             
             # 2. Синхронизируем во все другие подключенные боты (кроме текущего)
             # ВАЖНО: Синхронизируем даже если категория уже существует в основном боте
@@ -171,10 +173,10 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                         parent_id=synced_parent_id
                     )
                     db.add(new_category)
-                    print(f"🔄 Synced category '{db_category.name}' to bot {bot.id} (CREATE)")
+                    log.debug("Synced category '%s' to bot %s (CREATE)", db_category.name, bot.id)
                 else:
                     # Категория уже существует в этом боте - это нормально
-                    print(f"ℹ️ Category '{db_category.name}' already exists in bot {bot.id}, skipping creation")
+                    log.debug("Category '%s' already exists in bot %s, skipping", db_category.name, bot.id)
         
         elif action == "update":
             # 1. Обновляем категорию в основном боте
@@ -186,7 +188,7 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
             
             if matching_main:
                 matching_main.name = db_category.name
-                print(f"🔄 Synced category '{db_category.name}' to main bot (UPDATE)")
+                log.debug("Synced category '%s' to main bot (UPDATE)", db_category.name)
             
             # 2. Обновляем категорию во всех других подключенных ботах (кроме текущего)
             for bot in connected_bots:
@@ -201,7 +203,7 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                 
                 if matching:
                     matching.name = db_category.name
-                    print(f"🔄 Synced category '{db_category.name}' to bot {bot.id} (UPDATE)")
+                    log.debug("Synced category '%s' to bot %s (UPDATE)", db_category.name, bot.id)
         
         elif action == "delete":
             # 1. Удаляем соответствующую категорию в основном боте
@@ -213,7 +215,7 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
             
             if matching_main:
                 db.delete(matching_main)
-                print(f"🔄 Synced deletion of category '{db_category.name}' to main bot (DELETE)")
+                log.debug("Synced deletion of category '%s' to main bot (DELETE)", db_category.name)
             
             # 2. Удаляем категорию из всех других подключенных ботов (кроме текущего)
             for bot in connected_bots:
@@ -228,7 +230,7 @@ def sync_category_to_all_bots(db_category: models.Category, db: Session, action:
                 
                 if matching:
                     db.delete(matching)
-                    print(f"🔄 Synced deletion of category '{db_category.name}' to bot {bot.id} (DELETE)")
+                    log.debug("Synced deletion of category '%s' to bot %s (DELETE)", db_category.name, bot.id)
 
 @router.get("/", response_model=List[schemas.Category])
 def get_categories(
@@ -239,7 +241,7 @@ def get_categories(
 ):
     import time
     request_start = time.time()
-    print(f"📂 [CATEGORIES API] get_categories called: user_id={user_id}, bot_id={bot_id}, flat={flat}")
+    log.debug("[CATEGORIES API] get_categories user_id=%s bot_id=%s flat=%s", user_id, bot_id, flat)
     query = db.query(models.Category).filter(models.Category.user_id == user_id)
     # Если bot_id указан - фильтруем по bot_id (независимый магазин бота)
     # Если bot_id не указан - фильтруем по bot_id = None (основной бот)
@@ -249,11 +251,11 @@ def get_categories(
         query = query.filter(models.Category.bot_id == None)
     
     categories = query.all()
-    print(f"📂 [CATEGORIES API] Found {len(categories)} total categories in DB")
+    log.debug("[CATEGORIES API] Found %s categories", len(categories))
     
     if flat:
         # Возвращаем все категории в плоском виде (для выбора при создании товара)
-        print(f"📂 [CATEGORIES API] Returning {len(categories)} categories in flat format")
+        log.debug("[CATEGORIES API] Returning %s categories flat", len(categories))
         return categories
     else:
         # Группируем категории: основные (parent_id=None) и подкатегории
@@ -269,20 +271,17 @@ def get_categories(
         for main_cat in main_categories:
             if main_cat.id in subcategories_dict:
                 main_cat.subcategories = subcategories_dict[main_cat.id]
-                print(f"📂 [CATEGORIES API] Main category '{main_cat.name}' (id={main_cat.id}) has {len(main_cat.subcategories)} subcategories")
+                log.debug("[CATEGORIES API] Main category '%s' has %s subcategories", main_cat.name, len(main_cat.subcategories))
             else:
                 main_cat.subcategories = []
-                print(f"📂 [CATEGORIES API] Main category '{main_cat.name}' (id={main_cat.id}) has no subcategories")
+                log.debug("[CATEGORIES API] Main category '%s' has no subcategories", main_cat.name)
         
         # Возвращаем только основные категории (с подкатегориями внутри)
-        print(f"📂 [CATEGORIES API] Returning {len(main_categories)} main categories with hierarchy")
-        for main_cat in main_categories:
-            print(f"   - {main_cat.name} (id={main_cat.id}): {len(main_cat.subcategories)} subcategories")
-        
+        log.debug("[CATEGORIES API] Returning %s main categories", len(main_categories))
         total_time = time.time() - request_start
-        print(f"⏱️ [CATEGORIES API] Total request time: {total_time:.3f}s")
+        log.debug("[CATEGORIES API] Total request time: %.3fs", total_time)
         if total_time > 1.0:
-            print(f"⚠️ [CATEGORIES API] WARNING: Request took {total_time:.3f}s - this is slow!")
+            log.warning("[CATEGORIES API] Slow request: %.3fs", total_time)
         
         return main_categories
 
@@ -304,14 +303,14 @@ async def create_category(
             try:
                 from ..routers.context import get_validated_user_and_bot
                 _, final_bot_id = await get_validated_user_and_bot(x_telegram_init_data, db)
-                print(f"✅ Determined bot_id={final_bot_id} from initData for category creation")
+                log.debug("Determined bot_id=%s from initData for category creation", final_bot_id)
             except:
                 final_bot_id = None
         else:
             # Запрос от бота (localhost) - ВСЕГДА создаем в основном боте (bot_id=None)
             # Категории будут синхронизированы во все подключенные боты автоматически
             final_bot_id = None  # Основной бот
-            print(f"ℹ️ Category creation from bot - using main bot (bot_id=None), will sync to all connected bots")
+            log.debug("Category creation from bot - using main bot, will sync to connected bots")
     
     # Проверяем, что parent_id существует и принадлежит тому же пользователю, если указан
     if category.parent_id is not None:
@@ -339,7 +338,7 @@ async def create_category(
     
     db.commit()
     db.refresh(db_category)
-    print(f"✅ Created category '{category.name}' for user {user_id}, bot_id={final_bot_id}")
+    log.debug("Created category '%s' for user %s bot_id=%s", category.name, user_id, final_bot_id)
     return db_category
 
 @router.delete("/{category_id}")
@@ -386,7 +385,7 @@ def delete_category(
         db.query(models.SoldProduct).filter(
             models.SoldProduct.category_id == category_id
         ).update({models.SoldProduct.category_id: None})
-        print(f"📦 Set category_id=NULL for {sold_products_count} historical sold_products")
+        log.debug("Set category_id=NULL for %s historical sold_products", sold_products_count)
     
     # Синхронизируем удаление категории во все боты (ПЕРЕД удалением)
     sync_category_to_all_bots(db_category, db, action="delete")

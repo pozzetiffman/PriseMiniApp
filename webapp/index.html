@@ -17,7 +17,7 @@
                 <!-- Категории будут здесь -->
             </div>
             <div id="search-container" class="search-container">
-                <input type="text" id="search-input" class="search-input" placeholder="🔍 Поиск товаров..." />
+                <input type="text" id="search-input" class="search-input" placeholder="🔍 Поиск товаров..." enterkeyhint="done" />
                 <button id="card-view-toggle-button" class="card-view-toggle-button" style="display: none;">≡</button>
             </div>
             <div id="products-grid" class="products-grid-view">
@@ -35,6 +35,12 @@
                     <!-- Заголовок не нужен, оставляем пустым для центрирования -->
                 </div>
                 <div class="product-top-menu-right">
+                    <div id="product-top-menu-admin-toggles" class="product-top-menu-admin-toggles" style="display: none;"></div>
+                    <div id="product-top-menu-admin-actions" class="product-top-menu-admin-actions" style="display: none;">
+                        <button type="button" class="product-top-menu-admin-btn top-menu-icon-btn" data-action="edit" aria-label="Редактировать">✎</button>
+                        <button type="button" class="product-top-menu-admin-btn top-menu-icon-btn" data-action="sold" aria-label="Продан">✓</button>
+                        <button type="button" class="product-top-menu-admin-btn top-menu-icon-btn" data-action="delete" aria-label="Удалить">🗑</button>
+                    </div>
                     <button id="product-top-menu-favorite" class="product-top-menu-favorite" aria-label="Добавить в избранное" style="display: none;">
                         <svg viewBox="0 0 24 24" class="product-top-menu-favorite-icon" xmlns="http://www.w3.org/2000/svg">
                             <path class="product-top-menu-favorite-path" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
@@ -47,8 +53,18 @@
                 <div id="product-page-hot-offer-control" class="product-page-hot-offer-control" style="display: none;"></div>
                 <div id="product-page-edit-control" style="display: none;"></div>
                 <div id="product-page-name" class="product-page-name"></div>
-                <div id="product-page-description" class="product-page-description"></div>
                 <div id="product-page-price-container" class="product-page-price-container"></div>
+                <div id="product-page-delivery" class="product-page-delivery-card"></div>
+                <div id="product-page-reviews" class="product-page-reviews-text"></div>
+                <section id="product-page-about-section" class="product-page-about-section">
+                    <h3 class="product-page-section-title">О товаре</h3>
+                    <div id="product-page-description" class="product-page-description"></div>
+                    <button type="button" id="product-page-description-toggle" class="product-page-toggle-btn" style="display: none;">Читать далее</button>
+                </section>
+                <section id="product-page-specs-section" class="product-page-specs-section">
+                    <button type="button" id="product-page-specs-toggle" class="product-page-specs-toggle" aria-expanded="false">Все характеристики</button>
+                    <div id="product-page-specs-content" class="product-page-specs-content"></div>
+                </section>
                 <div id="product-page-quantity" class="product-page-quantity" style="display: none;"></div>
                 <div id="product-page-reservation-status" class="product-page-reservation-status"></div>
                 <div id="product-page-reservation-button" class="product-page-reservation-button"></div>
@@ -86,6 +102,7 @@
                     </div>
                 </div>
             </div>
+            <div id="product-page-toast-host" class="product-page-toast-host" aria-live="polite"></div>
         </div>
         
         <!-- Страница оформления покупки (отдельная страница вместо модального окна) -->
@@ -182,6 +199,497 @@
                     <div style="display: flex; gap: 12px; margin-top: 12px;">
                         <button id="sale-order-page-step-3-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
                         <button id="sale-order-page-step-3-submit" class="reserve-btn" style="flex: 1;">✅ Оформить заказ</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Страница редактирования товара (вместо edit-product-modal) -->
+        <div id="edit-product-page" class="operation-page" style="display: none;">
+            <div class="operation-top-menu">
+                <button id="edit-product-page-back" class="operation-top-menu-close" aria-label="Назад">←</button>
+                <div class="operation-top-menu-title-container">
+                    <h2 class="operation-top-menu-title">✏️ Редактировать товар</h2>
+                </div>
+                <div class="operation-top-menu-right"></div>
+            </div>
+            <div class="operation-page-content form-page-content">
+                <div class="edit-product-form">
+                    <div class="edit-product-field">
+                        <label for="edit-name">Название товара</label>
+                        <input type="text" id="edit-name" placeholder="Введите название товара">
+                    </div>
+                    <div class="edit-product-field">
+                        <label for="edit-description">Описание товара</label>
+                        <textarea id="edit-description" rows="4" placeholder="Введите описание товара"></textarea>
+                    </div>
+                    <div class="edit-product-field">
+                        <label for="edit-price">Цена по карте (₽)</label>
+                        <input type="number" id="edit-price" step="0.01" min="0" placeholder="Введите цену по карте">
+                        <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">💡 Оставьте поле пустым для "Цена по запросу"</p>
+                    </div>
+                    <div class="edit-product-field" id="edit-price-cash-field">
+                        <label for="edit-price-cash">Цена наличными (₽)</label>
+                        <input type="number" id="edit-price-cash" step="0.01" min="0" placeholder="Введите цену наличными (необязательно)">
+                    </div>
+                    <div class="edit-product-field">
+                        <label for="edit-discount">Скидка (%)</label>
+                        <input type="number" id="edit-discount" step="0.1" min="0" max="100" placeholder="Введите скидку">
+                    </div>
+                    <div class="edit-product-field">
+                        <label for="edit-quantity">Количество товара</label>
+                        <input type="number" id="edit-quantity" step="1" min="0" placeholder="Введите количество">
+                    </div>
+                    <div class="edit-product-field">
+                        <label for="edit-quantity-unit-general">Единица измерения</label>
+                        <select id="edit-quantity-unit-general">
+                            <option value="шт">шт (штуки)</option>
+                            <option value="кг">кг (килограммы)</option>
+                            <option value="г">г (граммы)</option>
+                            <option value="л">л (литры)</option>
+                            <option value="мл">мл (миллилитры)</option>
+                            <option value="м">м (метры)</option>
+                            <option value="см">см (сантиметры)</option>
+                            <option value="м²">м² (квадратные метры)</option>
+                            <option value="м³">м³ (кубические метры)</option>
+                            <option value="упак">упак (упаковки)</option>
+                        </select>
+                    </div>
+                    <div class="edit-product-field">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label for="edit-quantity-show-enabled" style="margin-bottom: 0;">Показ количества</label>
+                                <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Индивидуальная настройка показа количества для этого товара</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="edit-quantity-show-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="edit-product-field" id="edit-made-to-order-field">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label for="edit-made-to-order" style="margin-bottom: 0;">Под заказ</label>
+                                <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Если включено, вместо количества будет показано "Под заказ"</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="edit-made-to-order">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="edit-product-field" id="edit-sale-enabled-field">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label for="edit-sale-enabled" style="margin-bottom: 0;">Продажа</label>
+                                <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Если включено, клиенты смогут купить этот товар</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="edit-sale-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="edit-product-field" id="edit-reservation-enabled-field">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label for="edit-reservation-enabled" style="margin-bottom: 0;">Резервация товара</label>
+                                <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Если включено, клиенты смогут зарезервировать этот товар</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="edit-reservation-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="for-sale-fields" style="display: none;">
+                        <div class="edit-product-field">
+                            <label style="margin-bottom: 8px; display: block;">Тип цены</label>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="radio" name="price-type" id="edit-price-type-range" value="range" checked style="display: none;">
+                                    <div>
+                                        <div style="font-weight: 500;">Цена от и до</div>
+                                        <div style="font-size: 12px; color: var(--text-hint);">Диапазон цен</div>
+                                    </div>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="radio" name="price-type" id="edit-price-type-fixed" value="fixed" style="display: none;">
+                                    <div>
+                                        <div style="font-weight: 500;">Фиксированная цена</div>
+                                        <div style="font-size: 12px; color: var(--text-hint);">Одна цена продажи</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="price-range-fields">
+                            <div class="edit-product-field">
+                                <label for="edit-price-from">Цена от (₽)</label>
+                                <input type="number" id="edit-price-from" step="0.01" min="0" placeholder="Введите цену от">
+                                <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">💡 Оставьте поле пустым для "Цена по запросу"</p>
+                            </div>
+                            <div class="edit-product-field">
+                                <label for="edit-price-to">Цена до (₽)</label>
+                                <input type="number" id="edit-price-to" step="0.01" min="0" placeholder="Введите цену до">
+                                <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">💡 Оставьте поле пустым для "Цена по запросу"</p>
+                            </div>
+                        </div>
+                        <div id="price-fixed-field" style="display: none;">
+                            <div class="edit-product-field">
+                                <label for="edit-price-fixed">Цена продажи (₽)</label>
+                                <input type="number" id="edit-price-fixed" step="0.01" min="0" placeholder="Введите фиксированную цену">
+                                <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">💡 Оставьте поле пустым для "Цена по запросу"</p>
+                            </div>
+                        </div>
+                        <div class="edit-product-field">
+                            <label for="edit-quantity-from">Количество от</label>
+                            <input type="number" id="edit-quantity-from" step="1" min="0" placeholder="Введите количество от">
+                        </div>
+                        <div class="edit-product-field">
+                            <label for="edit-quantity-unit">Единица измерения</label>
+                            <select id="edit-quantity-unit">
+                                <option value="шт">шт (штуки)</option>
+                                <option value="кг">кг (килограммы)</option>
+                                <option value="г">г (граммы)</option>
+                                <option value="л">л (литры)</option>
+                                <option value="мл">мл (миллилитры)</option>
+                                <option value="м">м (метры)</option>
+                                <option value="см">см (сантиметры)</option>
+                                <option value="м²">м² (квадратные метры)</option>
+                                <option value="м³">м³ (кубические метры)</option>
+                                <option value="упак">упак (упаковки)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Блок характеристик: компактный Liquid Glass -->
+                    <div class="edit-characteristics-card">
+                        <div class="edit-characteristics-header">Характеристики</div>
+                        <div id="edit-characteristics-list" class="edit-characteristics-list"></div>
+                        <div class="edit-char-add-row">
+                            <div class="edit-char-name-source" id="edit-char-name-source">
+                                <select id="edit-characteristics-name-select" class="edit-characteristics-name-select" title="Выберите из справочника"></select>
+                                <input type="text" id="edit-characteristics-name-manual" class="edit-characteristics-name-manual offscreen-hidden" placeholder="Название" aria-label="Название вручную" />
+                            </div>
+                            <input type="text" id="edit-characteristics-value" class="edit-characteristics-value" placeholder="Значение" />
+                            <button type="button" id="edit-characteristics-add-btn" class="edit-char-add-btn" aria-label="Добавить">+</button>
+                            <button type="button" id="edit-characteristics-name-toggle-btn" class="edit-char-toggle-btn" title="Переключить режим">✍️</button>
+                        </div>
+                    </div>
+                    <!-- Блок доставки: компактный Liquid Glass -->
+                    <div class="edit-delivery-card">
+                        <div class="edit-delivery-header">
+                            <div class="edit-delivery-title">Доставка</div>
+                            <div class="edit-delivery-hint">(необязательно)</div>
+                        </div>
+                        <div class="edit-delivery-body">
+                            <label class="edit-delivery-toggle">
+                                <input type="checkbox" id="edit-delivery-enabled" />
+                                <span>Доставка включена</span>
+                            </label>
+                            <div class="edit-delivery-row">
+                                <div class="edit-delivery-label">Срок доставки</div>
+                                <input id="edit-delivery-time" type="text" placeholder="например: 1–3 дня" />
+                            </div>
+                            <div class="edit-delivery-row">
+                                <div class="edit-delivery-label">Цена (₽)</div>
+                                <input id="edit-delivery-price" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" />
+                            </div>
+                            <label class="edit-delivery-toggle">
+                                <input type="checkbox" id="edit-pickup-enabled" />
+                                <span>Самовывоз</span>
+                            </label>
+                            <div class="edit-delivery-row">
+                                <div class="edit-delivery-label">Адрес</div>
+                                <input id="edit-pickup-address" type="text" placeholder="Адрес самовывоза" />
+                            </div>
+                            <div class="edit-delivery-actions">
+                                <button type="button" id="edit-delivery-save" class="edit-delivery-save-btn glass-btn">Сохранить доставку</button>
+                                <span id="edit-delivery-status" class="edit-delivery-status"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="edit-product-actions">
+                        <button id="edit-product-save" class="edit-product-btn save">💾 Сохранить</button>
+                        <button id="edit-product-cancel" class="edit-product-btn cancel">❌ Отменить</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Страница оформления заказа (вместо order-modal) -->
+        <div id="order-page" class="operation-page" style="display: none;">
+            <div class="operation-top-menu">
+                <button id="order-page-back" class="operation-top-menu-close" aria-label="Назад">←</button>
+                <div class="operation-top-menu-title-container">
+                    <h2 class="operation-top-menu-title">🛒 Оформление заказа</h2>
+                </div>
+                <div class="operation-top-menu-right"></div>
+            </div>
+            <div class="operation-page-content form-page-content">
+                <div id="order-step-1" class="order-step active">
+                    <div class="order-product-summary" id="order-product-summary"></div>
+                    <div class="order-form-field">
+                        <label for="order-promo-code">Промокод (если есть):</label>
+                        <input type="text" id="order-promo-code" placeholder="Введите промокод" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="order-quantity">Количество:</label>
+                        <input type="number" id="order-quantity" min="1" value="1" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                        <div id="order-total" class="order-total"></div>
+                    </div>
+                    <button id="order-step-1-next" class="reserve-btn" style="width: 100%; margin-top: 12px;">Продолжить →</button>
+                </div>
+                <div id="order-step-2" class="order-step">
+                    <div class="order-form-field">
+                        <label for="order-first-name">Имя <span style="color: red;">*</span>:</label>
+                        <input type="text" id="order-first-name" required placeholder="Введите имя" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="order-last-name">Фамилия <span style="color: red;">*</span>:</label>
+                        <input type="text" id="order-last-name" required placeholder="Введите фамилию" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="order-middle-name">Отчество:</label>
+                        <input type="text" id="order-middle-name" placeholder="Введите отчество" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="order-phone">Номер телефона <span style="color: red;">*</span>:</label>
+                        <div style="display: flex; gap: 8px;">
+                            <select id="order-phone-country-code" style="flex: 0 0 100px; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                                <option value="+7">+7</option>
+                                <option value="+1">+1</option>
+                                <option value="+44">+44</option>
+                                <option value="+49">+49</option>
+                                <option value="+33">+33</option>
+                                <option value="+86">+86</option>
+                                <option value="+81">+81</option>
+                                <option value="+82">+82</option>
+                                <option value="+91">+91</option>
+                                <option value="+61">+61</option>
+                            </select>
+                            <input type="tel" id="order-phone-number" required placeholder="Введите номер телефона" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                        </div>
+                    </div>
+                    <div class="order-form-field">
+                        <label for="order-email">Почта:</label>
+                        <input type="email" id="order-email" placeholder="Введите email" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="order-notes">Примечание:</label>
+                        <textarea id="order-notes" rows="3" placeholder="Дополнительная информация" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical;"></textarea>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button id="order-step-2-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
+                        <button id="order-step-2-next" class="reserve-btn" style="flex: 1;">Продолжить →</button>
+                    </div>
+                </div>
+                <div id="order-step-3" class="order-step">
+                    <div class="order-form-field">
+                        <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ получения:</label>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <label class="delivery-option">
+                                <input type="radio" name="delivery-method" value="delivery" checked>
+                                <span>🚚 Доставка</span>
+                            </label>
+                            <label class="delivery-option">
+                                <input type="radio" name="delivery-method" value="pickup">
+                                <span>🏪 Самовывоз</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button id="order-step-3-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
+                        <button id="order-step-3-submit" class="reserve-btn" style="flex: 1;">✅ Оформить заказ</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Страница оформления покупки (сделка из корзины): шаги оплата, доставка, контакты, комментарий -->
+        <div id="deal-checkout-page" class="operation-page" style="display: none;">
+            <div class="operation-top-menu">
+                <button id="deal-checkout-page-back" class="operation-top-menu-close" aria-label="Назад">←</button>
+                <div class="operation-top-menu-title-container">
+                    <h2 class="operation-top-menu-title">🛍️ Оформление покупки</h2>
+                </div>
+                <div class="operation-top-menu-right"></div>
+            </div>
+            <div class="operation-page-content form-page-content">
+                <div id="deal-checkout-summary" class="order-product-summary" style="margin-bottom: 16px;"></div>
+                <div id="deal-checkout-step-1" class="order-step active">
+                    <div class="order-form-field">
+                        <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ оплаты:</label>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <label class="delivery-option"><input type="radio" name="deal-payment-method" value="card" checked><span>💳 Картой</span></label>
+                            <label class="delivery-option"><input type="radio" name="deal-payment-method" value="cash"><span>💵 Наличными</span></label>
+                            <label class="delivery-option"><input type="radio" name="deal-payment-method" value="transfer"><span>🏦 Перевод</span></label>
+                            <label class="delivery-option"><input type="radio" name="deal-payment-method" value="other"><span>📌 Другое</span></label>
+                        </div>
+                    </div>
+                    <button id="deal-checkout-step-1-next" class="reserve-btn" style="width: 100%; margin-top: 12px;">Продолжить →</button>
+                </div>
+                <div id="deal-checkout-step-2" class="order-step">
+                    <div class="order-form-field">
+                        <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ получения:</label>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <label class="delivery-option"><input type="radio" name="deal-delivery-method" value="pickup" checked><span>🏪 Самовывоз</span></label>
+                            <label class="delivery-option"><input type="radio" name="deal-delivery-method" value="courier"><span>🚚 Курьером</span></label>
+                            <label class="delivery-option"><input type="radio" name="deal-delivery-method" value="none"><span>— Не указано</span></label>
+                        </div>
+                    </div>
+                    <div id="deal-checkout-address-wrap" class="order-form-field" style="display: none;">
+                        <label for="deal-checkout-address">Адрес доставки:</label>
+                        <input type="text" id="deal-checkout-address" placeholder="Город, улица, дом" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button id="deal-checkout-step-2-back" class="reserve-btn" style="flex: 1; background: rgba(255,255,255,0.1);">← Назад</button>
+                        <button id="deal-checkout-step-2-next" class="reserve-btn" style="flex: 1;">Продолжить →</button>
+                    </div>
+                </div>
+                <div id="deal-checkout-step-3" class="order-step">
+                    <div class="order-form-field">
+                        <label for="deal-checkout-name">Имя <span style="color: red;">*</span></label>
+                        <input type="text" id="deal-checkout-name" required placeholder="Введите имя" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="deal-checkout-phone">Телефон <span style="color: red;">*</span></label>
+                        <input type="tel" id="deal-checkout-phone" required placeholder="+7 999 123-45-67" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button id="deal-checkout-step-3-back" class="reserve-btn" style="flex: 1; background: rgba(255,255,255,0.1);">← Назад</button>
+                        <button id="deal-checkout-step-3-next" class="reserve-btn" style="flex: 1;">Продолжить →</button>
+                    </div>
+                </div>
+                <div id="deal-checkout-step-4" class="order-step">
+                    <div class="order-form-field">
+                        <label for="deal-checkout-comment">Комментарий к заказу</label>
+                        <textarea id="deal-checkout-comment" rows="3" placeholder="Пожелания, подъезд, код и т.д." style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button id="deal-checkout-step-4-back" class="reserve-btn" style="flex: 1; background: rgba(255,255,255,0.1);">← Назад</button>
+                        <button id="deal-checkout-step-4-submit" class="reserve-btn" style="flex: 1;">✅ Подтвердить покупку</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Страница заявки на продажу (вместо purchase-modal) -->
+        <div id="purchase-page" class="operation-page" style="display: none;">
+            <div class="operation-top-menu">
+                <button id="purchase-page-back" class="operation-top-menu-close" aria-label="Назад">←</button>
+                <div class="operation-top-menu-title-container">
+                    <h2 class="operation-top-menu-title">💰 Продать товар</h2>
+                </div>
+                <div class="operation-top-menu-right"></div>
+            </div>
+            <div class="operation-page-content form-page-content">
+                <div class="order-form" style="padding: 0; box-sizing: border-box;">
+                    <div class="order-form-field">
+                        <label for="purchase-last-name">Фамилия *</label>
+                        <input type="text" id="purchase-last-name" placeholder="Введите фамилию" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="purchase-first-name">Имя *</label>
+                        <input type="text" id="purchase-first-name" placeholder="Введите имя" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="purchase-middle-name">Отчество</label>
+                        <input type="text" id="purchase-middle-name" placeholder="Введите отчество" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="purchase-phone">Номер телефона *</label>
+                        <input type="tel" id="purchase-phone" placeholder="+7 (999) 999-99-99" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="purchase-city">Город *</label>
+                        <input type="text" id="purchase-city" placeholder="Введите город" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div class="order-form-field">
+                        <label for="purchase-address">Адрес *</label>
+                        <textarea id="purchase-address" rows="3" placeholder="Введите адрес" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
+                    </div>
+                    <div class="order-form-field">
+                        <label for="purchase-notes">Примечание к продаже</label>
+                        <textarea id="purchase-notes" rows="3" placeholder="Дополнительная информация о товаре" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
+                    </div>
+                    <div class="order-form-field">
+                        <label>Форма оплаты *</label>
+                        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 8px; background: var(--bg-glass);">
+                                <input type="radio" name="purchase-payment" value="cash" required style="width: 18px; height: 18px; cursor: pointer;">
+                                <span>Наличными</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 8px; background: var(--bg-glass);">
+                                <input type="radio" name="purchase-payment" value="bank_transfer" required style="width: 18px; height: 18px; cursor: pointer;">
+                                <span>Безналичными</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="order-form-field">
+                        <label for="purchase-organization">Организация (если есть)</label>
+                        <input type="text" id="purchase-organization" placeholder="Название организации" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                    </div>
+                    <div class="order-form-field">
+                        <label>Фото (до 5 шт)</label>
+                        <input type="file" id="purchase-images" accept="image/*" multiple style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                        <div id="purchase-images-preview" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                    </div>
+                    <div class="order-form-field">
+                        <label>Видео (1 шт)</label>
+                        <input type="file" id="purchase-video" accept="video/*" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                        <div id="purchase-video-preview" style="margin-top: 8px;"></div>
+                    </div>
+                    <button id="purchase-submit" class="reserve-btn" style="width: 100%; margin-top: 12px; background: rgba(255, 149, 0, 0.95);">✅ Отправить заявку</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Страница настроек магазина (вместо settings-modal) -->
+        <div id="settings-page" class="operation-page" style="display: none;">
+            <div class="operation-top-menu">
+                <button id="settings-page-back" class="operation-top-menu-close" aria-label="Назад">←</button>
+                <div class="operation-top-menu-title-container">
+                    <h2 class="operation-top-menu-title">⚙️ Настройки магазина</h2>
+                </div>
+                <div class="operation-top-menu-right"></div>
+            </div>
+            <div class="operation-page-content form-page-content">
+                <div id="settings-content" class="settings-content">
+                    <div class="admin-setting">
+                        <div class="admin-setting-label">
+                            <label for="quantity-enabled-toggle">Показ количества товаров</label>
+                            <p class="admin-setting-description">Показывать количество товаров в карточках и модальном окне. При отключении будет отображаться "В наличии" без указания числа.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="quantity-enabled-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="admin-setting">
+                        <div class="admin-setting-label">
+                            <label for="reservations-toggle">Резервация товаров</label>
+                            <p class="admin-setting-description">Разрешить клиентам резервировать товары на определенное время. Работает независимо от показа количества.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="reservations-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="admin-setting">
+                        <div class="admin-setting-label">
+                            <label for="all-products-made-to-order-toggle">Все товары под заказ</label>
+                            <p class="admin-setting-description">При включении все активные товары устанавливаются как "под заказ". При выключении статус "под заказ" снимается со всех активных товаров. Вы можете индивидуально изменять статус товаров в карточке товара - это не влияет на тумблер.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="all-products-made-to-order-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="admin-info">
+                        <p>💡 <strong>Как это работает:</strong><br>
+                        • <strong>Показ количества включен:</strong> отображается точное количество товара (например, "В наличии: 5"). При резервации товара с количеством больше 1 можно выбрать, сколько единиц зарезервировать.<br>
+                        • <strong>Показ количества выключен:</strong> отображается просто "В наличии" без числа. Резервация работает, но всегда резервируется 1 единица товара (выбор количества недоступен).</p>
                     </div>
                 </div>
             </div>
@@ -336,20 +844,24 @@
                                 <span id="cart-summary-discount-amount"></span>
                             </span>
                         </div>
+                        <div class="cart-summary-row" id="cart-summary-delivery-row" style="display: none;">
+                            <span class="cart-summary-label">Доставка</span>
+                            <span id="cart-summary-delivery-value" class="cart-summary-value">0₽</span>
+                        </div>
                     </div>
                     
                     <!-- Разделитель -->
                     <div class="cart-summary-divider"></div>
                     
-                    <!-- Итого -->
+                    <!-- Итого: по карте / наличными (клик переключает способ оплаты для футера) -->
                     <div class="cart-summary-total">
-                        <div class="cart-summary-total-row">
+                        <div class="cart-summary-total-row cart-payment-choice cart-total-row--inactive" data-payment="card" role="button" tabindex="0">
                             <span class="cart-summary-total-label">Цена по карте</span>
-                            <span id="cart-summary-total-card" class="cart-summary-total-value cart-summary-total-green">0₽</span>
+                            <span id="cart-summary-total-card" class="cart-summary-total-value">0₽</span>
                         </div>
-                        <div class="cart-summary-total-row">
+                        <div class="cart-summary-total-row cart-payment-choice cart-total-row--inactive" data-payment="cash" role="button" tabindex="0">
                             <span class="cart-summary-total-label">Цена наличными</span>
-                            <span class="cart-summary-total-value">—</span>
+                            <span id="cart-summary-total-cash" class="cart-summary-total-value">—</span>
                         </div>
                     </div>
                 </div>
@@ -450,93 +962,11 @@
         </div>
     </div>
     
-    <!-- Модальное окно для заказа товара -->
-    <div id="order-modal" class="modal">
+    <!-- Модальное окно для заказа товара (устарело: используется order-page) -->
+    <div id="order-modal" class="modal" style="display: none;" aria-hidden="true">
         <div class="modal-content reservation-modal-content order-form-modal">
             <span class="modal-close order-close">&times;</span>
-            <h2 class="reservation-title">🛒 Оформление заказа</h2>
-            
-            <!-- Шаг 1: Промокод и количество -->
-            <div id="order-step-1" class="order-step active">
-                <div class="order-product-summary" id="order-product-summary"></div>
-                <div class="order-form-field">
-                    <label for="order-promo-code">Промокод (если есть):</label>
-                    <input type="text" id="order-promo-code" placeholder="Введите промокод" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                </div>
-                <div class="order-form-field">
-                    <label for="order-quantity">Количество:</label>
-                    <input type="number" id="order-quantity" min="1" value="1" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                    <div id="order-total" class="order-total"></div>
-                </div>
-                <button id="order-step-1-next" class="reserve-btn" style="width: 100%; margin-top: 12px;">Продолжить →</button>
-            </div>
-            
-            <!-- Шаг 2: Личные данные -->
-            <div id="order-step-2" class="order-step">
-                <div class="order-form-field">
-                    <label for="order-first-name">Имя <span style="color: red;">*</span>:</label>
-                    <input type="text" id="order-first-name" required placeholder="Введите имя" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                </div>
-                <div class="order-form-field">
-                    <label for="order-last-name">Фамилия <span style="color: red;">*</span>:</label>
-                    <input type="text" id="order-last-name" required placeholder="Введите фамилию" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                </div>
-                <div class="order-form-field">
-                    <label for="order-middle-name">Отчество:</label>
-                    <input type="text" id="order-middle-name" placeholder="Введите отчество" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                </div>
-                <div class="order-form-field">
-                    <label for="order-phone">Номер телефона <span style="color: red;">*</span>:</label>
-                    <div style="display: flex; gap: 8px;">
-                        <select id="order-phone-country-code" style="flex: 0 0 100px; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                            <option value="+7">+7</option>
-                            <option value="+1">+1</option>
-                            <option value="+44">+44</option>
-                            <option value="+49">+49</option>
-                            <option value="+33">+33</option>
-                            <option value="+86">+86</option>
-                            <option value="+81">+81</option>
-                            <option value="+82">+82</option>
-                            <option value="+91">+91</option>
-                            <option value="+61">+61</option>
-                        </select>
-                        <input type="tel" id="order-phone-number" required placeholder="Введите номер телефона" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                    </div>
-                </div>
-                <div class="order-form-field">
-                    <label for="order-email">Почта:</label>
-                    <input type="email" id="order-email" placeholder="Введите email" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px;">
-                </div>
-                <div class="order-form-field">
-                    <label for="order-notes">Примечание:</label>
-                    <textarea id="order-notes" rows="3" placeholder="Дополнительная информация" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical;"></textarea>
-                </div>
-                <div style="display: flex; gap: 12px; margin-top: 12px;">
-                    <button id="order-step-2-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
-                    <button id="order-step-2-next" class="reserve-btn" style="flex: 1;">Продолжить →</button>
-                </div>
-            </div>
-            
-            <!-- Шаг 3: Способ доставки -->
-            <div id="order-step-3" class="order-step">
-                <div class="order-form-field">
-                    <label style="display: block; margin-bottom: 12px; font-weight: 600;">Способ получения:</label>
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <label class="delivery-option">
-                            <input type="radio" name="delivery-method" value="delivery" checked>
-                            <span>🚚 Доставка</span>
-                        </label>
-                        <label class="delivery-option">
-                            <input type="radio" name="delivery-method" value="pickup">
-                            <span>🏪 Самовывоз</span>
-                        </label>
-                    </div>
-                </div>
-                <div style="display: flex; gap: 12px; margin-top: 12px;">
-                    <button id="order-step-3-back" class="reserve-btn" style="flex: 1; background: rgba(255, 255, 255, 0.1);">← Назад</button>
-                    <button id="order-step-3-submit" class="reserve-btn" style="flex: 1;">✅ Оформить заказ</button>
-                </div>
-            </div>
+            <p class="reservation-title">Используется страница «Оформление заказа»</p>
         </div>
     </div>
     
@@ -665,69 +1095,11 @@
         </div>
     </div>
     
-    <!-- Модальное окно для продажи товара -->
-    <div id="purchase-modal" class="modal">
+    <!-- Модальное окно для продажи товара (устарело: используется purchase-page) -->
+    <div id="purchase-modal" class="modal" style="display: none;" aria-hidden="true">
         <div class="modal-content reservation-modal-content">
             <span class="modal-close purchase-close">&times;</span>
-            <h2 class="reservation-title">💰 Продать товар</h2>
-            <div class="order-form" style="max-height: 80vh; overflow-y: auto; padding: 0 20px; box-sizing: border-box;">
-                <div class="order-form-field">
-                    <label for="purchase-last-name">Фамилия *</label>
-                    <input type="text" id="purchase-last-name" placeholder="Введите фамилию" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
-                </div>
-                <div class="order-form-field">
-                    <label for="purchase-first-name">Имя *</label>
-                    <input type="text" id="purchase-first-name" placeholder="Введите имя" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
-                </div>
-                <div class="order-form-field">
-                    <label for="purchase-middle-name">Отчество</label>
-                    <input type="text" id="purchase-middle-name" placeholder="Введите отчество" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
-                </div>
-                <div class="order-form-field">
-                    <label for="purchase-phone">Номер телефона *</label>
-                    <input type="tel" id="purchase-phone" placeholder="+7 (999) 999-99-99" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
-                </div>
-                <div class="order-form-field">
-                    <label for="purchase-city">Город *</label>
-                    <input type="text" id="purchase-city" placeholder="Введите город" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
-                </div>
-                <div class="order-form-field">
-                    <label for="purchase-address">Адрес *</label>
-                    <textarea id="purchase-address" rows="3" placeholder="Введите адрес" required style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
-                </div>
-                <div class="order-form-field">
-                    <label for="purchase-notes">Примечание к продаже</label>
-                    <textarea id="purchase-notes" rows="3" placeholder="Дополнительная информация о товаре" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; resize: vertical; box-sizing: border-box;"></textarea>
-                </div>
-                <div class="order-form-field">
-                    <label>Форма оплаты *</label>
-                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 8px; background: var(--bg-glass);">
-                            <input type="radio" name="purchase-payment" value="cash" required style="width: 18px; height: 18px; cursor: pointer;">
-                            <span>Наличными</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 8px; background: var(--bg-glass);">
-                            <input type="radio" name="purchase-payment" value="bank_transfer" required style="width: 18px; height: 18px; cursor: pointer;">
-                            <span>Безналичными</span>
-                        </label>
-                    </div>
-                </div>
-                <div class="order-form-field">
-                    <label for="purchase-organization">Организация (если есть)</label>
-                    <input type="text" id="purchase-organization" placeholder="Название организации" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
-                </div>
-                <div class="order-form-field">
-                    <label>Фото (до 5 шт)</label>
-                    <input type="file" id="purchase-images" accept="image/*" multiple style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
-                    <div id="purchase-images-preview" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
-                </div>
-                <div class="order-form-field">
-                    <label>Видео (1 шт)</label>
-                    <input type="file" id="purchase-video" accept="video/*" style="width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 2px solid var(--border-color); background: var(--bg-glass); color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
-                    <div id="purchase-video-preview" style="margin-top: 8px;"></div>
-                </div>
-                <button id="purchase-submit" class="reserve-btn" style="width: 100%; margin-top: 12px; background: rgba(255, 149, 0, 0.95);">✅ Отправить заявку</button>
-            </div>
+            <p class="reservation-title">Используется страница «Продать товар»</p>
         </div>
     </div>
     
@@ -786,244 +1158,149 @@
         </div>
     </div>
     
-    <!-- Модальное окно для редактирования товара -->
-    <div id="edit-product-modal" class="modal">
+    <!-- Модальное окно для редактирования товара (устарело: используется edit-product-page) -->
+    <div id="edit-product-modal" class="modal" style="display: none;" aria-hidden="true">
         <div class="modal-content">
             <span class="modal-close edit-product-close">&times;</span>
-            <h2 class="edit-product-title">✏️ Редактировать товар</h2>
-            <div class="edit-product-form">
-                <div class="edit-product-field">
-                    <label for="edit-name">Название товара</label>
-                    <input type="text" id="edit-name" placeholder="Введите название товара">
-                </div>
-                <div class="edit-product-field">
-                    <label for="edit-description">Описание товара</label>
-                    <textarea id="edit-description" rows="4" placeholder="Введите описание товара"></textarea>
-                </div>
-                <div class="edit-product-field">
-                    <label for="edit-price">Цена (₽)</label>
-                    <input type="number" id="edit-price" step="0.01" min="0" placeholder="Введите цену">
-                    <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">💡 Оставьте поле пустым для "Цена по запросу"</p>
-                </div>
-                <div class="edit-product-field">
-                    <label for="edit-discount">Скидка (%)</label>
-                    <input type="number" id="edit-discount" step="0.1" min="0" max="100" placeholder="Введите скидку">
-                </div>
-                <div class="edit-product-field">
-                    <label for="edit-quantity">Количество товара</label>
-                    <input type="number" id="edit-quantity" step="1" min="0" placeholder="Введите количество">
-                </div>
-                <div class="edit-product-field">
-                    <label for="edit-quantity-unit-general">Единица измерения</label>
-                    <select id="edit-quantity-unit-general">
-                        <option value="шт">шт (штуки)</option>
-                        <option value="кг">кг (килограммы)</option>
-                        <option value="г">г (граммы)</option>
-                        <option value="л">л (литры)</option>
-                        <option value="мл">мл (миллилитры)</option>
-                        <option value="м">м (метры)</option>
-                        <option value="см">см (сантиметры)</option>
-                        <option value="м²">м² (квадратные метры)</option>
-                        <option value="м³">м³ (кубические метры)</option>
-                        <option value="упак">упак (упаковки)</option>
-                    </select>
-                </div>
-                <div class="edit-product-field">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <label for="edit-quantity-show-enabled" style="margin-bottom: 0;">Показ количества</label>
-                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Индивидуальная настройка показа количества для этого товара</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-quantity-show-enabled">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
-                <div class="edit-product-field" id="edit-made-to-order-field">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <label for="edit-made-to-order" style="margin-bottom: 0;">Под заказ</label>
-                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Если включено, вместо количества будет показано "Под заказ"</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-made-to-order">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
-                <div class="edit-product-field" id="edit-sale-enabled-field">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <label for="edit-sale-enabled" style="margin-bottom: 0;">Продажа</label>
-                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">Если включено, клиенты смогут купить этот товар</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="edit-sale-enabled">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
-                <!-- Поля для товаров с флагом продажа (скрыты по умолчанию) -->
-                <div id="for-sale-fields" style="display: none;">
-                    <div class="edit-product-field">
-                        <label style="margin-bottom: 8px; display: block;">Тип цены</label>
-                        <div style="display: flex; flex-direction: column; gap: 8px;">
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="radio" name="price-type" id="edit-price-type-range" value="range" checked style="display: none;">
-                                <div>
-                                    <div style="font-weight: 500;">Цена от и до</div>
-                                    <div style="font-size: 12px; color: var(--text-hint);">Диапазон цен</div>
-                                </div>
-                            </label>
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="radio" name="price-type" id="edit-price-type-fixed" value="fixed" style="display: none;">
-                                <div>
-                                    <div style="font-weight: 500;">Фиксированная цена</div>
-                                    <div style="font-size: 12px; color: var(--text-hint);">Одна цена продажи</div>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-                    <div id="price-range-fields">
-                        <div class="edit-product-field">
-                            <label for="edit-price-from">Цена от (₽)</label>
-                            <input type="number" id="edit-price-from" step="0.01" min="0" placeholder="Введите цену от">
-                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">💡 Оставьте поле пустым для "Цена по запросу"</p>
-                        </div>
-                        <div class="edit-product-field">
-                            <label for="edit-price-to">Цена до (₽)</label>
-                            <input type="number" id="edit-price-to" step="0.01" min="0" placeholder="Введите цену до">
-                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">💡 Оставьте поле пустым для "Цена по запросу"</p>
-                        </div>
-                    </div>
-                    <div id="price-fixed-field" style="display: none;">
-                        <div class="edit-product-field">
-                            <label for="edit-price-fixed">Цена продажи (₽)</label>
-                            <input type="number" id="edit-price-fixed" step="0.01" min="0" placeholder="Введите фиксированную цену">
-                            <p style="font-size: 12px; color: var(--text-hint); margin: 4px 0 0 0;">💡 Оставьте поле пустым для "Цена по запросу"</p>
-                        </div>
-                    </div>
-                    <div class="edit-product-field">
-                        <label for="edit-quantity-from">Количество от</label>
-                        <input type="number" id="edit-quantity-from" step="1" min="0" placeholder="Введите количество от">
-                    </div>
-                    <div class="edit-product-field">
-                        <label for="edit-quantity-unit">Единица измерения</label>
-                        <select id="edit-quantity-unit">
-                            <option value="шт">шт (штуки)</option>
-                            <option value="кг">кг (килограммы)</option>
-                            <option value="г">г (граммы)</option>
-                            <option value="л">л (литры)</option>
-                            <option value="мл">мл (миллилитры)</option>
-                            <option value="м">м (метры)</option>
-                            <option value="см">см (сантиметры)</option>
-                            <option value="м²">м² (квадратные метры)</option>
-                            <option value="м³">м³ (кубические метры)</option>
-                            <option value="упак">упак (упаковки)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="edit-product-actions">
-                    <button id="edit-product-save" class="edit-product-btn save">💾 Сохранить</button>
-                    <button id="edit-product-cancel" class="edit-product-btn cancel">❌ Отменить</button>
-                </div>
-            </div>
+            <p class="edit-product-title">Используется страница «Редактировать товар»</p>
         </div>
     </div>
     
     <!-- Модальное окно личного кабинета -->
-    <div id="profile-modal" class="modal">
-        <div class="modal-content profile-modal-content">
-            <span class="modal-close profile-close">&times;</span>
-            <h2 class="profile-title">👤 Личный кабинет</h2>
-            <div class="profile-content">
-                <div class="profile-avatar-container">
-                    <img id="profile-avatar" class="profile-avatar" src="" alt="Аватар" style="display: none;">
-                    <div id="profile-avatar-placeholder" class="profile-avatar-placeholder">👤</div>
+        <!-- Страница личного кабинета (отдельная страница вместо модального окна) -->
+        <div id="profile-page" class="profile-page" style="display: none;">
+            <!-- Верхнее меню страницы профиля (фиксированное, как в странице товара) -->
+            <div class="profile-new-top-menu">
+                <button id="profile-page-close" class="profile-top-menu-close" aria-label="Закрыть">←</button>
+                <div class="profile-top-menu-title-container">
+                    <h2 class="profile-top-menu-title">👤 Личный кабинет</h2>
                 </div>
-                <div class="profile-info">
-                    <div class="profile-field">
-                        <label>Имя:</label>
-                        <div id="profile-first-name" class="profile-value">—</div>
+                <div class="profile-top-menu-right">
+                    <!-- Правая часть меню (пока пустая) -->
+                </div>
+            </div>
+            <div class="profile-page-content">
+                <div class="profile-content">
+                    <div class="profile-avatar-container">
+                        <img id="profile-avatar" class="profile-avatar" src="" alt="Аватар" style="display: none;">
+                        <div id="profile-avatar-placeholder" class="profile-avatar-placeholder">👤</div>
                     </div>
-                    <div class="profile-field">
-                        <label>Фамилия:</label>
-                        <div id="profile-last-name" class="profile-value">—</div>
+                    <div id="profile-greeting" class="profile-greeting">—</div>
+                    <div class="profile-divider"></div>
+                    <div class="profile-section">
+                        <h3 class="profile-section-title">📦 Мои операции</h3>
+                        <div class="profile-operations-grid">
+                            <button id="profile-orders-btn" class="profile-operation-card" data-type="orders">
+                                <div class="profile-operation-icon">🛒</div>
+                                <div class="profile-operation-text">
+                                    <div class="profile-operation-title">Заказы</div>
+                                    <div class="profile-operation-subtitle">Оформленные покупки</div>
+                                </div>
+                            </button>
+                            <button id="profile-reservations-btn" class="profile-operation-card" data-type="reservations">
+                                <div class="profile-operation-icon">🔒</div>
+                                <div class="profile-operation-text">
+                                    <div class="profile-operation-title">Резервации</div>
+                                    <div class="profile-operation-subtitle">Зарезервированные товары</div>
+                                </div>
+                            </button>
+                            <button id="profile-purchases-btn" class="profile-operation-card" data-type="purchases">
+                                <div class="profile-operation-icon">💰</div>
+                                <div class="profile-operation-text">
+                                    <div class="profile-operation-title">Продажи</div>
+                                    <div class="profile-operation-subtitle">Товары на продажу</div>
+                                </div>
+                            </button>
+                            <button id="profile-sale-orders-btn" class="profile-operation-card" data-type="sale-orders">
+                                <div class="profile-operation-icon">🛍️</div>
+                                <div class="profile-operation-text">
+                                    <div class="profile-operation-title">Покупки</div>
+                                    <div class="profile-operation-subtitle">Заказы на покупку</div>
+                                </div>
+                            </button>
+                        </div>
                     </div>
-                    <div class="profile-field">
-                        <label>Username:</label>
-                        <div id="profile-username" class="profile-value">—</div>
+                    <div class="profile-divider"></div>
+                    <button id="profile-contact-info-btn" class="profile-operation-card profile-contact-info-card" type="button">
+                        <div class="profile-operation-icon">👤</div>
+                        <div class="profile-operation-text">
+                            <div class="profile-operation-title">Контактная информация</div>
+                            <div class="profile-operation-subtitle">Имя, телефон, email, адрес</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Страница «Контактная информация» (подстраница личного кабинета) -->
+        <div id="profile-details-page" class="operation-page" style="display: none;">
+            <div class="operation-top-menu">
+                <button id="profile-details-page-close" class="operation-top-menu-close" aria-label="Назад">←</button>
+                <div class="operation-top-menu-title-container">
+                    <h2 class="operation-top-menu-title">👤 Контактная информация</h2>
+                </div>
+                <div class="operation-top-menu-right"></div>
+            </div>
+            <div class="profile-details-page-content operation-page-content">
+                <!-- Профильный блок: аватар слева, имя и ссылка справа -->
+                <div class="profile-details-profile-block">
+                    <div class="profile-details-avatar-wrap">
+                        <img id="profile-details-avatar" class="profile-details-avatar" src="" alt="" style="display: none;">
+                        <div id="profile-details-avatar-placeholder" class="profile-details-avatar-placeholder">👤</div>
                     </div>
-                    <div class="profile-field">
-                        <label>ID пользователя:</label>
-                        <div id="profile-user-id" class="profile-value">—</div>
-                    </div>
-                    <div class="profile-field">
-                        <label>Язык:</label>
-                        <div id="profile-language" class="profile-value">—</div>
+                    <div class="profile-details-profile-info">
+                        <div id="profile-details-display-name" class="profile-details-display-name">—</div>
+                        <div id="profile-details-username" class="profile-details-username">—</div>
+                        <a id="profile-details-open-profile-link" href="#" class="profile-details-open-profile">Открыть профиль →</a>
                     </div>
                 </div>
-                <div style="
-                    height: 1px;
-                    background: rgba(255, 255, 255, 0.2);
-                    margin: 24px 0;
-                    width: 100%;
-                "></div>
-                <div class="profile-section" style="margin-top: 24px;">
-                    <h3 class="profile-section-title" style="margin: 0 0 12px 0;">📋 Контактная информация</h3>
+                <div class="profile-divider"></div>
+                <!-- Личные данные (read-only из Telegram) -->
+                <div class="profile-section">
+                    <h3 class="profile-section-title">📋 Личные данные</h3>
+                    <div class="profile-info">
+                        <div class="profile-field">
+                            <label>Имя:</label>
+                            <div id="profile-first-name" class="profile-value">—</div>
+                        </div>
+                        <div class="profile-field">
+                            <label>Фамилия:</label>
+                            <div id="profile-last-name" class="profile-value">—</div>
+                        </div>
+                        <div class="profile-field">
+                            <label>Username:</label>
+                            <div id="profile-username" class="profile-value">—</div>
+                        </div>
+                        <div class="profile-field">
+                            <label>ID пользователя:</label>
+                            <div id="profile-user-id" class="profile-value">—</div>
+                        </div>
+                        <div class="profile-field">
+                            <label>Язык:</label>
+                            <div id="profile-language" class="profile-value">—</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="profile-divider"></div>
+                <div class="profile-section">
+                    <h3 class="profile-section-title">📋 Контактная информация</h3>
                     <div class="profile-info">
                         <div class="profile-field">
                             <label>Фамилия:</label>
-                            <input type="text" id="profile-contact-last-name" class="profile-value-editable" placeholder="Фамилия" style="
-                                width: 100%;
-                                padding: 8px;
-                                border: 1px solid rgba(255, 255, 255, 0.2);
-                                border-radius: 6px;
-                                background: rgba(255, 255, 255, 0.05);
-                                color: #ffffff;
-                                font-size: 14px;
-                                box-sizing: border-box;
-                            ">
+                            <input type="text" id="profile-contact-last-name" class="profile-value-editable" placeholder="Фамилия">
                         </div>
                         <div class="profile-field">
                             <label>Имя:</label>
-                            <input type="text" id="profile-contact-first-name" class="profile-value-editable" placeholder="Имя" style="
-                                width: 100%;
-                                padding: 8px;
-                                border: 1px solid rgba(255, 255, 255, 0.2);
-                                border-radius: 6px;
-                                background: rgba(255, 255, 255, 0.05);
-                                color: #ffffff;
-                                font-size: 14px;
-                                box-sizing: border-box;
-                            ">
+                            <input type="text" id="profile-contact-first-name" class="profile-value-editable" placeholder="Имя">
                         </div>
                         <div class="profile-field">
                             <label>Отчество:</label>
-                            <input type="text" id="profile-contact-middle-name" class="profile-value-editable" placeholder="Отчество" style="
-                                width: 100%;
-                                padding: 8px;
-                                border: 1px solid rgba(255, 255, 255, 0.2);
-                                border-radius: 6px;
-                                background: rgba(255, 255, 255, 0.05);
-                                color: #ffffff;
-                                font-size: 14px;
-                                box-sizing: border-box;
-                            ">
+                            <input type="text" id="profile-contact-middle-name" class="profile-value-editable" placeholder="Отчество">
                         </div>
                         <div class="profile-field">
                             <label>Телефон:</label>
-                            <div style="display: flex; gap: 8px;">
-                                <select id="profile-contact-phone-country-code" style="
-                                    flex: 0 0 80px;
-                                    padding: 8px;
-                                    border: 1px solid rgba(255, 255, 255, 0.2);
-                                    border-radius: 6px;
-                                    background: rgba(255, 255, 255, 0.05);
-                                    color: #ffffff;
-                                    font-size: 14px;
-                                ">
+                            <div class="profile-phone-container">
+                                <select id="profile-contact-phone-country-code" class="profile-phone-country-code">
                                     <option value="+7">+7</option>
                                     <option value="+1">+1</option>
                                     <option value="+44">+44</option>
@@ -1035,122 +1312,158 @@
                                     <option value="+91">+91</option>
                                     <option value="+61">+61</option>
                                 </select>
-                                <input type="tel" id="profile-contact-phone-number" class="profile-value-editable" placeholder="Номер телефона" style="
-                                    flex: 1;
-                                    padding: 8px;
-                                    border: 1px solid rgba(255, 255, 255, 0.2);
-                                    border-radius: 6px;
-                                    background: rgba(255, 255, 255, 0.05);
-                                    color: #ffffff;
-                                    font-size: 14px;
-                                    box-sizing: border-box;
-                                ">
+                                <input type="tel" id="profile-contact-phone-number" class="profile-value-editable profile-phone-number" placeholder="Номер телефона">
                             </div>
                         </div>
                         <div class="profile-field">
                             <label>Email:</label>
-                            <input type="email" id="profile-contact-email" class="profile-value-editable" placeholder="example@mail.com" style="
-                                width: 100%;
-                                padding: 8px;
-                                border: 1px solid rgba(255, 255, 255, 0.2);
-                                border-radius: 6px;
-                                background: rgba(255, 255, 255, 0.05);
-                                color: #ffffff;
-                                font-size: 14px;
-                                box-sizing: border-box;
-                            ">
+                            <input type="email" id="profile-contact-email" class="profile-value-editable" placeholder="example@mail.com">
                         </div>
                         <div class="profile-field">
                             <label>Город:</label>
-                            <input type="text" id="profile-contact-city" class="profile-value-editable" placeholder="Город" style="
-                                width: 100%;
-                                padding: 8px;
-                                border: 1px solid rgba(255, 255, 255, 0.2);
-                                border-radius: 6px;
-                                background: rgba(255, 255, 255, 0.05);
-                                color: #ffffff;
-                                font-size: 14px;
-                                box-sizing: border-box;
-                            ">
+                            <input type="text" id="profile-contact-city" class="profile-value-editable" placeholder="Город">
                         </div>
                         <div class="profile-field">
                             <label>Адрес:</label>
-                            <textarea id="profile-contact-address" class="profile-value-editable" placeholder="Адрес" rows="2" style="
-                                width: 100%;
-                                padding: 8px;
-                                border: 1px solid rgba(255, 255, 255, 0.2);
-                                border-radius: 6px;
-                                background: rgba(255, 255, 255, 0.05);
-                                color: #ffffff;
-                                font-size: 14px;
-                                resize: vertical;
-                                box-sizing: border-box;
-                            "></textarea>
+                            <textarea id="profile-contact-address" class="profile-value-editable" placeholder="Адрес" rows="2"></textarea>
                         </div>
                     </div>
-                    <div style="margin-top: 16px; display: flex; justify-content: center;">
-                        <button id="profile-contact-save-btn" style="
-                            display: none;
-                            padding: 10px 20px;
-                            background: rgba(90, 200, 250, 0.2);
-                            color: #5ac8fa;
-                            border: 1px solid rgba(90, 200, 250, 0.4);
-                            border-radius: 6px;
-                            font-size: 14px;
-                            cursor: pointer;
-                            font-weight: 600;
-                        ">💾 Сохранить</button>
+                    <div class="profile-save-container">
+                        <button id="profile-contact-save-btn" class="profile-save-btn">💾 Сохранить</button>
                     </div>
                 </div>
             </div>
         </div>
+    
+    <!-- Страница заказов -->
+    <div id="orders-page" class="operation-page" style="display: none;">
+        <div class="operation-top-menu">
+            <button id="orders-page-close" class="operation-top-menu-close" aria-label="Закрыть">←</button>
+            <div class="operation-top-menu-title-container">
+                <h2 class="operation-top-menu-title">🛒 Заказы</h2>
+            </div>
+            <div class="operation-top-menu-right"></div>
+        </div>
+        <div class="operation-page-content">
+            <div class="operation-tabs">
+                <button class="operation-tab active" data-status="active">Активные</button>
+                <button class="operation-tab" data-status="completed">Завершённые</button>
+            </div>
+            <div id="orders-active-content" class="operation-content active">
+                <div id="orders-active-items" class="operation-items"></div>
+            </div>
+            <div id="orders-completed-content" class="operation-content" style="display: none;">
+                <div id="orders-completed-items" class="operation-items"></div>
+            </div>
+        </div>
     </div>
     
-    <!-- Модальное окно настроек магазина -->
-    <div id="settings-modal" class="modal admin-modal">
+    <!-- Страница резерваций -->
+    <div id="reservations-page" class="operation-page" style="display: none;">
+        <div class="operation-top-menu">
+            <button id="reservations-page-close" class="operation-top-menu-close" aria-label="Закрыть">←</button>
+            <div class="operation-top-menu-title-container">
+                <h2 class="operation-top-menu-title">🔒 Резервации</h2>
+            </div>
+            <div class="operation-top-menu-right"></div>
+        </div>
+        <div class="operation-page-content">
+            <div class="operation-tabs">
+                <button class="operation-tab active" data-status="active">Активные</button>
+                <button class="operation-tab" data-status="completed">Завершённые</button>
+            </div>
+            <div id="reservations-active-content" class="operation-content active">
+                <div id="reservations-active-items" class="operation-items"></div>
+            </div>
+            <div id="reservations-completed-content" class="operation-content" style="display: none;">
+                <div id="reservations-completed-items" class="operation-items"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Страница продаж -->
+    <div id="purchases-page" class="operation-page" style="display: none;">
+        <div class="operation-top-menu">
+            <button id="purchases-page-close" class="operation-top-menu-close" aria-label="Закрыть">←</button>
+            <div class="operation-top-menu-title-container">
+                <h2 class="operation-top-menu-title">💰 Продажи</h2>
+            </div>
+            <div class="operation-top-menu-right"></div>
+        </div>
+        <div class="operation-page-content">
+            <div class="operation-tabs">
+                <button class="operation-tab active" data-status="active">Активные</button>
+                <button class="operation-tab" data-status="completed">Завершённые</button>
+            </div>
+            <div id="purchases-active-content" class="operation-content active">
+                <div id="purchases-active-items" class="operation-items"></div>
+            </div>
+            <div id="purchases-completed-content" class="operation-content" style="display: none;">
+                <div id="purchases-completed-items" class="operation-items"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Страница покупок -->
+    <div id="sale-orders-page" class="operation-page" style="display: none;">
+        <div class="operation-top-menu">
+            <button id="sale-orders-page-close" class="operation-top-menu-close" aria-label="Закрыть">←</button>
+            <div class="operation-top-menu-title-container">
+                <h2 class="operation-top-menu-title">🛍️ Покупки</h2>
+            </div>
+            <div class="operation-top-menu-right"></div>
+        </div>
+        <div class="operation-page-content">
+            <div class="operation-tabs">
+                <button class="operation-tab active" data-status="active">Активные</button>
+                <button class="operation-tab" data-status="completed">Завершённые</button>
+            </div>
+            <div id="sale-orders-active-content" class="operation-content active">
+                <div id="sale-orders-active-items" class="operation-items"></div>
+            </div>
+            <div id="sale-orders-completed-content" class="operation-content" style="display: none;">
+                <div id="sale-orders-completed-items" class="operation-items"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Страница детали операции (заказ / покупка / продажа) -->
+    <div id="operation-detail-page" class="operation-page operation-detail-page" style="display: none;">
+        <div class="operation-top-menu">
+            <button id="operation-detail-back" class="operation-top-menu-close" aria-label="Назад">←</button>
+            <div class="operation-top-menu-title-container">
+                <h2 id="operation-detail-title" class="operation-top-menu-title">Детали</h2>
+            </div>
+            <div class="operation-top-menu-right"></div>
+        </div>
+        <div class="operation-detail-content">
+            <!-- Блок номера заказа (под заголовком): заполняется в JS только при наличии order_number -->
+            <div id="operation-detail-order-number-wrap" class="operation-order-number-wrap"></div>
+            <div id="operation-detail-status-row" class="operation-detail-status-row"></div>
+            <!-- Блок 1: Карточка товара (данные из снапшота) -->
+            <div class="operation-detail-section operation-detail-product-section">
+                <div id="operation-detail-product-card" class="operation-detail-product-card-wrap"></div>
+            </div>
+            <!-- Блок 2: Детали заказа (Итого) -->
+            <div class="operation-detail-section operation-detail-order-section">
+                <div id="operation-detail-order-block" class="operation-detail-order-block"></div>
+            </div>
+            <!-- Блок 3: Контактная информация -->
+            <div class="operation-detail-section operation-detail-contact-section">
+                <div id="operation-detail-contact-block" class="operation-detail-contact-block"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно настроек магазина (устарело: используется settings-page) -->
+    <div id="settings-modal" class="modal admin-modal" style="display: none;" aria-hidden="true">
         <div class="modal-content admin-modal-content">
             <div class="admin-modal-header">
                 <h2>⚙️ Настройки магазина</h2>
                 <span class="admin-close settings-close">&times;</span>
             </div>
             <div class="admin-modal-body">
-                <div id="settings-content" class="settings-content">
-                    <div class="admin-setting">
-                        <div class="admin-setting-label">
-                            <label for="quantity-enabled-toggle">Показ количества товаров</label>
-                            <p class="admin-setting-description">Показывать количество товаров в карточках и модальном окне. При отключении будет отображаться "В наличии" без указания числа.</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="quantity-enabled-toggle" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <div class="admin-setting">
-                        <div class="admin-setting-label">
-                            <label for="reservations-toggle">Резервация товаров</label>
-                            <p class="admin-setting-description">Разрешить клиентам резервировать товары на определенное время. Работает независимо от показа количества.</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="reservations-toggle" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <div class="admin-setting">
-                        <div class="admin-setting-label">
-                            <label for="all-products-made-to-order-toggle">Все товары под заказ</label>
-                            <p class="admin-setting-description">При включении все активные товары устанавливаются как "под заказ". При выключении статус "под заказ" снимается со всех активных товаров. Вы можете индивидуально изменять статус товаров в карточке товара - это не влияет на тумблер.</p>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="all-products-made-to-order-toggle">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <div class="admin-info">
-                        <p>💡 <strong>Как это работает:</strong><br>
-                        • <strong>Показ количества включен:</strong> отображается точное количество товара (например, "В наличии: 5"). При резервации товара с количеством больше 1 можно выбрать, сколько единиц зарезервировать.<br>
-                        • <strong>Показ количества выключен:</strong> отображается просто "В наличии" без числа. Резервация работает, но всегда резервируется 1 единица товара (выбор количества недоступен).</p>
-                    </div>
-                </div>
+                <p>Используется страница «Настройки магазина»</p>
             </div>
         </div>
     </div>
@@ -1192,9 +1505,12 @@
     <!-- СЛОЙ 1: Меню (z-index: 10010) - САМЫЙ ВЫСОКИЙ, всегда поверх всего -->
     <header>
         <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-start;">
-            <button id="profile-button" class="profile-button" style="display: none;">👤</button>
-            <button id="settings-button" class="settings-button" style="display: none;">⚙️</button>
-            <button id="admin-button" class="admin-button" style="display: none;">📊</button>
+            <button id="main-menu-button" class="menu-btn" aria-label="Menu" style="display: none;">
+                <svg viewBox="0 0 24 24">
+                    <line id="menu-line-1" x1="5" y1="9" x2="19" y2="9"/>
+                    <line id="menu-line-2" x1="5" y1="15" x2="19" y2="15"/>
+                </svg>
+            </button>
         </div>
         <h1 id="user-name">Загрузка...</h1>
         <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
@@ -1206,6 +1522,25 @@
             </button>
         </div>
     </header>
+    
+    <!-- Выпадающее меню на всю ширину экрана -->
+    <div id="main-menu-dropdown" class="main-menu-dropdown" style="display: none;">
+        <div class="main-menu-dropdown-backdrop"></div>
+        <div class="main-menu-dropdown-content">
+            <button id="menu-item-profile" class="main-menu-item" style="display: none;">
+                <span class="main-menu-item-icon">👤</span>
+                <span class="main-menu-item-text">Личный кабинет</span>
+            </button>
+            <button id="menu-item-settings" class="main-menu-item" style="display: none;">
+                <span class="main-menu-item-icon">⚙️</span>
+                <span class="main-menu-item-text">Настройки</span>
+            </button>
+            <button id="menu-item-admin" class="main-menu-item" style="display: none;">
+                <span class="main-menu-item-icon">📊</span>
+                <span class="main-menu-item-text">Админка</span>
+            </button>
+        </div>
+    </div>
     
     <script type="module" src="js/app.js"></script>
 </body>

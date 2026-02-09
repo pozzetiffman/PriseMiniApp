@@ -1,12 +1,50 @@
 """
-Утилиты для валидации Telegram WebApp initData
+Утилиты для валидации Telegram WebApp initData.
+Кэширование: initDataHash -> (user_id, bot_token, bot_id) на 5 мин; список ботов на 60 сек.
 """
 import hmac
 import hashlib
 import json
+import os
+import time
+import logging
+from contextvars import ContextVar
 from urllib.parse import parse_qs, unquote
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 from fastapi import HTTPException
+
+log = logging.getLogger(__name__)
+DEBUG = os.getenv("DEBUG", "0") == "1"
+request_id_ctx: ContextVar[str] = ContextVar("request_id", default="?")
+
+# Кэш: hash(init_data) -> (user_id, bot_token, bot_id, expires_at)
+_auth_cache: Dict[str, Tuple[int, str, Optional[int], float]] = {}
+_AUTH_CACHE_TTL = 300  # 5 минут
+
+# Кэш: список активных ботов (list of (id, bot_token))
+_active_bots_cache: Optional[List[tuple]] = None
+_active_bots_cache_time: float = 0
+_ACTIVE_BOTS_TTL = 60  # 60 секунд
+
+
+def _get_init_data_hash(init_data: str) -> str:
+    return hashlib.sha256(init_data.encode()).hexdigest()
+
+
+def _get_cached_auth(init_data: str) -> Optional[Tuple[int, str, Optional[int]]]:
+    h = _get_init_data_hash(init_data)
+    if h not in _auth_cache:
+        return None
+    user_id, bot_token, bot_id, expires = _auth_cache[h]
+    if time.time() > expires:
+        del _auth_cache[h]
+        return None
+    return (user_id, bot_token, bot_id)
+
+
+def _set_cached_auth(init_data: str, user_id: int, bot_token: str, bot_id: Optional[int]) -> None:
+    h = _get_init_data_hash(init_data)
+    _auth_cache[h] = (user_id, bot_token, bot_id, time.time() + _AUTH_CACHE_TTL)
 
 
 def validate_telegram_init_data(init_data: str, bot_token: str) -> Dict[str, Any]:
@@ -113,44 +151,39 @@ async def validate_init_data_multi_bot(
 ) -> tuple[int, Optional[str], Optional[int]]:
     """
     Валидирует initData с любым токеном бота.
-    Сначала пытается валидировать с default_bot_token (главный бот),
-    затем ищет бота в БД по user_id и валидирует с его токеном.
-    
-    Args:
-        init_data: Строка initData из Telegram.WebApp.initData
-        db: Сессия базы данных
-        default_bot_token: Токен главного бота (опционально)
-        
-    Returns:
-        tuple: (user_id, bot_token, bot_id) - ID пользователя, токен бота и ID бота в БД
-        
-    Raises:
-        HTTPException: Если валидация не прошла
+    Кэш: initDataHash -> (user_id, bot_token, bot_id) на 5 мин.
+    Кэш списка активных ботов на 60 сек.
     """
     from ..db import models
-    import time
-    
+
     start_time = time.time()
-    
-    # Сначала пытаемся валидировать с главным ботом (самый быстрый вариант)
+    request_id = request_id_ctx.get()
+
+    # 1. Проверка кэша — без DB lookup
+    cached = _get_cached_auth(init_data)
+    if cached:
+        user_id, bot_token, bot_id = cached
+        if DEBUG:
+            log.debug("[AUTH] Cache hit request_id=%s user_id=%s bot_id=%s", request_id, user_id, bot_id)
+        return cached
+
+    # 2. Валидация с главным ботом (самый быстрый путь)
     if default_bot_token:
         try:
-            main_bot_start = time.time()
             validated_data = validate_telegram_init_data(init_data, default_bot_token)
             user_id = validated_data["user"]["id"]
-            main_bot_time = time.time() - main_bot_start
-            print(f"✅ [AUTH] Validated with main bot in {main_bot_time:.3f}s (total: {time.time() - start_time:.3f}s)")
-            # Главный бот не имеет bot_id в БД (используем None)
-            return (user_id, default_bot_token, None)
+            result = (user_id, default_bot_token, None)
+            _set_cached_auth(init_data, *result)
+            if DEBUG:
+                log.debug("[AUTH] Main bot OK request_id=%s user_id=%s", request_id, user_id)
+            return result
         except HTTPException as e:
-            # Если не получилось, логируем причину и продолжаем поиск
-            main_bot_time = time.time() - start_time
-            print(f"⚠️ [AUTH] Main bot validation failed after {main_bot_time:.3f}s: {e.detail}")
+            if DEBUG:
+                log.warning("[AUTH] Main bot failed: %s", e.detail)
             pass
         except Exception as e:
-            # Логируем любые другие ошибки
-            main_bot_time = time.time() - start_time
-            print(f"❌ [AUTH] Main bot validation error after {main_bot_time:.3f}s: {str(e)}")
+            if DEBUG:
+                log.error("[AUTH] Main bot error: %s", str(e))
             pass
     
     # Парсим initData без валидации, чтобы получить user_id
@@ -169,113 +202,59 @@ async def validate_init_data_multi_bot(
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found in initData")
         
-        print(f"🔍 [AUTH] Parsed user_id={user_id}, searching for bot...")
-        
-        # ОПТИМИЗАЦИЯ: Сначала пробуем бота владельца (если пользователь - владелец)
-        # Это самый вероятный случай и не требует загрузки всех ботов
-        owner_bot = db.query(models.Bot).filter(
-            models.Bot.owner_user_id == user_id,
-            models.Bot.is_active == True
-        ).first()
-        
-        if owner_bot:
+        # 3. Кэш списка активных ботов (TTL 60 сек)
+        global _active_bots_cache, _active_bots_cache_time
+        now = time.time()
+        if _active_bots_cache is None or (now - _active_bots_cache_time) > _ACTIVE_BOTS_TTL:
+            _active_bots_cache = [
+                (b.id, b.bot_token, b.owner_user_id)
+                for b in db.query(models.Bot).filter(models.Bot.is_active == True).all()
+            ]
+            _active_bots_cache_time = now
+            if DEBUG:
+                print(f"🔍 [AUTH] Loaded {len(_active_bots_cache)} active bots (cache refresh)")
+
+        # 4. Сначала пробуем бота владельца
+        owner_bot_entry = next((b for b in _active_bots_cache if b[2] == user_id), None)
+        if owner_bot_entry:
+            bot_id_val, bot_token_val, _ = owner_bot_entry
             try:
-                validated_data = validate_telegram_init_data(init_data, owner_bot.bot_token)
-                print(f"✅ [AUTH] Validated with owner bot (id={owner_bot.id}) in {time.time() - start_time:.3f}s")
-                return (user_id, owner_bot.bot_token, owner_bot.id)
-            except HTTPException:
-                pass  # Продолжаем поиск
-        
-        # ОПТИМИЗАЦИЯ: Загружаем активные боты с умным ограничением
-        # Сначала пробуем недавно использованные боты (если есть такая информация)
-        # Затем пробуем все остальные активные боты, но с ограничением по времени
-        print(f"🔍 [AUTH] Loading active bots from DB...")
-        db_start = time.time()
-        
-        # Получаем общее количество активных ботов для информации
-        total_bots_count = db.query(models.Bot).filter(
-            models.Bot.is_active == True
-        ).count()
-        
-        # Загружаем ботов порциями (батчами) для предотвращения зависаний
-        # Начинаем с разумного лимита, но можем увеличить при необходимости
-        BATCH_SIZE = 20  # Проверяем по 20 ботов за раз
-        MAX_BOTS_TO_CHECK = 50  # Максимум ботов для проверки (защита от зависаний)
-        
-        print(f"🔍 [AUTH] Total active bots in DB: {total_bots_count}")
-        
-        # Загружаем первую порцию ботов
-        all_bots = db.query(models.Bot).filter(
-            models.Bot.is_active == True
-        ).limit(BATCH_SIZE).all()
-        
-        db_time = time.time() - db_start
-        print(f"⏱️ [AUTH] DB query took {db_time:.3f}s, loaded {len(all_bots)} bots (batch 1)")
-        
-        # Если запрос к БД занял больше 2 секунд, это проблема
-        if db_time > 2.0:
-            print(f"⚠️ [AUTH] WARNING: DB query took {db_time:.3f}s - database may be slow!")
-        
-        # Если запрос к БД занял больше 5 секунд, это критическая проблема
-        if db_time > 5.0:
-            print(f"❌ [AUTH] CRITICAL: DB query took {db_time:.3f}s - database is very slow!")
-            raise HTTPException(
-                status_code=504,
-                detail="Database query timeout. Please try again."
-            )
-        
-        # Пробуем все загруженные боты (кроме уже проверенного owner_bot)
-        checked_count = 0
-        for bot in all_bots:
-            if owner_bot and bot.id == owner_bot.id:
-                continue  # Уже пробовали
-            
-            checked_count += 1
-            if checked_count > MAX_BOTS_TO_CHECK:
-                print(f"⚠️ [AUTH] Reached max bots check limit ({MAX_BOTS_TO_CHECK}), stopping")
-                break
-            
-            try:
-                validated_data = validate_telegram_init_data(init_data, bot.bot_token)
-                # Если валидация прошла, значит это правильный бот
-                print(f"✅ [AUTH] Validated with bot (id={bot.id}) in {time.time() - start_time:.3f}s")
-                return (user_id, bot.bot_token, bot.id)
-            except HTTPException:
-                continue  # Пробуем следующий бот
-        
-        # Если в первой порции не нашли, и ботов больше чем загрузили
-        # Загружаем следующую порцию (если есть еще боты)
-        if len(all_bots) == BATCH_SIZE and total_bots_count > BATCH_SIZE:
-            print(f"🔍 [AUTH] First batch didn't match, loading next batch...")
-            db_start = time.time()
-            next_bots = db.query(models.Bot).filter(
-                models.Bot.is_active == True
-            ).offset(BATCH_SIZE).limit(BATCH_SIZE).all()
-            db_time = time.time() - db_start
-            print(f"⏱️ [AUTH] Loaded {len(next_bots)} more bots in {db_time:.3f}s")
-            
-            for bot in next_bots:
-                if checked_count >= MAX_BOTS_TO_CHECK:
-                    break
-                checked_count += 1
-                try:
-                    validated_data = validate_telegram_init_data(init_data, bot.bot_token)
-                    print(f"✅ [AUTH] Validated with bot (id={bot.id}) in {time.time() - start_time:.3f}s")
-                    return (user_id, bot.bot_token, bot.id)
-                except HTTPException:
-                    continue
-        
-        # Если ни один бот не подошел, пробуем главный бот еще раз (на случай, если он не был указан)
-        if default_bot_token:
-            try:
-                validated_data = validate_telegram_init_data(init_data, default_bot_token)
-                print(f"✅ [AUTH] Validated with main bot (fallback) in {time.time() - start_time:.3f}s")
-                return (user_id, default_bot_token, None)
+                validate_telegram_init_data(init_data, bot_token_val)
+                result = (user_id, bot_token_val, bot_id_val)
+                _set_cached_auth(init_data, *result)
+                if DEBUG:
+                    log.debug("[AUTH] Owner bot OK request_id=%s user_id=%s bot_id=%s", request_id, user_id, bot_id_val)
+                return result
             except HTTPException:
                 pass
-        
-        total_time = time.time() - start_time
-        print(f"❌ [AUTH] Failed to validate after {total_time:.3f}s")
+
+        # 5. Перебираем все активные боты из кэша
+        owner_bot_id = owner_bot_entry[0] if owner_bot_entry else None
+        for bot_id_val, bot_token_val, _ in _active_bots_cache:
+            if owner_bot_id is not None and bot_id_val == owner_bot_id:
+                continue
+            try:
+                validate_telegram_init_data(init_data, bot_token_val)
+                result = (user_id, bot_token_val, bot_id_val)
+                _set_cached_auth(init_data, *result)
+                if DEBUG:
+                    print(f"✅ [AUTH] Multi-bot OK request_id={request_id} user_id={user_id} bot_id={bot_id_val}")
+                return result
+            except HTTPException:
+                continue
+
+        # 6. Fallback главный бот
+        if default_bot_token:
+            try:
+                validate_telegram_init_data(init_data, default_bot_token)
+                result = (user_id, default_bot_token, None)
+                _set_cached_auth(init_data, *result)
+                return result
+            except HTTPException:
+                pass
+
+        if DEBUG:
+            log.warning("[AUTH] Failed validate request_id=%s", request_id)
         raise HTTPException(
             status_code=401,
             detail="Bot not found. Please register your bot first or use the main bot."
@@ -283,7 +262,7 @@ async def validate_init_data_multi_bot(
         
     except Exception as e:
         total_time = time.time() - start_time
-        print(f"❌ [AUTH] Exception after {total_time:.3f}s: {str(e)}")
+        log.error("[AUTH] Exception after %.3fs: %s", total_time, str(e), exc_info=True)
         if isinstance(e, HTTPException):
             raise
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")

@@ -5,12 +5,13 @@ from typing import List, Optional
 from datetime import datetime
 from ..db import models, database
 from ..utils.telegram_auth import validate_init_data_multi_bot
+from ..utils.logging_config import get_logger
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Telegram Bot Token для валидации
+log = get_logger(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 router = APIRouter(prefix="/api/favorites", tags=["favorites"])
@@ -22,10 +23,8 @@ async def check_favorite(
     db: Session = Depends(database.get_db)
 ):
     """Проверить, добавлен ли товар в избранное для текущего пользователя"""
-    print(f"[FAVORITES DEBUG] check_favorite called: product_id={product_id}")
-    
+    log.debug("check_favorite called product_id=%s", product_id)
     if not x_telegram_init_data:
-        print("[FAVORITES DEBUG] check_favorite: No initData provided")
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -34,11 +33,11 @@ async def check_favorite(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[FAVORITES DEBUG] check_favorite: user_id={user_id}")
+        log.debug("check_favorite user_id=%s", user_id)
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[FAVORITES DEBUG] check_favorite: Validation error: {str(e)}")
+        log.warning("check_favorite Validation error: %s", str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Проверяем наличие товара в избранном
@@ -50,7 +49,7 @@ async def check_favorite(
     ).first()
     
     is_favorite = favorite is not None
-    print(f"[FAVORITES DEBUG] check_favorite result: product_id={product_id}, user_id={user_id}, is_favorite={is_favorite}")
+    log.debug("check_favorite result product_id=%s user_id=%s is_favorite=%s", product_id, user_id, is_favorite)
     
     return {"is_favorite": is_favorite}
 
@@ -61,10 +60,8 @@ async def toggle_favorite(
     db: Session = Depends(database.get_db)
 ):
     """Переключить статус избранного для товара (добавить/удалить)"""
-    print(f"[FAVORITES DEBUG] toggle_favorite called: product_id={product_id}")
-    
+    log.debug("toggle_favorite called product_id=%s", product_id)
     if not x_telegram_init_data:
-        print("[FAVORITES DEBUG] toggle_favorite: No initData provided")
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -73,17 +70,17 @@ async def toggle_favorite(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[FAVORITES DEBUG] toggle_favorite: user_id={user_id}")
+        log.debug("toggle_favorite user_id=%s", user_id)
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[FAVORITES DEBUG] toggle_favorite: Validation error: {str(e)}")
+        log.warning("toggle_favorite Validation error: %s", str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Проверяем наличие товара
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
-        print(f"[FAVORITES DEBUG] toggle_favorite: Product {product_id} not found")
+        log.debug("toggle_favorite Product %s not found", product_id)
         raise HTTPException(status_code=404, detail="Product not found")
     
     # Проверяем, есть ли уже товар в избранном
@@ -96,12 +93,12 @@ async def toggle_favorite(
     
     if favorite:
         # Удаляем из избранного
-        print(f"[FAVORITES DEBUG] toggle_favorite: Removing favorite for product_id={product_id}, user_id={user_id}")
+        log.debug("toggle_favorite Removing favorite product_id=%s user_id=%s", product_id, user_id)
         db.delete(favorite)
         is_favorite = False
     else:
         # Добавляем в избранное
-        print(f"[FAVORITES DEBUG] toggle_favorite: Adding favorite for product_id={product_id}, user_id={user_id}, shop_owner_id={product.user_id}")
+        log.debug("toggle_favorite Adding favorite product_id=%s user_id=%s shop_owner_id=%s", product_id, user_id, product.user_id)
         new_favorite = models.Favorite(
             product_id=product_id,
             user_id=user_id,
@@ -112,7 +109,7 @@ async def toggle_favorite(
         is_favorite = True
     
     db.commit()
-    print(f"[FAVORITES DEBUG] toggle_favorite result: product_id={product_id}, user_id={user_id}, is_favorite={is_favorite}")
+    log.debug("toggle_favorite result product_id=%s user_id=%s is_favorite=%s", product_id, user_id, is_favorite)
     
     return {"is_favorite": is_favorite}
 
@@ -123,10 +120,8 @@ async def get_favorites(
     db: Session = Depends(database.get_db)
 ):
     """Получить список избранных товаров для текущего пользователя"""
-    print(f"[FAVORITES DEBUG] get_favorites called: shop_owner_id={shop_owner_id}")
-    
+    log.debug("get_favorites called shop_owner_id=%s", shop_owner_id)
     if not x_telegram_init_data:
-        print("[FAVORITES DEBUG] get_favorites: No initData provided")
         raise HTTPException(status_code=401, detail="Telegram initData is required")
     
     try:
@@ -135,11 +130,11 @@ async def get_favorites(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[FAVORITES DEBUG] get_favorites: user_id={user_id}")
+        log.debug("get_favorites user_id=%s", user_id)
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[FAVORITES DEBUG] get_favorites: Validation error: {str(e)}")
+        log.warning("get_favorites Validation error: %s", str(e))
         raise HTTPException(status_code=401, detail=f"Invalid Telegram initData: {str(e)}")
     
     # Получаем все избранные товары пользователя для указанного магазина
@@ -173,6 +168,9 @@ async def get_favorites(
                 "quantity": product.quantity,
                 "is_made_to_order": product.is_made_to_order,
                 "is_for_sale": product.is_for_sale,
+                "is_sale_enabled": product.is_sale_enabled,
+                "is_reservation_enabled": getattr(product, 'is_reservation_enabled', False),
+                "is_client_sale": product.is_client_sale,
                 "price_from": product.price_from,
                 "price_to": product.price_to,
                 "price_fixed": product.price_fixed,
@@ -184,7 +182,7 @@ async def get_favorites(
                 "created_at": favorite.created_at.isoformat() if favorite.created_at else None
             })
     
-    print(f"[FAVORITES DEBUG] get_favorites result: Returning {len(products)} products")
+    log.debug("get_favorites result Returning %s products", len(products))
     return products
 
 @router.get("/count")
@@ -206,7 +204,7 @@ async def get_favorites_count(
             db,
             default_bot_token=TELEGRAM_BOT_TOKEN if TELEGRAM_BOT_TOKEN else None
         )
-        print(f"[FAVORITES DEBUG] get_favorites_count: user_id={user_id}")
+        log.debug("get_favorites_count user_id=%s", user_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -225,6 +223,6 @@ async def get_favorites_count(
         )
     ).count()
     
-    print(f"[FAVORITES DEBUG] get_favorites_count result: user_id={user_id}, shop_owner_id={shop_owner_id}, count={count}")
+    log.debug("get_favorites_count result user_id=%s shop_owner_id=%s count=%s", user_id, shop_owner_id, count)
     
     return {"count": count}

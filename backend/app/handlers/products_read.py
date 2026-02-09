@@ -2,13 +2,17 @@
 Обработчики для чтения товаров
 """
 import json
+import logging
 from datetime import datetime
 from typing import List, Optional
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_
 from ..db import models, database
 from ..utils.products_utils import make_full_url
+from ..utils.product_action_type import get_product_action_type_dict
+
+log = logging.getLogger(__name__)
 
 
 def get_product_by_id(
@@ -16,7 +20,10 @@ def get_product_by_id(
     db: Session
 ):
     """Получить товар по его ID (из любого магазина)"""
-    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    product = db.query(models.Product).options(
+        selectinload(models.Product.characteristics),
+        selectinload(models.Product.delivery_option)
+    ).filter(models.Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
@@ -51,10 +58,13 @@ def get_product_by_id(
         )
     ).first()
     
-    # Логируем информацию о описании товара для отладки
-    print(f"🔍 [PRODUCT BY ID DEBUG] Product {product.id} '{product.name}': description={product.description}, type={type(product.description)}, has_description={bool(product.description)}")
+    log.debug("[PRODUCT BY ID] id=%s name='%s' description type=%s", product.id, product.name, type(product.description))
+    log.debug("[PRODUCT PRICE] id=%s price_card=%s price_cash=%s price_old=%s", product.id, getattr(product, 'price_card', None), getattr(product, 'price_cash', None), getattr(product, 'price_old', None))
     
-    return {
+    # ВАЖНО: Используем Pydantic модель для правильной сериализации всех полей
+    from ..models import product as schemas
+    
+    product_dict = {
         "id": product.id,
         "name": product.name,
         "description": product.description,
@@ -71,6 +81,7 @@ def get_product_by_id(
         "is_made_to_order": product.is_made_to_order,
         "is_for_sale": getattr(product, 'is_for_sale', False),
         "is_sale_enabled": getattr(product, 'is_sale_enabled', False),
+        "is_reservation_enabled": getattr(product, 'is_reservation_enabled', False),
         "price_from": getattr(product, 'price_from', None),
         "price_to": getattr(product, 'price_to', None),
         "price_fixed": getattr(product, 'price_fixed', None),
@@ -78,8 +89,69 @@ def get_product_by_id(
         "quantity_from": getattr(product, 'quantity_from', None),
         "quantity_unit": getattr(product, 'quantity_unit', None),
         "is_hidden": getattr(product, 'is_hidden', False),
-        "has_active_reservation": active_reservation is not None
+        "is_client_sale": getattr(product, 'is_client_sale', False),
+        "seller_id": getattr(product, 'seller_id', None),
+        "sync_product_id": getattr(product, 'sync_product_id', None),
+        # КРИТИЧНО: Включаем новые поля цен
+        "price_card": getattr(product, 'price_card', None),
+        "price_cash": getattr(product, 'price_cash', None),
+        "price_old": getattr(product, 'price_old', None),
+        "delivery_time": getattr(product, 'delivery_time', None),
+        "delivery_price": getattr(product, 'delivery_price', None),
+        "reservation": None,  # reservation будет добавлен отдельно, если нужно
+        # Характеристики товара (из product_characteristics): id, name, value, sort_order для редактирования
+        "characteristics": [{"id": pc.id, "name": pc.name, "value": pc.value, "sort_order": pc.sort_order or 0} for pc in product.characteristics] if hasattr(product, 'characteristics') and product.characteristics else [],
+        # Настройки доставки (из product_delivery) для страницы редактирования
+        "delivery": {"is_delivery_enabled": d.is_delivery_enabled, "is_pickup_enabled": d.is_pickup_enabled, "delivery_price": d.delivery_price, "pickup_address": d.pickup_address, "delivery_time": getattr(d, 'delivery_time', None)} if hasattr(product, 'delivery_option') and product.delivery_option and (d := product.delivery_option) else None
     }
+    
+    # ========== ВЫЧИСЛЕНИЕ action_type И can_add_to_cart ==========
+    # Получаем роль пользователя из контекста (если доступна)
+    # Для клиентов вычисляем action_type, для владельцев - None (они видят все)
+    user_role = None  # TODO: Получить из контекста запроса если нужно
+    
+    # Получаем настройки магазина из БД
+    from ..utils.product_action_type import get_shop_settings_dict
+    shop_settings = get_shop_settings_dict(product.user_id, product.bot_id, db)
+    
+    action_type_info = get_product_action_type_dict(product, user_role, shop_settings, db)
+    product_dict.update(action_type_info)
+    
+    # ЕДИНООБРАЗНОЕ ЛОГИРОВАНИЕ: формат как в products list для сравнения
+    log.debug(
+        f"[PRODUCT BY ID DEBUG] Product {product.id}: "
+        f"action_type={action_type_info['action_type']}, "
+        f"can_add_to_cart={action_type_info['can_add_to_cart']}, "
+        f"reason_not_sale={action_type_info['reason_not_sale']}, "
+        f"flags: is_sale_enabled={getattr(product, 'is_sale_enabled', False)}, "
+        f"is_made_to_order={getattr(product, 'is_made_to_order', False)}, "
+        f"is_reservation_enabled={getattr(product, 'is_reservation_enabled', False)}, "
+        f"price_card={getattr(product, 'price_card', None)}, "
+        f"price_cash={getattr(product, 'price_cash', None)}"
+    )
+    # ========== КОНЕЦ ВЫЧИСЛЕНИЯ action_type ==========
+    
+    chars_count = len(product_dict.get("characteristics") or [])
+    if chars_count > 0:
+        log.debug(f"📋 [PRODUCT SERIALIZE] Product {product.id}: characteristics_count={chars_count}")
+    
+    # Валидируем через Pydantic модель для гарантии правильной сериализации
+    # Это гарантирует, что все поля из ProductBase (включая price_card, price_cash) будут включены
+    try:
+        product_model = schemas.Product(**product_dict)
+        result_dict = product_model.model_dump()
+        # Логируем для диагностики
+        log.debug(f"✅ [PRODUCT BY ID SERIALIZE] Product {product.id}: price_card={result_dict.get('price_card')}, price_cash={result_dict.get('price_cash')}, discount={result_dict.get('discount')}")
+        
+        # Добавляем дополнительное поле has_active_reservation (не в схеме, но используется фронтендом)
+        result_dict["has_active_reservation"] = active_reservation is not None
+        
+        return result_dict
+    except Exception as e:
+        log.debug(f"❌ [PRODUCT BY ID SERIALIZE ERROR] Product {product.id}: {e}")
+        # Fallback: возвращаем словарь напрямую
+        product_dict["has_active_reservation"] = active_reservation is not None
+        return product_dict
 
 
 def get_products(
@@ -92,7 +164,7 @@ def get_products(
     """Получить список товаров с автоматической синхронизацией между основным магазином и ботами"""
     import time
     sync_start = time.time()
-    print(f"📦 [PRODUCTS] get_products called with user_id={user_id}, category_id={category_id}, bot_id={bot_id}, viewer_id={viewer_id}")
+    log.debug(f"📦 [PRODUCTS] get_products called with user_id={user_id}, category_id={category_id}, bot_id={bot_id}, viewer_id={viewer_id}")
     
     # ОПТИМИЗАЦИЯ: Синхронизация выполняется только для владельца магазина (viewer_id == user_id)
     # Для клиентов (viewer_id != user_id) синхронизация не нужна - это только просмотр
@@ -101,9 +173,9 @@ def get_products(
     should_sync = False  # ОТКЛЮЧЕНО: Синхронизация выполняется только при создании/обновлении товаров, не при просмотре
     
     if not should_sync:
-        print(f"📦 [PRODUCTS] Skipping sync - viewing mode (sync disabled for performance)")
+        log.debug(f"📦 [PRODUCTS] Skipping sync - viewing mode (sync disabled for performance)")
     else:
-        print(f"📦 [PRODUCTS] Running sync - owner view (viewer_id={viewer_id}, user_id={user_id})")
+        log.debug(f"📦 [PRODUCTS] Running sync - owner view (viewer_id={viewer_id}, user_id={user_id})")
     
     # Автоматическая синхронизация: проверяем расхождения между основным магазином и ботами
     # ОПТИМИЗАЦИЯ: Выполняем только для владельца, и только если есть подключенные боты
@@ -152,7 +224,7 @@ def get_products(
                     
                     # Если товар в боте не найден в основном магазине - синхронизируем
                     if not found_in_main:
-                        print(f"🔄 Auto-syncing product '{bot_product.name}' from bot {bot.id} to main shop")
+                        log.debug(f"🔄 Auto-syncing product '{bot_product.name}' from bot {bot.id} to main shop")
                         # Находим соответствующую категорию в основном боте по имени
                         category_id_for_main = None
                         if bot_product.category_id:
@@ -199,7 +271,7 @@ def get_products(
                         if not bot_product.sync_product_id:
                             bot_product.sync_product_id = new_main_product.id
                         db.commit()
-                        print(f"✅ Auto-synced product '{bot_product.name}' (id={new_main_product.id}) to main shop")
+                        log.debug(f"✅ Auto-synced product '{bot_product.name}' (id={new_main_product.id}) to main shop")
             
             # Также синхронизируем товары из основного магазина в боты
             for main_product in main_products:
@@ -229,7 +301,7 @@ def get_products(
                     
                     # Если товар в основном магазине не найден в боте - синхронизируем
                     if not existing:
-                        print(f"🔄 Auto-syncing product '{main_product.name}' from main shop to bot {bot.id}")
+                        log.debug(f"🔄 Auto-syncing product '{main_product.name}' from main shop to bot {bot.id}")
                         # Находим соответствующую категорию в боте по имени
                         category_id_for_bot = None
                         if main_product.category_id:
@@ -272,15 +344,18 @@ def get_products(
                         )
                         db.add(new_bot_product)
                         db.commit()
-                        print(f"✅ Auto-synced product '{main_product.name}' (id={new_bot_product.id}) to bot {bot.id}")
+                        log.debug(f"✅ Auto-synced product '{main_product.name}' (id={new_bot_product.id}) to bot {bot.id}")
         
         sync_time = time.time() - sync_start
         if sync_time > 1.0:
-            print(f"⚠️ [PRODUCTS] Sync took {sync_time:.3f}s - this is slow!")
+            log.debug(f"⚠️ [PRODUCTS] Sync took {sync_time:.3f}s - this is slow!")
         else:
-            print(f"⏱️ [PRODUCTS] Sync completed in {sync_time:.3f}s")
+            log.debug(f"⏱️ [PRODUCTS] Sync completed in {sync_time:.3f}s")
     
-    query = db.query(models.Product).filter(
+    query = db.query(models.Product).options(
+        selectinload(models.Product.characteristics),
+        selectinload(models.Product.delivery_option)
+    ).filter(
         models.Product.user_id == user_id,
         models.Product.is_sold == False  # Не показываем проданные товары на витрине
     )
@@ -303,8 +378,10 @@ def get_products(
     
     # ИСПРАВЛЕНИЕ: Если товаров нет для клиентского бота, пробуем главный бот (fallback)
     if not products and bot_id is not None:
-        print(f"📦 [PRODUCTS] No products for bot_id={bot_id}, trying main bot (bot_id=None) as fallback")
-        query_fallback = db.query(models.Product).filter(
+        log.debug(f"📦 [PRODUCTS] No products for bot_id={bot_id}, trying main bot (bot_id=None) as fallback")
+        query_fallback = db.query(models.Product).options(
+            selectinload(models.Product.characteristics)
+        ).filter(
             models.Product.user_id == user_id,
             models.Product.is_sold == False,
             models.Product.bot_id == None
@@ -314,10 +391,10 @@ def get_products(
         if category_id is not None:
             query_fallback = query_fallback.filter(models.Product.category_id == category_id)
         products = query_fallback.all()
-        print(f"📦 [PRODUCTS] Found {len(products)} products in main bot (fallback)")
+        log.debug(f"📦 [PRODUCTS] Found {len(products)} products in main bot (fallback)")
     
     # Логируем информацию о товарах и их изображениях
-    print(f"📦 [PRODUCTS] Found {len(products)} products for user {user_id}, bot_id={bot_id}, category_id={category_id}")
+    log.debug(f"📦 [PRODUCTS] Found {len(products)} products for user {user_id}, bot_id={bot_id}, category_id={category_id}")
     result = []
     for prod in products:
         # Преобразуем images_urls из JSON строки в список
@@ -389,22 +466,36 @@ def get_products(
         # Преобразуем is_made_to_order в bool
         is_made_to_order = bool(getattr(prod, 'is_made_to_order', False))
         
-        print(f"DEBUG: Product {prod.id} '{prod.name}' has {'active' if has_reservation else 'no active'} reservation")
-        print(f"DEBUG: Product {prod.id} '{prod.name}' - is_made_to_order raw={getattr(prod, 'is_made_to_order', False)} (type: {type(getattr(prod, 'is_made_to_order', False))}), converted={is_made_to_order}")
-        print(f"DEBUG: Product {prod.id} '{prod.name}' - images_urls: {len(images_list)} images")
+        log.debug(f"DEBUG: Product {prod.id} '{prod.name}' has {'active' if has_reservation else 'no active'} reservation")
+        log.debug(f"DEBUG: Product {prod.id} '{prod.name}' - is_made_to_order raw={getattr(prod, 'is_made_to_order', False)} (type: {type(getattr(prod, 'is_made_to_order', False))}), converted={is_made_to_order}")
+        log.debug(f"DEBUG: Product {prod.id} '{prod.name}' - images_urls: {len(images_list)} images")
         if images_list:
             first_image = images_list[0]
-            print(f"DEBUG: Product {prod.id} first image URL: {first_image}")
+            log.debug(f"DEBUG: Product {prod.id} first image URL: {first_image}")
             if '/api/images/' in first_image:
-                print(f"OK: Product {prod.id} image URL correctly uses /api/images/")
+                log.debug(f"OK: Product {prod.id} image URL correctly uses /api/images/")
             elif '/static/uploads/' in first_image:
-                print(f"WARNING: Product {prod.id} image URL still contains /static/uploads/ - should use /api/images/")
+                log.debug(f"WARNING: Product {prod.id} image URL still contains /static/uploads/ - should use /api/images/")
         
         # Логируем информацию о описании товара для отладки
         description_value = prod.description
-        print(f"🔍 [PRODUCTS DEBUG] Product {prod.id} '{prod.name}': description={description_value}, type={type(description_value)}, has_description={bool(description_value)}")
+        log.debug(f"🔍 [PRODUCTS DEBUG] Product {prod.id} '{prod.name}': description={description_value}, type={type(description_value)}, has_description={bool(description_value)}")
         
-        result.append({
+        # КРИТИЧНО: Логирование новых полей цен для диагностики (используем print для backend-логов)
+        log.debug(
+            f"[PRODUCT PRICE DEBUG] "
+            f"id={prod.id} "
+            f"price_card={getattr(prod, 'price_card', None)} "
+            f"price_cash={getattr(prod, 'price_cash', None)} "
+            f"price_old={getattr(prod, 'price_old', None)}"
+        )
+        
+        # ВАЖНО: Используем Pydantic модель для правильной сериализации всех полей
+        # Это гарантирует, что price_card, price_cash и discount будут включены в ответ
+        from ..models import product as schemas
+        
+        # Создаем словарь с данными товара для Pydantic модели
+        product_dict = {
             "id": prod.id,
             "name": prod.name,
             "description": prod.description,
@@ -414,12 +505,14 @@ def get_products(
             "discount": prod.discount,
             "category_id": prod.category_id,
             "user_id": prod.user_id,
+            "bot_id": getattr(prod, 'bot_id', None),
+            "sync_product_id": getattr(prod, 'sync_product_id', None),
             "is_hot_offer": getattr(prod, 'is_hot_offer', False),
             "quantity": getattr(prod, 'quantity', 0),
-            "is_reserved": has_reservation,
             "is_made_to_order": is_made_to_order,
             "is_for_sale": getattr(prod, 'is_for_sale', False),
             "is_sale_enabled": getattr(prod, 'is_sale_enabled', False),
+            "is_reservation_enabled": getattr(prod, 'is_reservation_enabled', False),
             "price_from": getattr(prod, 'price_from', None),
             "price_to": getattr(prod, 'price_to', None),
             "price_fixed": getattr(prod, 'price_fixed', None),
@@ -428,9 +521,60 @@ def get_products(
             "quantity_unit": getattr(prod, 'quantity_unit', None),
             "quantity_show_enabled": getattr(prod, 'quantity_show_enabled', None),
             "is_hidden": getattr(prod, 'is_hidden', False),
-            "reservation": reservation_data
-        })
+            "is_client_sale": getattr(prod, 'is_client_sale', False),
+            "seller_id": getattr(prod, 'seller_id', None),
+            # КРИТИЧНО: Включаем новые поля цен
+            "price_card": getattr(prod, 'price_card', None),
+            "price_cash": getattr(prod, 'price_cash', None),
+            "price_old": getattr(prod, 'price_old', None),
+            "delivery_time": getattr(prod, 'delivery_time', None),
+            "delivery_price": getattr(prod, 'delivery_price', None),
+            "reservation": reservation_data,
+            # Характеристики товара (из product_characteristics): id, name, value, sort_order
+            "characteristics": [{"id": pc.id, "name": pc.name, "value": pc.value, "sort_order": pc.sort_order or 0} for pc in prod.characteristics] if hasattr(prod, 'characteristics') and prod.characteristics else [],
+            # Настройки доставки (из product_delivery)
+            "delivery": {"is_delivery_enabled": d.is_delivery_enabled, "is_pickup_enabled": d.is_pickup_enabled, "delivery_price": d.delivery_price, "pickup_address": d.pickup_address, "delivery_time": getattr(d, 'delivery_time', None)} if hasattr(prod, 'delivery_option') and prod.delivery_option and (d := prod.delivery_option) else None
+        }
+        
+        # ========== ВЫЧИСЛЕНИЕ action_type И can_add_to_cart ==========
+        # Для клиентов вычисляем action_type, для владельцев - None
+        user_role = 'client' if (viewer_id is not None and viewer_id != user_id) else None
+        
+        # Получаем настройки магазина из БД
+        from ..utils.product_action_type import get_shop_settings_dict
+        shop_settings = get_shop_settings_dict(prod.user_id, getattr(prod, 'bot_id', None), db)
+        
+        action_type_info = get_product_action_type_dict(prod, user_role, shop_settings, db)
+        product_dict.update(action_type_info)
+        
+        # ЕДИНООБРАЗНОЕ ЛОГИРОВАНИЕ: формат для сравнения с checkout
+        log.debug(
+            f"[PRODUCTS LIST DEBUG] Product {prod.id}: "
+            f"action_type={action_type_info['action_type']}, "
+            f"can_add_to_cart={action_type_info['can_add_to_cart']}, "
+            f"reason_not_sale={action_type_info['reason_not_sale']}, "
+            f"flags: is_sale_enabled={getattr(prod, 'is_sale_enabled', False)}, "
+            f"is_made_to_order={getattr(prod, 'is_made_to_order', False)}, "
+            f"is_reservation_enabled={getattr(prod, 'is_reservation_enabled', False)}, "
+            f"price_card={getattr(prod, 'price_card', None)}, "
+            f"price_cash={getattr(prod, 'price_cash', None)}"
+        )
+        # ========== КОНЕЦ ВЫЧИСЛЕНИЯ action_type ==========
+        
+        # Валидируем через Pydantic модель для гарантии правильной сериализации
+        # Это гарантирует, что все поля из ProductBase (включая price_card, price_cash) будут включены
+        try:
+            product_model = schemas.Product(**product_dict)
+            serialized = product_model.model_dump()
+            # Логируем для диагностики
+            chars_n = len(serialized.get("characteristics") or [])
+            log.debug(f"✅ [PRODUCT SERIALIZE] Product {prod.id}: characteristics_count={chars_n}, price_card={serialized.get('price_card')}")
+            result.append(serialized)
+        except Exception as e:
+            log.debug(f"❌ [PRODUCT SERIALIZE ERROR] Product {prod.id}: {e}")
+            # Fallback: возвращаем словарь напрямую
+            result.append(product_dict)
     
-    print(f"📦 [PRODUCTS] Returning {len(result)} products")
+    log.debug(f"📦 [PRODUCTS] Returning {len(result)} products")
     return result
 

@@ -2,8 +2,45 @@
 // Управление состоянием корзины
 
 import { API_BASE, getBaseHeaders } from '../api.js';
+import { getEffectiveUnitPrice, getOriginalUnitPrice } from '../utils/priceUtils.js';
 
 let cartItems = []; // Массив товаров в корзине: [{ product, quantity, selected }]
+
+/**
+ * Получить максимально доступное количество товара (остаток).
+ * Проверяет: stock, quantity, available_quantity, available_qty, qty_available, inventory.
+ * Учитывает резервации.
+ * @returns {number|null} Максимум или null если неограниченно
+ */
+export function getAvailableQuantity(product) {
+    if (!product || typeof product !== 'object') return null;
+    const keys = ['stock', 'quantity', 'available_quantity', 'available_qty', 'qty_available', 'inventory'];
+    const toCamel = (s) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    let raw = null;
+    for (const k of keys) {
+        const v = product[k] ?? product[toCamel(k)];
+        if (v !== undefined && v !== null && v !== '') {
+            const n = Number(v);
+            if (Number.isFinite(n) && n >= 0) {
+                raw = n;
+                break;
+            }
+        }
+    }
+    if (raw === null || raw === undefined) return null;
+    const activeReservations = product.reservation?.active_count ?? 0;
+    return Math.max(0, raw - activeReservations);
+}
+
+/**
+ * Можно ли выбрать товар в корзине (есть остаток).
+ */
+export function isProductSelectableInCart(product) {
+    const qty = getAvailableQuantity(product);
+    return qty === null || qty > 0;
+}
+// Выбранный способ оплаты для расчёта итога: null = по карте (дефолт), 'cash' = наличными
+let cartPaymentMethod = null;
 let syncInProgress = false; // Флаг для предотвращения одновременных синхронизаций
 
 /**
@@ -55,11 +92,12 @@ export async function syncCartFromServer() {
         const items = await response.json();
         
         // Преобразуем формат данных с сервера в локальный формат
-        cartItems = items.map(item => ({
-            product: item.product,
-            quantity: item.quantity,
-            selected: item.selected !== undefined ? item.selected : true
-        }));
+        cartItems = items.map(item => {
+            const prod = item.product;
+            const selectable = isProductSelectableInCart(prod);
+            const selected = selectable ? (item.selected !== undefined ? item.selected : true) : false;
+            return { product: prod, quantity: item.quantity, selected };
+        });
         
         // Сохраняем в localStorage как резервную копию
         saveCartToStorage();
@@ -87,6 +125,18 @@ export async function syncCartFromServer() {
  */
 export async function addToCart(product, quantity = 1) {
     try {
+        // ========== DEBUG: Логирование низкоуровневого добавления в корзину ==========
+        const stackTrace = new Error().stack;
+        console.log(`[CART STORE DEBUG] addToCart called:`, {
+            productId: product?.id,
+            productName: product?.name,
+            quantity,
+            action_type: product?.action_type,
+            can_add_to_cart: product?.can_add_to_cart,
+            stackTrace: stackTrace
+        });
+        // ========== КОНЕЦ DEBUG ==========
+        
         if (!product || !product.id) {
             throw new Error('Invalid product: product or product.id is missing');
         }
@@ -115,14 +165,15 @@ export async function addToCart(product, quantity = 1) {
         
         // Обновляем локальное состояние
         const existingItem = cartItems.find(item => item.product.id === product.id);
-        
+        const selectable = isProductSelectableInCart(product);
         if (existingItem) {
             existingItem.quantity = result.quantity;
+            if (!selectable) existingItem.selected = false;
         } else {
             cartItems.push({
                 product: product,
                 quantity: result.quantity,
-                selected: result.selected !== undefined ? result.selected : true
+                selected: selectable ? (result.selected !== undefined ? result.selected : true) : false
             });
         }
         
@@ -333,13 +384,13 @@ export async function selectAllCartItems() {
         
         // Обновляем локальное состояние
         cartItems.forEach(item => {
-            item.selected = true;
+            item.selected = isProductSelectableInCart(item.product);
         });
         
         // Сохраняем в localStorage
         saveCartToStorage();
         
-        console.log(`[CART STORE] ✅ All items selected`);
+        console.log('[CART STORE] ✅ All items selected (only in-stock)');
         
         return getCartItems();
     } catch (error) {
@@ -457,66 +508,64 @@ export function getSelectedCartItemsCount() {
 }
 
 /**
- * Получить итоговую сумму выбранных товаров без скидки
+ * Выбранные позиции для оформления сделки (checkout).
+ * Возвращает [{ product_id, quantity }] только по выбранным товарам.
  */
-export function getSelectedCartTotalOriginal(promoCode = null) {
-    const selectedItems = cartItems.filter(item => item.selected);
-    
-    let total = selectedItems.reduce((sum, item) => {
-        const product = item.product;
-        let price = 0;
-        
-        // Определяем цену товара (без скидки)
-        if (product.price_fixed !== null && product.price_fixed !== undefined) {
-            price = product.price_fixed;
-        } else if (product.price_from !== null && product.price_from !== undefined) {
-            price = product.price_from;
-        } else if (product.price !== null && product.price !== undefined) {
-            price = product.price;
-        }
-        
-        return sum + (price * item.quantity);
-    }, 0);
-    
-    return total;
+export function getSelectedCartItemsForCheckout() {
+    return cartItems
+        .filter(item => item.selected && item.product && item.product.id)
+        .map(item => ({ product_id: item.product.id, quantity: item.quantity }));
 }
 
 /**
- * Получить итоговую сумму выбранных товаров
+ * Получить итоговую сумму выбранных товаров без скидки (исходная цена для выбранного способа оплаты).
  */
-export function getSelectedCartTotal(promoCode = null) {
+export function getSelectedCartTotalOriginal(promoCode = null, paymentMethod = null) {
     const selectedItems = cartItems.filter(item => item.selected);
-    
-    let total = selectedItems.reduce((sum, item) => {
-        const product = item.product;
-        let price = 0;
-        
-        // Определяем цену товара
-        if (product.price_fixed !== null && product.price_fixed !== undefined) {
-            // Фиксированная цена
-            price = product.price_fixed;
-        } else if (product.price_from !== null && product.price_from !== undefined) {
-            // Цена от
-            price = product.price_from;
-        } else if (product.price !== null && product.price !== undefined) {
-            // Обычная цена
-            price = product.price;
-        }
-        
-        // Применяем скидку, если есть
-        if (product.discount > 0) {
-            price = Math.round(price * (1 - product.discount / 100));
-        }
-        
-        return sum + (price * item.quantity);
+    return selectedItems.reduce((sum, item) => {
+        const price = getOriginalUnitPrice(item.product, paymentMethod);
+        return sum + ((price != null ? price : 0) * item.quantity);
     }, 0);
-    
-    // Применяем промокод, если есть (пока просто заглушка)
+}
+
+/**
+ * Получить итоговую сумму выбранных товаров по выбранному способу оплаты.
+ * paymentMethod: null = по карте (дефолт), 'cash' = наличными. Используется getEffectiveUnitPrice.
+ */
+export function getSelectedCartTotal(promoCode = null, paymentMethod = null) {
+    const selectedItems = cartItems.filter(item => item.selected);
+    let total = selectedItems.reduce((sum, item) => {
+        const price = getEffectiveUnitPrice(item.product, paymentMethod);
+        return sum + ((price != null ? price : 0) * item.quantity);
+    }, 0);
     if (promoCode) {
         // TODO: Применить промокод
     }
-    
     return total;
+}
+
+/** Выбранный способ оплаты в корзине: null = по карте, 'cash' = наличными */
+export function getCartPaymentMethod() {
+    return cartPaymentMethod;
+}
+
+export function setCartPaymentMethod(method) {
+    cartPaymentMethod = method;
+}
+
+/** Есть ли среди выбранных товаров хотя бы один с ценой наличными */
+export function getSelectedCartHasAnyCash() {
+    return cartItems.filter(item => item.selected).some(item => {
+        const cash = item.product?.price_cash ?? item.product?.priceCash;
+        return cash != null && Number(cash) > 0;
+    });
+}
+
+/** Есть ли среди выбранных товары с "ценой по запросу" (без числовой цены при данном способе оплаты) */
+export function getSelectedCartHasRequestPrice(paymentMethod = null) {
+    return cartItems.filter(item => item.selected).some(item =>
+        getEffectiveUnitPrice(item.product, paymentMethod) == null
+    );
 }
 
 /**
@@ -553,9 +602,11 @@ export function loadCartFromStorage() {
         const stored = localStorage.getItem('cart_items');
         if (stored) {
             cartItems = JSON.parse(stored);
-            // Убеждаемся, что все товары выбраны по умолчанию
             cartItems.forEach(item => {
-                if (item.selected === undefined) {
+                const selectable = isProductSelectableInCart(item.product);
+                if (!selectable) {
+                    item.selected = false;
+                } else if (item.selected === undefined) {
                     item.selected = true;
                 }
             });
@@ -655,7 +706,7 @@ export function updateCartProductsFromAPI(freshProducts) {
             // Обновляем товар в корзине
             item.product = updatedProduct;
             item.quantity = quantity;
-            item.selected = selected;
+            item.selected = selected && isProductSelectableInCart(updatedProduct);
             
             updatedCount++;
         } else {

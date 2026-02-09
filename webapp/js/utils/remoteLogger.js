@@ -1,277 +1,163 @@
-// Утилита для отправки логов на сервер (для отладки Telegram приложения)
-// Импортируем API_BASE через api.js для совместимости
-import { API_BASE } from '../api.js';
+/**
+ * RemoteLogger: отправка логов на сервер.
+ * ВКЛЮЧЕНИЕ: ТОЛЬКО при ?remote_log=1 или remote_log=true.
+ * Никогда не использует console.* для ошибок — только window.__RAW_CONSOLE__ при debug_user.
+ */
+import { API_BASE } from '../api/config.js';
 import { getTelegramInstance } from '../telegram.js';
+import { safeSerialize, maskSensitive } from './logger.js';
 
-// Буфер для логов (чтобы не отправлять каждый лог отдельно)
+const BUFFER_DELAY_MS = 2000;
+const MAX_BATCH_BYTES = 50 * 1024;
+const MAX_BUFFER_SIZE = 100;
+const DEDUP_WINDOW_MS = 10000;
+const DEDUP_MAX_ITEMS = 200;
+const MAX_MESSAGE_LEN = 2000;
+
 let logBuffer = [];
 let bufferTimer = null;
-const BUFFER_DELAY = 2000; // Отправлять каждые 2 секунды
-const MAX_BUFFER_SIZE = 20; // Максимум логов в буфере (увеличено для лучшей отладки)
+let lastSendTime = 0;
+let sendInProgress = false;
+const dedupMap = new Map();
 
-// Настройки отладки
-const DEBUG_CONFIG = {
-    // Уровни логирования для отправки (можно фильтровать)
-    levels: ['log', 'info', 'warn', 'error'],
-    // Включить детальную информацию (URL, user agent, и т.д.)
-    includeDetails: true,
-    // Включить stack trace для всех логов (не только ошибок)
-    includeStack: false,
-    // Максимальная длина сообщения
-    maxMessageLength: 5000
-};
-
-// Проверка, включено ли удаленное логирование
 function isRemoteLoggingEnabled() {
-    // Проверяем параметр URL для принудительного включения
-    const urlParams = new URLSearchParams(window.location.search);
-    const forceRemoteLog = urlParams.get('remote_log');
-    if (forceRemoteLog === '1' || forceRemoteLog === 'true') {
-        return true; // Принудительно включаем
-    }
-    
-    // Включаем только если НЕ режим диагностики (в браузере логи видны в консоли)
-    const debugUser = urlParams.get('debug_user');
-    return !debugUser; // Включаем только в реальном Telegram
+    const params = new URLSearchParams(window.location?.search || '');
+    return params.get('remote_log') === '1' || params.get('remote_log') === 'true';
 }
 
-/**
- * Получить дополнительную информацию для отладки
- */
+function isDebugUser() {
+    const params = new URLSearchParams(window.location?.search || '');
+    return params.get('debug_user') === '1' || params.get('debug_user') === 'true';
+}
+
 function getDebugInfo() {
-    const info = {
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        platform: navigator.platform,
-        language: navigator.language,
-        screenSize: `${window.screen.width}x${window.screen.height}`,
-        viewportSize: `${window.innerWidth}x${window.innerHeight}`,
-        timestamp: new Date().toISOString()
-    };
-    
+    const loc = window.location || {};
+    const url = (loc.origin || '') + (loc.pathname || '/') + '?***';
+    const info = { url, timestamp: new Date().toISOString() };
     try {
         const tg = getTelegramInstance();
-        if (tg) {
-            info.telegramVersion = tg.version;
-            info.telegramPlatform = tg.platform;
-            info.telegramColorScheme = tg.colorScheme;
-            info.telegramThemeParams = tg.themeParams;
-        }
-    } catch (e) {
-        // Игнорируем ошибки получения информации о Telegram
-    }
-    
+        if (tg) { info.tgVersion = tg.version; info.tgPlatform = tg.platform; }
+    } catch (_) {}
     return info;
 }
 
-/**
- * Отправить логи на сервер
- */
-async function sendLogsToServer() {
-    if (logBuffer.length === 0) return;
-    
-    const logsToSend = [...logBuffer];
-    logBuffer = []; // Очищаем буфер
-    
+function safeStringifyPayload(arg) {
     try {
-        const tg = getTelegramInstance();
-        const userInfo = tg?.initDataUnsafe?.user || { id: 'unknown' };
-        
-        const logData = {
-            user_id: userInfo.id,
-            username: userInfo.username || 'unknown',
-            timestamp: new Date().toISOString(),
-            logs: logsToSend
-        };
-        
-        // Добавляем дополнительную информацию для отладки
-        if (DEBUG_CONFIG.includeDetails) {
-            logData.debug_info = getDebugInfo();
-        }
-        
+        if (arg instanceof Error) return safeSerialize(arg);
+        const s = safeSerialize(arg);
+        return typeof s === 'string' ? s : JSON.stringify(s);
+    } catch (_) { return '[serialize error]'; }
+}
+
+function isDuplicate(level, message) {
+    const key = level + ':' + message.slice(0, 150);
+    const now = Date.now();
+    if (dedupMap.has(key) && now - dedupMap.get(key) < DEDUP_WINDOW_MS) return true;
+    if (dedupMap.size >= DEDUP_MAX_ITEMS) {
+        const sorted = [...dedupMap.entries()].sort((a, b) => a[1] - b[1]);
+        sorted.slice(0, 50).forEach(([k]) => dedupMap.delete(k));
+    }
+    dedupMap.set(key, now);
+    return false;
+}
+
+async function sendLogsToServer() {
+    if (logBuffer.length === 0 || sendInProgress) return;
+    const toSend = [...logBuffer];
+    logBuffer = [];
+    if (bufferTimer) { clearTimeout(bufferTimer); bufferTimer = null; }
+    sendInProgress = true;
+
+    const payload = {
+        user_id: getTelegramInstance()?.initDataUnsafe?.user?.id ?? 'unknown',
+        username: getTelegramInstance()?.initDataUnsafe?.user?.username ?? 'unknown',
+        timestamp: new Date().toISOString(),
+        logs: toSend,
+        debug_info: getDebugInfo()
+    };
+
+    let body;
+    try {
+        body = JSON.stringify(payload);
+    } catch (_) {
+        body = '{}';
+    }
+    if (body.length > MAX_BATCH_BYTES) {
+        const half = Math.floor(toSend.length / 2);
+        logBuffer = toSend.slice(half);
+        payload.logs = toSend.slice(0, half);
+        body = JSON.stringify(payload);
+    }
+
+    try {
         const response = await fetch(`${API_BASE}/api/debug/logs`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': '69420'
-            },
-            body: JSON.stringify(logData)
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '69420' },
+            body: body
         });
-        
-        if (!response.ok) {
-            // Используем оригинальный console.error напрямую, чтобы избежать рекурсии
-            // (не используем перехваченный console.error)
-            console.error = console.error || (() => {});
-            console.error(`❌ Failed to send logs: ${response.status} ${response.statusText}`);
+        lastSendTime = Date.now();
+        if (!response.ok && isDebugUser() && window.__RAW_CONSOLE__?.error) {
+            window.__RAW_CONSOLE__.error('[RemoteLogger] send failed:', response.status);
         }
-    } catch (error) {
-        // Не логируем ошибки отправки логов, чтобы избежать бесконечного цикла
-        // Используем оригинальный console.error напрямую
-        try {
-            console.error('❌ Failed to send logs to server:', error);
-        } catch (e) {
-            // Игнорируем ошибки логирования
+    } catch (_err) {
+        if (isDebugUser() && window.__RAW_CONSOLE__?.error) {
+            window.__RAW_CONSOLE__.error('[RemoteLogger] send error (silent in prod)');
         }
+    } finally {
+        sendInProgress = false;
+        if (logBuffer.length > 0) scheduleSend();
     }
 }
 
-/**
- * Добавить лог в буфер
- */
+function scheduleSend() {
+    if (bufferTimer) return;
+    bufferTimer = setTimeout(() => {
+        bufferTimer = null;
+        sendLogsToServer();
+    }, BUFFER_DELAY_MS);
+}
+
 function addLogToBuffer(level, args) {
     if (!isRemoteLoggingEnabled()) return;
-    
-    // Фильтруем по уровням логирования
-    if (!DEBUG_CONFIG.levels.includes(level)) return;
-    
-    // Формируем сообщение
-    let message = args.map(arg => {
-        if (typeof arg === 'object') {
-            try {
-                // Ограничиваем глубину вложенности для больших объектов
-                return JSON.stringify(arg, (key, value) => {
-                    if (typeof value === 'object' && value !== null) {
-                        // Ограничиваем размер объекта
-                        const str = JSON.stringify(value);
-                        if (str.length > 1000) {
-                            return '[Object too large]';
-                        }
-                    }
-                    return value;
-                }, 2);
-            } catch (e) {
-                return String(arg);
-            }
-        }
-        return String(arg);
-    }).join(' ');
-    
-    // Фильтруем известные ошибки, которые не критичны
-    // Telegram WebApp API выбрасывает ошибку для tg:// протокола, но переход работает
-    if (level === 'error') {
-        // Фильтруем ошибку про tg:// протокол
-        if (message.includes('Url protocol is not supported') && message.includes('tg://user?id=')) {
-            return; // Не логируем - переход работает
-        }
-        // Фильтруем ложную ошибку "Error opening Telegram chat" - это особенность браузера и tg:// протокола
-        if (message.includes('Error opening Telegram chat')) {
-            return; // Не логируем - это ложная ошибка, переход работает правильно
-        }
+    const raw = args.map(safeStringifyPayload).join(' ');
+    const message = maskSensitive(raw).slice(0, MAX_MESSAGE_LEN);
+    if (isDuplicate(level, message)) return;
+    if (level === 'error' && (message.includes('Url protocol is not supported') || message.includes('Error opening Telegram chat'))) return;
+
+    logBuffer.push({ level, message, timestamp: new Date().toISOString() });
+
+    if (logBuffer.length >= MAX_BUFFER_SIZE) {
+        logBuffer = logBuffer.slice(-Math.floor(MAX_BUFFER_SIZE / 2));
     }
-    
-    // Ограничиваем длину сообщения
-    if (message.length > DEBUG_CONFIG.maxMessageLength) {
-        message = message.substring(0, DEBUG_CONFIG.maxMessageLength) + '...[truncated]';
-    }
-    
-    const logEntry = {
-        level: level,
-        message: message,
-        timestamp: new Date().toISOString(),
-        stack: DEBUG_CONFIG.includeStack || level === 'error' ? new Error().stack : undefined
-    };
-    
-    logBuffer.push(logEntry);
-    
-    // Для критических ошибок отправляем немедленно
-    const isCritical = level === 'error' || 
-                      (level === 'warn' && (logEntry.message.includes('[FILTER ERROR]') || 
-                                           logEntry.message.includes('[FILTER WARNING]') ||
-                                           logEntry.message.includes('ERROR') ||
-                                           logEntry.message.includes('FAILED'))) ||
-                      (level === 'log' && (logEntry.message.includes('[FILTER DEBUG]') ||
-                                          logEntry.message.includes('[CATEGORIES DEBUG]') ||
-                                          logEntry.message.includes('[API DEBUG]')));
-    
-    if (isCritical) {
-        // Отправляем критические логи немедленно
-        if (bufferTimer) {
-            clearTimeout(bufferTimer);
-            bufferTimer = null;
-        }
-        // Добавляем небольшую задержку, чтобы собрать связанные логи
-        setTimeout(() => {
-            sendLogsToServer();
-        }, 100);
-    } else if (logBuffer.length >= MAX_BUFFER_SIZE) {
-        // Если буфер заполнен, отправляем сразу
-        if (bufferTimer) {
-            clearTimeout(bufferTimer);
-            bufferTimer = null;
-        }
+
+    if (logBuffer.length >= 20) {
+        if (bufferTimer) { clearTimeout(bufferTimer); bufferTimer = null; }
         sendLogsToServer();
     } else {
-        // Иначе планируем отправку через задержку
-        if (!bufferTimer) {
-            bufferTimer = setTimeout(() => {
-                bufferTimer = null;
-                sendLogsToServer();
-            }, BUFFER_DELAY);
-        }
+        scheduleSend();
     }
 }
 
-/**
- * Перехватить console методы и отправлять логи на сервер
- */
 export function initRemoteLogger() {
-    const enabled = isRemoteLoggingEnabled();
-    const urlParams = new URLSearchParams(window.location.search);
-    const forceRemoteLog = urlParams.get('remote_log');
-    
-    // Сохраняем оригинальные методы ДО перехвата
-    const originalLog = console.log;
-    const originalError = console.error;
-    const originalWarn = console.warn;
-    const originalInfo = console.info;
-    
-    if (!enabled && forceRemoteLog !== '1' && forceRemoteLog !== 'true') {
-        // В режиме отладки не перехватываем логи
-        return;
-    }
-    
-    // Перехватываем console.log (БЕЗ вывода в консоль браузера)
-    console.log = function(...args) {
-        // НЕ вызываем originalLog - логи только на сервер
-        addLogToBuffer('log', args);
-    };
-    
-    // Перехватываем console.error (БЕЗ вывода в консоль браузера)
-    console.error = function(...args) {
-        // НЕ вызываем originalError - логи только на сервер
-        addLogToBuffer('error', args);
-    };
-    
-    // Перехватываем console.warn (БЕЗ вывода в консоль браузера)
-    console.warn = function(...args) {
-        // НЕ вызываем originalWarn - логи только на сервер
-        addLogToBuffer('warn', args);
-    };
-    
-    // Перехватываем console.info (БЕЗ вывода в консоль браузера)
-    console.info = function(...args) {
-        // НЕ вызываем originalInfo - логи только на сервер
-        addLogToBuffer('info', args);
-    };
-    
-    // Отправляем оставшиеся логи при закрытии страницы
+    if (!isRemoteLoggingEnabled()) return;
+
+    const orig = window.__RAW_CONSOLE__ || console;
+    console.log = (...args) => { addLogToBuffer('log', args); };
+    console.info = (...args) => { addLogToBuffer('info', args); };
+    console.warn = (...args) => { addLogToBuffer('warn', args); };
+    console.error = (...args) => { addLogToBuffer('error', args); };
+
     window.addEventListener('beforeunload', () => {
         if (logBuffer.length > 0) {
-            // Используем sendBeacon для надежной отправки при закрытии
-            const tg = getTelegramInstance();
-            const userInfo = tg?.initDataUnsafe?.user || { id: 'unknown' };
-            
-            const logData = {
-                user_id: userInfo.id,
-                username: userInfo.username || 'unknown',
+            const payload = {
+                user_id: getTelegramInstance()?.initDataUnsafe?.user?.id ?? 'unknown',
+                username: getTelegramInstance()?.initDataUnsafe?.user?.username ?? 'unknown',
                 timestamp: new Date().toISOString(),
                 logs: logBuffer
             };
-            
-            navigator.sendBeacon(
-                `${API_BASE}/api/debug/logs`,
-                JSON.stringify(logData)
-            );
+            try {
+                navigator.sendBeacon(`${API_BASE}/api/debug/logs`, new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+            } catch (_) {}
         }
     });
 }

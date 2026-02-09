@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.filters.command import CommandObject
-from aiogram.types import Message, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
+from aiogram.types import Message, CallbackQuery, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -17,7 +17,14 @@ from aiogram.exceptions import TelegramNetworkError, TelegramAPIError, TelegramS
 # Загружаем .env
 load_dotenv(dotenv_path="../.env")
 
-logging.basicConfig(level=logging.INFO)
+BOT_LOG_LEVEL = os.getenv("BOT_LOG_LEVEL", "WARNING").upper()
+if BOT_LOG_LEVEL not in ("DEBUG", "INFO", "WARNING", "ERROR"):
+    BOT_LOG_LEVEL = "WARNING"
+logging.basicConfig(
+    level=getattr(logging, BOT_LOG_LEVEL, logging.WARNING),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBAPP_URL = os.getenv("WEBAPP_URL")
@@ -2755,14 +2762,19 @@ async def process_product_type(callback: types.CallbackQuery, state: FSMContext)
 # Статус: В процессе
 # НОВЫЙ КОД (используется сейчас)
 try:
-    from .handlers.products import process_price_type
+    from .handlers.products import process_price_type, resend_price_type_on_product_type_click
 except ImportError:
-    from handlers.products import process_price_type
+    from handlers.products import process_price_type, resend_price_type_on_product_type_click
 
 @dp.callback_query(StateFilter(AddProduct.price_type), F.data.startswith("price_type_"))
 async def process_price_type_handler(callback: types.CallbackQuery, state: FSMContext):
     """Обработчик типа цены - вызывает функцию из handlers/products.py"""
     await process_price_type(callback, state)
+
+@dp.callback_query(StateFilter(AddProduct.price_type), F.data.startswith("product_type_"))
+async def resend_price_type_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Повторное нажатие типа товара в price_type — показываем клавиатуру выбора типа цены."""
+    await resend_price_type_on_product_type_click(callback, state)
 
 # СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 """
@@ -3312,6 +3324,42 @@ try:
 except ImportError:
     from handlers.products import process_discount
 
+# ========== REFACTORING STEP: process_price_card ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_price_card
+except ImportError:
+    from handlers.products import process_price_card
+
+@dp.message(AddProduct.price_card)
+async def process_price_card_handler(message: Message, state: FSMContext):
+    """Обработчик цены по карте - вызывает функцию из handlers/products.py"""
+    await process_price_card(message, state)
+
+# ========== REFACTORING STEP: process_price_cash ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_price_cash
+except ImportError:
+    from handlers.products import process_price_cash
+
+@dp.message(AddProduct.price_cash)
+async def process_price_cash_handler(message: Message, state: FSMContext):
+    """Обработчик цены наличными - вызывает функцию из handlers/products.py"""
+    await process_price_cash(message, state)
+
+# ========== REFACTORING STEP: process_price_old ==========
+# НОВЫЙ КОД (используется сейчас)
+try:
+    from .handlers.products import process_price_old
+except ImportError:
+    from handlers.products import process_price_old
+
+@dp.message(AddProduct.price_old)
+async def process_price_old_handler(message: Message, state: FSMContext):
+    """Обработчик старой цены - вызывает функцию из handlers/products.py"""
+    await process_price_old(message, state)
+
 @dp.message(AddProduct.discount)
 async def process_discount_handler(message: Message, state: FSMContext):
     """Обработчик скидки - вызывает функцию из handlers/products.py"""
@@ -3349,6 +3397,78 @@ except ImportError:
 async def process_description_handler(message: Message, state: FSMContext):
     """Обработчик описания - вызывает функцию из handlers/products.py"""
     await process_description(message, state)
+
+# ========== Обработчики доставки (после описания, перед характеристиками) ==========
+try:
+    from .handlers.products import (
+        process_ask_delivery,
+        process_delivery_time,
+        process_delivery_price,
+    )
+except ImportError:
+    from handlers.products import (
+        process_ask_delivery,
+        process_delivery_time,
+        process_delivery_price,
+    )
+
+@dp.callback_query(AddProduct.ask_delivery, F.data.in_(["delivery_yes", "delivery_skip"]))
+async def process_ask_delivery_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработка: указать доставку или пропустить"""
+    await process_ask_delivery(callback, state)
+
+@dp.message(AddProduct.delivery_time_input)
+async def process_delivery_time_handler(message: Message, state: FSMContext):
+    """Обработка ввода срока доставки"""
+    await process_delivery_time(message, state)
+
+@dp.message(AddProduct.delivery_price_input)
+async def process_delivery_price_handler(message: Message, state: FSMContext):
+    """Обработка ввода стоимости доставки"""
+    await process_delivery_price(message, state)
+
+# ========== Обработчики характеристик (после описания/доставки, перед фото) ==========
+try:
+    from .handlers.products import (
+        process_ask_features,
+        process_feature_name_choose,
+        process_feature_name_manual,
+        process_feature_value,
+        process_ask_more_features,
+    )
+except ImportError:
+    from handlers.products import (
+        process_ask_features,
+        process_feature_name_choose,
+        process_feature_name_manual,
+        process_feature_value,
+        process_ask_more_features,
+    )
+
+@dp.callback_query(AddProduct.ask_features, F.data.in_(["features_yes", "features_skip"]))
+async def process_ask_features_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработка: добавить характеристики или пропустить"""
+    await process_ask_features(callback, state)
+
+@dp.callback_query(AddProduct.feature_name_choose)
+async def process_feature_name_choose_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора названия характеристики из списка или ввод нового"""
+    await process_feature_name_choose(callback, state)
+
+@dp.message(AddProduct.feature_name_manual)
+async def process_feature_name_manual_handler(message: Message, state: FSMContext):
+    """Обработка ввода нового названия характеристики вручную"""
+    await process_feature_name_manual(message, state)
+
+@dp.message(AddProduct.feature_value)
+async def process_feature_value_handler(message: Message, state: FSMContext):
+    """Обработка ввода значения характеристики"""
+    await process_feature_value(message, state)
+
+@dp.callback_query(AddProduct.ask_more_features, F.data.in_(["features_add_more", "features_continue"]))
+async def process_ask_more_features_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработка: добавить ещё характеристику или продолжить"""
+    await process_ask_more_features(callback, state)
 
 # СТАРЫЙ КОД (закомментирован, будет удален после проверки)
 """
@@ -3785,6 +3905,22 @@ async def send_reservation_notification(product_owner_id: int, product_id: int, 
         logging.error(f"Error sending reservation notification: {e}", exc_info=True)
 """
 # ========== END REFACTORING STEP 9.1 ==========
+
+# ========== DEBUG: Fallback для необработанных callback-ов ==========
+# ВРЕМЕННЫЙ обработчик для отладки - показывает все необработанные callback-и
+# УДАЛИТЬ после фикса проблемы с quantity_unit
+@dp.callback_query()
+async def debug_unhandled_callbacks(callback: types.CallbackQuery, state: FSMContext):
+    """Временный обработчик для отладки необработанных callback-ов"""
+    st = await state.get_state()
+    logging.debug("UNHANDLED CALLBACK: callback_data=%s, state=%s", callback.data, st)
+    try:
+        await callback.answer("⚠️ Необработанная кнопка (см. лог)", show_alert=False)
+    except (TelegramNetworkError, TelegramAPIError, TelegramServerError) as e:
+        logging.warning("debug_unhandled_callbacks: не удалось ответить на callback (сеть/API): %s", e)
+    except Exception as e:
+        logging.warning("debug_unhandled_callbacks: ошибка при answer: %s", e, exc_info=True)
+# ========== END DEBUG ==========
 
 async def main():
     # Проверка токена

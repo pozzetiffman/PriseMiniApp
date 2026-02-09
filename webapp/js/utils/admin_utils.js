@@ -7,19 +7,38 @@
  * Показ уведомления пользователю
  * @param {string} message - Текст уведомления
  * @param {string} type - Тип уведомления ('success' или 'error')
+ * @param {Object} [options] - Опции позиционирования
+ * @param {string} [options.anchor] - 'product-page' — позиция ниже меню страницы товара
+ * @param {string|number} [options.top] - Явное значение top (переопределяет дефолт и anchor)
  */
-export function showNotification(message, type = 'success') {
+export function showNotification(message, type = 'success', options = {}) {
     // Создаем временное уведомление
     const notification = document.createElement('div');
     notification.className = 'admin-notification';
     notification.textContent = message;
-    
+
     // Определяем цвет фона в зависимости от типа
     const backgroundColor = type === 'error' ? '#f44336' : '#4CAF50';
-    
+
+    let topValue = '100px';
+    if (options.top !== undefined && options.top !== null) {
+        topValue = typeof options.top === 'number' ? `${options.top}px` : String(options.top);
+    } else if (options.anchor === 'product-page') {
+        const menu = document.querySelector('.product-new-top-menu');
+
+        // СТАВИМ УВЕДОМЛЕНИЕ ТОЧНО ПОД НИЖНЕЙ ГРАНИЦЕЙ МЕНЮ
+        // Это надежнее, чем offsetHeight + safe-area, потому что учитывает реальную позицию меню на экране.
+        if (menu) {
+            const rect = menu.getBoundingClientRect();
+            topValue = `${Math.round(rect.bottom)}px`; // без зазора
+        } else {
+            topValue = '64px'; // fallback
+        }
+    }
+
     notification.style.cssText = `
         position: fixed;
-        top: 100px;
+        top: ${topValue};
         right: 20px;
         background: ${backgroundColor};
         color: white;
@@ -29,9 +48,9 @@ export function showNotification(message, type = 'success') {
         z-index: 10000;
         animation: slideIn 0.3s ease-out;
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
         notification.style.animation = 'slideOut 0.3s ease-out';
         setTimeout(() => {

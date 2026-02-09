@@ -7,11 +7,54 @@ from sqlalchemy import and_, or_
 from typing import List, Optional
 from datetime import datetime
 from dotenv import load_dotenv
+from sqlalchemy.exc import IntegrityError
 from ..db import models, database
 from ..models import sale_order as schemas
 from ..utils.telegram_auth import get_user_id_from_init_data, validate_init_data_multi_bot
 from ..utils.product_snapshot import create_product_snapshot, get_product_display_info_from_snapshot
 from ..utils.products_utils import make_full_url
+from ..utils.order_number import generate_order_number_11
+from ..services.pricing import build_quote
+
+def _minimal_product_no_snapshot(product_id: Optional[int], product_exists: bool) -> dict:
+    """Минимальный объект товара для операции без snapshot. НЕ использует данные живого Product."""
+    return {
+        "id": product_id or 0,
+        "name": "Товар недоступен" if not product_exists else "Товар",
+        "price": None,
+        "price_card": None,
+        "price_cash": None,
+        "discount": 0,
+        "image_url": None,
+        "images_urls": [],
+        "is_unavailable": not product_exists,
+    }
+
+
+def _get_product_info_for_sale_order(sale_order: models.SaleOrder, db: Session) -> dict:
+    """Только из snapshot_json. Никаких цен/описания из живого Product."""
+    if sale_order.snapshot_id:
+        snapshot = db.query(models.UserProductSnapshot).filter(
+            models.UserProductSnapshot.snapshot_id == sale_order.snapshot_id
+        ).first()
+        if snapshot:
+            product_info = get_product_display_info_from_snapshot(snapshot)
+            if product_info:
+                calculated_price = get_product_price_from_dict(product_info)
+                product_info["price"] = calculated_price
+                product_info["discount"] = 0
+                product_info["is_unavailable"] = False
+                if product_info.get("images_urls"):
+                    product_info["images_urls"] = [make_full_url(img_url) for img_url in product_info["images_urls"]]
+                if product_info.get("image_url"):
+                    product_info["image_url"] = make_full_url(product_info["image_url"])
+                if product_info.get("price_card") is not None:
+                    print(f"   📸 [SALE_ORDERS] item.product.price_card from snapshot_json (sale_order_id={sale_order.id})")
+                return product_info
+            return _minimal_product_no_snapshot(sale_order.product_id, sale_order.product is not None)
+        return _minimal_product_no_snapshot(sale_order.product_id, sale_order.product is not None)
+    return _minimal_product_no_snapshot(sale_order.product_id, sale_order.product is not None)
+
 
 def get_product_price_from_dict(product_dict: dict) -> Optional[float]:
     """
@@ -126,6 +169,23 @@ async def create_sale_order(
             detail="Вы не можете купить свой собственный товар"
         )
     
+    # Единый расчёт сумм: способ оплаты + доставка (как в deals)
+    delivery_method_for_pricing = (order_data.delivery_method or "pickup").strip().lower()
+    if delivery_method_for_pricing == "delivery":
+        delivery_method_for_pricing = "courier"
+    quote = build_quote(
+        db,
+        [{"product_id": product_id, "quantity": quantity}],
+        order_data.payment_method or "card",
+        delivery_method_for_pricing,
+        ordered_by_user_id,
+    )
+    if quote.get("errors"):
+        raise HTTPException(status_code=400, detail="; ".join(quote["errors"]))
+    items_amount = quote.get("items_amount") or 0
+    delivery_fee = quote.get("delivery_fee") or 0
+    total_amount = quote.get("total_amount") or (items_amount + delivery_fee)
+
     # Создаем snapshot товара на момент операции
     snapshot_id = create_product_snapshot(
         db=db,
@@ -135,7 +195,7 @@ async def create_sale_order(
     )
     print(f"✅ [SALE ORDER] Created snapshot: snapshot_id={snapshot_id}")
     
-    # Создаем заказ на покупку
+    # Создаем заказ на покупку с зафиксированными суммами
     sale_order = models.SaleOrder(
         product_id=product_id,
         snapshot_id=snapshot_id,
@@ -153,12 +213,22 @@ async def create_sale_order(
         notes=order_data.notes,
         delivery_method=order_data.delivery_method,
         payment_method=order_data.payment_method,
+        delivery_fee=delivery_fee,
+        items_amount=items_amount,
+        total_amount=total_amount,
         status='pending'
     )
-    
     db.add(sale_order)
-    db.commit()
-    db.refresh(sale_order)
+    for _ in range(5):
+        sale_order.order_number = generate_order_number_11()  # 11 цифр, уникальность + retry в БД
+        try:
+            db.commit()
+            db.refresh(sale_order)
+            break
+        except IntegrityError:
+            db.rollback()
+    else:
+        raise HTTPException(status_code=500, detail="Не удалось сгенерировать уникальный номер заказа")
     
     # Загружаем product для возврата в ответе
     db.refresh(sale_order, ['product'])
@@ -309,18 +379,13 @@ async def get_my_sale_orders(
     
     print(f"✅ [SALE ORDER] Found {len(sale_orders)} sale orders for user {ordered_by_user_id}")
     
-    # Загружаем информацию о товарах
+    # Формируем ответ: product ТОЛЬКО из snapshot_json, не из живого Product
+    result = []
     for sale_order in sale_orders:
-        if sale_order.product:
-            # Преобразуем images_urls из JSON строки в список
-            if sale_order.product.images_urls:
-                if isinstance(sale_order.product.images_urls, str):
-                    try:
-                        sale_order.product.images_urls = json.loads(sale_order.product.images_urls)
-                    except (json.JSONDecodeError, TypeError):
-                        sale_order.product.images_urls = []
-    
-    return sale_orders
+        so_dict = schemas.SaleOrder.model_validate(sale_order).model_dump(mode='json')
+        so_dict['product'] = _get_product_info_for_sale_order(sale_order, db)
+        result.append(so_dict)
+    return result
 
 @router.get("/history", response_model=List[schemas.SaleOrder])
 async def get_sale_orders_history(
@@ -358,18 +423,13 @@ async def get_sale_orders_history(
     
     print(f"✅ [SALE ORDER] Found {len(sale_orders)} sale orders in history for user {ordered_by_user_id}")
     
-    # Загружаем информацию о товарах
+    # Формируем ответ: product ТОЛЬКО из snapshot_json, не из живого Product
+    result = []
     for sale_order in sale_orders:
-        if sale_order.product:
-            # Преобразуем images_urls из JSON строки в список
-            if sale_order.product.images_urls:
-                if isinstance(sale_order.product.images_urls, str):
-                    try:
-                        sale_order.product.images_urls = json.loads(sale_order.product.images_urls)
-                    except (json.JSONDecodeError, TypeError):
-                        sale_order.product.images_urls = []
-    
-    return sale_orders
+        so_dict = schemas.SaleOrder.model_validate(sale_order).model_dump(mode='json')
+        so_dict['product'] = _get_product_info_for_sale_order(sale_order, db)
+        result.append(so_dict)
+    return result
 
 @router.patch("/{sale_order_id}/cancel")
 async def cancel_sale_order(

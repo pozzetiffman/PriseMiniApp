@@ -39,18 +39,22 @@ export async function toggleHotOffer(productId, shopOwnerId, isHotOffer) {
 // ========== END REFACTORING STEP 5.1 ==========
 
 // ========== REFACTORING STEP 5.2: updateProductAPI() ==========
-// Обновление цены и скидки товара
-export async function updateProductAPI(productId, shopOwnerId, price, discount) {
+// Обновление цен (по карте, наличными) и скидки товара
+export async function updateProductAPI(productId, shopOwnerId, priceCard, priceCash, discount) {
     const url = `${API_BASE}/api/products/${productId}/update-price-discount?user_id=${shopOwnerId}`;
-    console.log(`Updating product: productId=${productId}, price=${price}, discount=${discount}`);
+    console.log(`Updating product: productId=${productId}, price_card=${priceCard}, price_cash=${priceCash}, discount=${discount}`);
+    
+    const body = {
+        price_card: priceCard,
+        price_cash: priceCash,
+        discount: discount ?? 0
+    };
+    if (priceCard != null) body.price = priceCard;
     
     const response = await fetch(url, {
         method: 'PATCH',
         headers: getBaseHeaders(),
-        body: JSON.stringify({
-            price: price,
-            discount: discount
-        })
+        body: JSON.stringify(body)
     });
     
     const responseText = await response.text();
@@ -149,17 +153,21 @@ export async function updateProductQuantityAPI(productId, shopOwnerId, quantity,
 // Обновление статуса 'под заказ' товара (без уведомлений)
 export async function updateProductMadeToOrderAPI(productId, shopOwnerId, isMadeToOrder) {
     const url = `${API_BASE}/api/products/${productId}/update-made-to-order?user_id=${shopOwnerId}`;
-    console.log(`Updating product made-to-order: productId=${productId}, isMadeToOrder=${isMadeToOrder}`);
+    const payload = { is_made_to_order: isMadeToOrder };
+    const appContext = window.getAppContext ? window.getAppContext() : null;
+    const botId = appContext ? appContext.bot_id : null;
+    // Логирование запроса для диагностики отсутствующих PATCH (перехватывается remoteLogger)
+    console.log(`[TOGGLE REQUEST] url=${url} payload=${JSON.stringify(payload)} product_id=${productId} bot_id=${botId}`);
     
     const response = await fetch(url, {
         method: 'PATCH',
         headers: getBaseHeaders(),
-        body: JSON.stringify({
-            is_made_to_order: isMadeToOrder
-        })
+        body: JSON.stringify(payload)
     });
     
     const responseText = await response.text();
+    // Логирование ответа для диагностики (перехватывается remoteLogger)
+    console.log(`[TOGGLE RESPONSE] status=${response.status} json=${responseText.substring(0, 200)}`);
     console.log(`Update product made-to-order response: status=${response.status}, body=${responseText}`);
     
     if (response.ok) {
@@ -351,17 +359,21 @@ export async function updateProductHiddenAPI(productId, shopOwnerId, isHidden) {
 // Обновление статуса 'продажа' товара (без уведомлений)
 export async function updateProductSaleEnabledAPI(productId, shopOwnerId, isSaleEnabled) {
     const url = `${API_BASE}/api/products/${productId}/update-sale-enabled?user_id=${shopOwnerId}`;
-    console.log(`Updating product sale-enabled: productId=${productId}, isSaleEnabled=${isSaleEnabled}`);
+    const payload = { is_sale_enabled: isSaleEnabled };
+    const appContext = window.getAppContext ? window.getAppContext() : null;
+    const botId = appContext ? appContext.bot_id : null;
+    // Логирование запроса для диагностики отсутствующих PATCH (перехватывается remoteLogger)
+    console.log(`[TOGGLE REQUEST] url=${url} payload=${JSON.stringify(payload)} product_id=${productId} bot_id=${botId}`);
     
     const response = await fetch(url, {
         method: 'PATCH',
         headers: getBaseHeaders(),
-        body: JSON.stringify({
-            is_sale_enabled: isSaleEnabled
-        })
+        body: JSON.stringify(payload)
     });
     
     const responseText = await response.text();
+    // Логирование ответа для диагностики (перехватывается remoteLogger)
+    console.log(`[TOGGLE RESPONSE] status=${response.status} json=${responseText.substring(0, 200)}`);
     console.log(`Update product sale-enabled response: status=${response.status}, body=${responseText}`);
     
     if (response.ok) {
@@ -385,3 +397,114 @@ export async function updateProductSaleEnabledAPI(productId, shopOwnerId, isSale
 
 
 // ========== END REFACTORING STEP 5.10 ==========
+
+// Обновление статуса 'резервация' товара (без уведомлений)
+export async function updateProductReservationEnabledAPI(productId, shopOwnerId, isReservationEnabled) {
+    const url = `${API_BASE}/api/products/${productId}/update-reservation-enabled?user_id=${shopOwnerId}`;
+    const payload = { is_reservation_enabled: isReservationEnabled };
+    const appContext = window.getAppContext ? window.getAppContext() : null;
+    const botId = appContext ? appContext.bot_id : null;
+    // Логирование запроса для диагностики отсутствующих PATCH (перехватывается remoteLogger)
+    console.log(`[TOGGLE REQUEST] url=${url} payload=${JSON.stringify(payload)} product_id=${productId} bot_id=${botId}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify(payload)
+    });
+    const responseText = await response.text();
+    // Логирование ответа для диагностики (перехватывается remoteLogger)
+    console.log(`[TOGGLE RESPONSE] status=${response.status} json=${responseText.substring(0, 200)}`);
+    if (response.ok) {
+        return JSON.parse(responseText);
+    }
+    let errorMessage = 'Не удалось обновить статус "резервация"';
+    try {
+        const errorData = JSON.parse(responseText);
+        errorMessage = errorData.detail || errorMessage;
+    } catch (e) {
+        errorMessage = responseText;
+    }
+    throw new Error(errorMessage);
+}
+
+// ========== getCharacteristicNamesAPI ==========
+// Справочник названий характеристик для выбора при добавлении (GET /api/characteristics/names)
+export async function getCharacteristicNamesAPI(shopOwnerId, botId = null) {
+    let url = `${API_BASE}/api/characteristics/names?user_id=${shopOwnerId}`;
+    if (botId != null && botId !== '') {
+        url += `&bot_id=${botId}`;
+    }
+    const response = await fetch(url, { headers: getBaseHeaders() });
+    const responseText = await response.text();
+    if (!response.ok) {
+        console.warn('Failed to fetch characteristic names:', responseText);
+        return [];
+    }
+    try {
+        return JSON.parse(responseText);
+    } catch (e) {
+        return [];
+    }
+}
+// ========== END getCharacteristicNamesAPI ==========
+
+// ========== updateProductCharacteristicsAPI ==========
+// Обновление характеристик товара: замена списком (PATCH /api/products/{id}/characteristics)
+export async function updateProductCharacteristicsAPI(productId, shopOwnerId, characteristics) {
+    const url = `${API_BASE}/api/products/${productId}/characteristics?user_id=${shopOwnerId}`;
+    console.log(`Updating product characteristics: productId=${productId}, count=${characteristics.length}`);
+    
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({ characteristics })
+    });
+    
+    const responseText = await response.text();
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить характеристики товара';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    return JSON.parse(responseText);
+}
+// ========== END updateProductCharacteristicsAPI ==========
+
+// ========== updateProductDeliveryAPI ==========
+// Обновление настроек доставки товара (PATCH /api/products/{id}/delivery)
+export async function updateProductDeliveryAPI(productId, shopOwnerId, payload) {
+    const url = `${API_BASE}/api/products/${productId}/delivery?user_id=${shopOwnerId}`;
+    console.log('Updating product delivery:', { productId, shopOwnerId, payload });
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getBaseHeaders(),
+        body: JSON.stringify({
+            is_delivery_enabled: !!payload.is_delivery_enabled,
+            is_pickup_enabled: !!payload.is_pickup_enabled,
+            delivery_price: payload.delivery_price != null && payload.delivery_price !== '' ? Number(payload.delivery_price) : null,
+            pickup_address: (payload.pickup_address || '').trim() || null,
+            delivery_time: (payload.delivery_time || '').trim() || null
+        })
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+        let errorMessage = 'Не удалось обновить настройки доставки';
+        try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+            errorMessage = responseText;
+        }
+        throw new Error(errorMessage);
+    }
+    return JSON.parse(responseText);
+}
+// ========== END updateProductDeliveryAPI ==========

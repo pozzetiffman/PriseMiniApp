@@ -2,6 +2,7 @@
 // Вынесено из app.js для рефакторинга
 
 // Импорты зависимостей
+import { updateActivityCounts } from './activityIndicators.js';
 import { getCurrentShopSettings } from './admin.js';
 import { cancelReservationAPI, createReservationAPI } from './api.js';
 import { closeProductPage } from './handlers/products_modal.js';
@@ -142,9 +143,27 @@ export function showReservationModal(productId) {
             const availableCount = Math.max(0, productQuantity - activeReservationsCount);
             const quantityUnit = product.quantity_unit || 'шт';
             
+            // СИНХРОНИЗАЦИЯ: Получаем выбранное количество из единого store
+            let selectedQuantity = Math.min(1, availableCount);
+            // Используем динамический импорт без await, чтобы не блокировать
+            import('./reservationStore.js').then(({ getReservationQuantity }) => {
+                try {
+                    const storedQuantity = getReservationQuantity(productId, 1);
+                    // Валидируем сохраненное количество
+                    if (storedQuantity >= 1 && storedQuantity <= availableCount) {
+                        selectedQuantity = storedQuantity;
+                        quantityInput.value = selectedQuantity;
+                    }
+                } catch (error) {
+                    console.error('❌ Error getting reservation quantity from store:', error);
+                }
+            }).catch((error) => {
+                console.error('❌ Error importing reservationStore:', error);
+            });
+            
             // Устанавливаем максимальное значение для input
             quantityInput.max = availableCount;
-            quantityInput.value = Math.min(1, availableCount); // По умолчанию 1, но не больше доступного
+            quantityInput.value = selectedQuantity;
             
             // Обновляем информацию о доступном количестве
             if (availableCount > 0) {
@@ -154,28 +173,64 @@ export function showReservationModal(productId) {
                 quantityInput.disabled = true;
             }
             
-            // Обновляем max при изменении
-            quantityInput.oninput = () => {
+            // Обновляем max при изменении и синхронизируем с store
+            quantityInput.oninput = async () => {
                 const value = parseInt(quantityInput.value) || 1;
+                let validatedValue = value;
                 if (value > availableCount) {
-                    quantityInput.value = availableCount;
+                    validatedValue = availableCount;
+                    quantityInput.value = validatedValue;
                 }
                 if (value < 1) {
-                    quantityInput.value = 1;
+                    validatedValue = 1;
+                    quantityInput.value = validatedValue;
                 }
+                
+                // Синхронизируем с единым store (без блокировки)
+                import('./reservationStore.js').then(({ setReservationQuantity }) => {
+                    setReservationQuantity(productId, validatedValue);
+                }).catch((error) => {
+                    console.error('❌ Error syncing reservation quantity on input:', error);
+                });
             };
         } else {
             // Если quantity не указан, считаем что товар в наличии (неограниченное количество)
+            // СИНХРОНИЗАЦИЯ: Получаем выбранное количество из единого store
+            let selectedQuantity = 1;
+            // Используем динамический импорт без await, чтобы не блокировать
+            import('./reservationStore.js').then(({ getReservationQuantity }) => {
+                try {
+                    const storedQuantity = getReservationQuantity(productId, 1);
+                    if (storedQuantity >= 1) {
+                        selectedQuantity = storedQuantity;
+                        quantityInput.value = selectedQuantity;
+                    }
+                } catch (error) {
+                    console.error('❌ Error getting reservation quantity from store:', error);
+                }
+            }).catch((error) => {
+                console.error('❌ Error importing reservationStore:', error);
+            });
+            
             quantityInput.max = ''; // Убираем ограничение
-            quantityInput.value = 1;
+            quantityInput.value = selectedQuantity;
             quantityInfo.textContent = 'Введите количество для резервации';
             
-            // Обновляем max при изменении
-            quantityInput.oninput = () => {
+            // Обновляем max при изменении и синхронизируем с store
+            quantityInput.oninput = async () => {
                 const value = parseInt(quantityInput.value) || 1;
+                let validatedValue = value;
                 if (value < 1) {
-                    quantityInput.value = 1;
+                    validatedValue = 1;
+                    quantityInput.value = validatedValue;
                 }
+                
+                // Синхронизируем с единым store (без блокировки)
+                import('./reservationStore.js').then(({ setReservationQuantity }) => {
+                    setReservationQuantity(productId, validatedValue);
+                }).catch((error) => {
+                    console.error('❌ Error syncing reservation quantity on input:', error);
+                });
             };
         }
     } else {
@@ -218,6 +273,7 @@ export function showReservationModal(productId) {
             if (quantityEnabled && quantityContainer && quantityContainer.style.display !== 'none') {
                 quantity = parseInt(quantityInput.value) || 1;
                 
+                // ВАЛИДАЦИЯ: Проверяем количество перед подтверждением резервации
                 // Проверяем количество только если оно указано для товара
                 const hasQuantity = productQuantity !== null && productQuantity !== undefined && productQuantity > 0;
                 if (hasQuantity) {
@@ -235,6 +291,13 @@ export function showReservationModal(productId) {
                     alert('❌ Количество должно быть не менее 1');
                     return;
                 }
+                
+                // Синхронизируем финальное значение с store перед созданием резервации (без блокировки)
+                import('./reservationStore.js').then(({ setReservationQuantity }) => {
+                    setReservationQuantity(productId, quantity);
+                }).catch((error) => {
+                    console.error('❌ Error syncing reservation quantity before creation:', error);
+                });
             } else {
                 console.log('🔒 Using default quantity=1 (quantity selector not shown)');
             }
@@ -263,6 +326,13 @@ export async function createReservation(productId, hours, quantity = 1) {
         const reservation = await createReservationAPI(productId, hours, quantity);
         console.log('✅ Reservation created:', reservation);
         
+        // Очищаем сохраненное количество после успешного создания резервации (без блокировки)
+        import('./reservationStore.js').then(({ clearReservationQuantity }) => {
+            clearReservationQuantity(productId);
+        }).catch((error) => {
+            console.error('❌ Error clearing reservation quantity after creation:', error);
+        });
+        
         const quantityText = quantity > 1 ? ` (${quantity} шт.)` : '';
         alert(`✅ Товар зарезервирован на ${hours} ${hours === 1 ? 'час' : hours === 2 ? 'часа' : 'часов'}${quantityText}`);
         
@@ -285,6 +355,8 @@ export async function createReservation(productId, hours, quantity = 1) {
             if (updateCartUICallback) {
                 await updateCartUICallback();
             }
+            // Обновляем индикаторы активности
+            await updateActivityCounts();
         }, 500);
     } catch (e) {
         console.error('Reservation error:', e);
@@ -331,6 +403,8 @@ export async function cancelReservation(reservationId, productId) {
             if (updateCartUICallback) {
                 await updateCartUICallback();
             }
+            // Обновляем индикаторы активности
+            await updateActivityCounts();
         }, 500);
     } catch (e) {
         console.error('Cancel reservation error:', e);

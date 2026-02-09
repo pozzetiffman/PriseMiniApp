@@ -1,4 +1,5 @@
 import os
+import time
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -6,24 +7,38 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from .db import database, models
 from .db.schema_check import log_schema_status
-from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots, purchases, debug, favorites, clients, sale_orders, cart
+from .routers import products, categories, channels, reservations, context, shop_settings, shop_visits, orders, bots, purchases, debug, favorites, clients, sale_orders, cart, characteristics, deals, pricing
 
-# Проверяем целостность схемы БД перед созданием таблиц
-import time
+from .utils.logging_config import setup_logging, get_logger
+from .utils.log_rate_limit import allow as log_rate_allow
+setup_logging()
+log = get_logger(__name__)
+
 app_start = time.time()
-print(f"🚀 [APP START] Starting application initialization...")
+log.info("APP START: Application initialization")
 log_schema_status()
 
-# Создаем таблицы базы данных
-print(f"🚀 [APP START] Creating database tables...")
+# C) Глобально глушим print() (DISABLE_PY_PRINT=1 по умолчанию) — после startup
+import sys
+import builtins
+_original_print = builtins.print
+if os.getenv("DISABLE_PY_PRINT", "1").strip() in ("1", "true", "yes"):
+    _app_log = get_logger("app")
+    def _silent_print(*args, file=sys.stdout, **kwargs):
+        if file is sys.stderr:
+            _app_log.error(" ".join(str(a) for a in args))
+        elif os.getenv("LOG_LEVEL", "WARNING").upper() == "DEBUG":
+            _app_log.debug(" ".join(str(a) for a in args))
+    builtins.print = _silent_print
+
 db_init_start = time.time()
 models.Base.metadata.create_all(bind=database.engine)
 db_init_time = time.time() - db_init_start
-print(f"⏱️ [APP START] Database tables created in {db_init_time:.3f}s")
+log.info("APP START: Database tables created in %.3fs", db_init_time)
 
 app = FastAPI(title="PriseMiniApp API")
 app_init_time = time.time() - app_start
-print(f"⏱️ [APP START] FastAPI app created in {app_init_time:.3f}s")
+log.info("APP START: FastAPI app created in %.3fs", app_init_time)
 
 # Подключаем статику для изображений
 if not os.path.exists("static/uploads"):
@@ -59,93 +74,74 @@ else:
     async def root():
         return {"message": "PriseMiniApp API is running", "webapp": "not found"}
 
-# Middleware для добавления заголовков к статическим файлам и API endpoints
+DEBUG_MODE = os.getenv("DEBUG", "0") == "1"
+LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING").upper()
+
+# Публичные endpoint'ы (без initData)
+PUBLIC_API_PATHS = {"/api/debug/logs", "/api/health", "/api/test-image"}
+
+
 @app.middleware("http")
 async def add_ngrok_headers(request, call_next):
-    import time
+    from .utils.telegram_auth import request_id_ctx
+    import uuid
+
     request_start = time.time()
-    
-    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем ВСЕ запросы ДО обработки
-    # Это поможет понять, почему GET запросы не доходят до сервера
-    if request.url.path.startswith("/api/"):
-        print(f"📡 [REQUEST] {request.method} {request.url.path} - {request.url.query}")
-        # Для /api/context логируем ВСЕ методы (включая OPTIONS)
-        if request.url.path == "/api/context":
-            headers = dict(request.headers)
-            print(f"🔍 [CONTEXT REQUEST] {request.method} /api/context received")
-            print(f"🔍 [CONTEXT REQUEST] Headers: {list(headers.keys())}")
-            print(f"🔍 [CONTEXT REQUEST] Has X-Telegram-Init-Data: {'X-Telegram-Init-Data' in headers}")
-            if 'X-Telegram-Init-Data' in headers:
-                init_data = headers['X-Telegram-Init-Data']
-                print(f"🔍 [CONTEXT REQUEST] InitData length: {len(init_data)}")
-            print(f"🔍 [CONTEXT REQUEST] Client: {request.client.host if request.client else 'unknown'}")
-            print(f"🔍 [CONTEXT REQUEST] Full URL: {request.url}")
-        # Для /api/context логируем заголовки
-        if request.url.path == "/api/context" and request.method == "GET":
-            headers = dict(request.headers)
-            print(f"🔍 [CONTEXT REQUEST] GET /api/context received")
-            print(f"🔍 [CONTEXT REQUEST] Headers: {list(headers.keys())}")
-            print(f"🔍 [CONTEXT REQUEST] Has X-Telegram-Init-Data: {'X-Telegram-Init-Data' in headers}")
-            if 'X-Telegram-Init-Data' in headers:
-                init_data = headers['X-Telegram-Init-Data']
-                print(f"🔍 [CONTEXT REQUEST] InitData length: {len(init_data)}")
-            print(f"🔍 [CONTEXT REQUEST] Client: {request.client.host if request.client else 'unknown'}")
-        # Для /api/products/ логируем детально
-        elif request.url.path.startswith("/api/products") and request.method == "GET":
-            headers = dict(request.headers)
-            print(f"🔍 [PRODUCTS REQUEST] GET {request.url.path} received")
-            print(f"🔍 [PRODUCTS REQUEST] Query: {request.url.query}")
-            print(f"🔍 [PRODUCTS REQUEST] Headers: {list(headers.keys())}")
-            print(f"🔍 [PRODUCTS REQUEST] Has X-Telegram-Init-Data: {'X-Telegram-Init-Data' in headers}")
-            print(f"🔍 [PRODUCTS REQUEST] Client: {request.client.host if request.client else 'unknown'}")
-        # Для /api/categories/ логируем детально
-        elif request.url.path.startswith("/api/categories") and request.method == "GET":
-            headers = dict(request.headers)
-            print(f"🔍 [CATEGORIES REQUEST] GET {request.url.path} received")
-            print(f"🔍 [CATEGORIES REQUEST] Query: {request.url.query}")
-            print(f"🔍 [CATEGORIES REQUEST] Headers: {list(headers.keys())}")
-            print(f"🔍 [CATEGORIES REQUEST] Has X-Telegram-Init-Data: {'X-Telegram-Init-Data' in headers}")
-            print(f"🔍 [CATEGORIES REQUEST] Client: {request.client.host if request.client else 'unknown'}")
-    
+    headers_dict = dict(request.headers)
+    has_init_data = "X-Telegram-Init-Data" in headers_dict and bool(headers_dict.get("X-Telegram-Init-Data"))
+    init_data_len = len(headers_dict.get("X-Telegram-Init-Data") or "")
+    request_id = headers_dict.get("X-Request-Id") or str(uuid.uuid4())
+    request_id_ctx.set(request_id)
+    request.state.request_id = request_id
+
+    path = request.url.path
+    method = request.method
+    client_ip = request.client.host if request.client else "0.0.0.0"
+
+    if path.startswith("/api/") and path not in PUBLIC_API_PATHS:
+        if not has_init_data:
+            rl_key = f"no_initdata:{path}:{client_ip}"
+            if log_rate_allow(rl_key, 10):
+                log.warning("REQUEST: %s %s missing initData request_id=%s initData_len=0", method, path, request_id)
+        elif LOG_LEVEL == "DEBUG":
+            log.debug("REQUEST: %s %s has_initdata request_id=%s initData_len=%s", method, path, request_id, init_data_len)
+
     try:
-        # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем время ДО вызова call_next
-        # Это поможет понять, не блокируется ли запрос до middleware
-        if request.url.path == "/api/context" and request.method == "GET":
-            print(f"🔍 [CONTEXT REQUEST] About to call_next, elapsed: {time.time() - request_start:.3f}s")
-        
         response = await call_next(request)
-        request_time = time.time() - request_start
-        
-        # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: Логируем время ПОСЛЕ вызова call_next
-        if request.url.path == "/api/context" and request.method == "GET":
-            print(f"🔍 [CONTEXT REQUEST] call_next completed, elapsed: {request_time:.3f}s")
-        
-        # Логируем медленные запросы
-        if request.url.path.startswith("/api/"):
-            if request_time > 2.0:
-                print(f"⚠️ [REQUEST] Slow request: {request.method} {request.url.path} took {request_time:.3f}s")
-            elif request.url.path == "/api/context":
-                print(f"⏱️ [CONTEXT REQUEST] Total time: {request_time:.3f}s")
+        request_time_ms = (time.time() - request_start) * 1000
+        status = response.status_code
+
+        if path.startswith("/api/"):
+            if status >= 400:
+                # Rate-limit noisy 401 (Invalid initData) to 1 per 10s per path+ip
+                if status == 401:
+                    rl_key = f"auth_401:{path}:{client_ip}"
+                    if not log_rate_allow(rl_key, 10):
+                        pass  # skip log
+                    else:
+                        log.warning("REQUEST: %s %s status=401 duration_ms=%.0f request_id=%s", method, path, request_time_ms, request_id)
+                else:
+                    log.warning("REQUEST: %s %s status=%s duration_ms=%.0f request_id=%s", method, path, status, request_time_ms, request_id)
+            elif request_time_ms > 2000:
+                log.warning("REQUEST: Slow %s %s duration_ms=%.0f request_id=%s", method, path, request_time_ms, request_id)
+            elif LOG_LEVEL == "DEBUG":
+                log.info("REQUEST: %s %s status=%s duration_ms=%.0f request_id=%s", method, path, status, request_time_ms, request_id)
         
         # Добавляем заголовки для статических файлов, WebApp и API endpoints изображений
-        if (request.url.path.startswith("/static/") or 
-            request.url.path.startswith("/css/") or 
-            request.url.path.startswith("/js/") or 
-            request.url.path.startswith("/assets/") or
-            request.url.path.startswith("/api/images/") or  # Проксирование изображений через API
-            request.url.path == "/" or
-            request.url.path.endswith(('.html', '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.webp'))):
+        if (path.startswith("/static/") or path.startswith("/css/") or path.startswith("/js/") or
+            path.startswith("/assets/") or path.startswith("/api/images/") or path == "/" or
+            path.endswith(('.html', '.css', '.js', '.jpg', '.jpeg', '.png', '.gif', '.webp'))):
             response.headers["ngrok-skip-browser-warning"] = "69420"
             # Добавляем CORS заголовки
             response.headers["Access-Control-Allow-Origin"] = "*"
             response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = "*"
             # Кэширование для изображений
-            if request.url.path.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) or request.url.path.startswith("/api/images/"):
+            if path.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) or path.startswith("/api/images/"):
                 response.headers["Cache-Control"] = "public, max-age=31536000"
-        
+
         # Для всех API endpoints добавляем CORS заголовки
-        if request.url.path.startswith("/api/"):
+        if path.startswith("/api/"):
             response.headers["Access-Control-Allow-Origin"] = "*"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
             response.headers["Access-Control-Allow-Headers"] = "*"
@@ -154,8 +150,8 @@ async def add_ngrok_headers(request, call_next):
         
         return response
     except Exception as e:
-        request_time = time.time() - request_start
-        print(f"❌ [REQUEST] Error in {request.method} {request.url.path} after {request_time:.3f}s: {str(e)}")
+        request_time_ms = (time.time() - request_start) * 1000
+        log.error("REQUEST: Error %s %s after %.0fms: %s request_id=%s", method, path, request_time_ms, str(e), request_id)
         raise
 
 # Настройка CORS
@@ -169,14 +165,13 @@ app.add_middleware(
     max_age=3600,
 )
 
-# Подключаем роутеры
 router_start = time.time()
-print(f"🚀 [APP START] Including routers...")
 app.include_router(context.router)
 router_time = time.time() - router_start
-print(f"⏱️ [APP START] Routers included in {router_time:.3f}s")
+log.info("APP START: Routers included in %.3fs", router_time)
 app.include_router(categories.router)
 app.include_router(products.router)
+app.include_router(characteristics.router)
 app.include_router(channels.router)
 app.include_router(reservations.router)
 app.include_router(shop_settings.router)
@@ -188,6 +183,8 @@ app.include_router(purchases.router)
 app.include_router(favorites.router)
 app.include_router(cart.router)
 app.include_router(clients.router)
+app.include_router(deals.router)
+app.include_router(pricing.router)
 app.include_router(debug.router)
 
 @app.get("/")
@@ -226,16 +223,7 @@ async def proxy_image(filename: str):
         if alt_path.exists():
             file_path = alt_path
         else:
-            # Логируем для отладки
-            print(f"⚠️ Image not found: {filename}")
-            print(f"   Tried path 1: {file_path}")
-            print(f"   Tried path 2: {alt_path}")
-            print(f"   Backend dir: {backend_dir}")
-            print(f"   Static dir exists: {(backend_dir / 'static' / 'uploads').exists()}")
-            if (backend_dir / "static" / "uploads").exists():
-                # Показываем список файлов в директории
-                files = list((backend_dir / "static" / "uploads").glob("*"))
-                print(f"   Files in directory: {[f.name for f in files[:10]]}")
+            log.warning("Image not found: %s paths=%s,%s", filename, file_path, alt_path)
             
             # Вместо 404 возвращаем placeholder изображение (1x1 прозрачный PNG)
             # Это позволит фронтенду обработать отсутствие изображения корректно
