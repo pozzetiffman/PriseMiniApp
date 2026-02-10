@@ -74,13 +74,22 @@ function setupGlobalFunctions() {
 }
 
 /**
- * Закрытие страницы заявки на продажу, возврат на product-page
+ * Закрытие страницы заявки на продажу. Возврат на страницу из dataset.returnTo (по умолчанию product-page).
+ * После этапа 4: сначала снимаем is-active и скрываем, затем hideAllPages() и показываем только целевую страницу.
  */
 export function closePurchasePage() {
     const purchasePage = document.getElementById('purchase-page');
-    const productPage = document.getElementById('product-page');
-    if (purchasePage) purchasePage.style.display = 'none';
-    if (productPage) productPage.style.display = 'block';
+    if (purchasePage) {
+        purchasePage.classList.remove('is-active');
+        purchasePage.style.display = 'none';
+    }
+    const returnToId = (purchasePage && purchasePage.dataset.returnTo) || 'product-page';
+    hideAllPages();
+    const target = document.getElementById(returnToId);
+    if (target) {
+        target.classList.add('is-active');
+        target.style.display = 'block';
+    }
 }
 
 /**
@@ -97,7 +106,10 @@ export function showPurchasePage(prod) {
         alert('❌ Страница заявки на продажу не найдена');
         return;
     }
+    // Куда вернуться по «Назад»: с карточки товара — в product-page (state-класс, этап 4)
+    purchasePage.dataset.returnTo = 'product-page';
     hideAllPages();
+    purchasePage.classList.add('is-active');
     purchasePage.style.display = 'block';
     purchasePage.scrollTop = 0;
     const backBtn = document.getElementById('purchase-page-back');
@@ -191,10 +203,11 @@ export function showPurchaseModal(prod) {
     }
     setupPurchaseForm(prod);
     const closeBtn = document.querySelector('.purchase-close');
-    if (closeBtn) closeBtn.onclick = () => { purchaseModal.style.display = 'none'; };
+    if (closeBtn) closeBtn.onclick = () => { purchaseModal.classList.remove('is-open'); purchaseModal.style.display = 'none'; };
     purchaseModal.onclick = (e) => {
-        if (e.target === purchaseModal) purchaseModal.style.display = 'none';
+        if (e.target === purchaseModal) { purchaseModal.classList.remove('is-open'); purchaseModal.style.display = 'none'; }
     };
+    purchaseModal.classList.add('is-open');
     purchaseModal.style.display = 'flex';
 }
 
@@ -252,9 +265,9 @@ export async function submitPurchaseForm(productId) {
         const { safeAlert } = await import('./telegram.js');
         await safeAlert('✅ Заявка на продажу успешно отправлена!');
         
-        // Закрываем страницу или модальное окно заявки на продажу
+        // Закрываем страницу или модальное окно заявки на продажу (проверка по is-active)
         const purchasePage = document.getElementById('purchase-page');
-        if (purchasePage && (purchasePage.style.display === 'block' || purchasePage.style.display === 'flex')) {
+        if (purchasePage && purchasePage.classList.contains('is-active')) {
             closePurchasePage();
         } else {
             const purchaseModal = document.getElementById('purchase-modal');

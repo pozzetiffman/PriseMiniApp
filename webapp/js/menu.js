@@ -87,21 +87,39 @@ export function setupMainMenuButton(showProfile = false, showSettings = false, s
         menuButton.style.display = 'none';
     }
     
-    // Настраиваем видимость элементов меню
+    // Настраиваем видимость элементов меню (класс .is-hidden вместо только inline style)
     const profileItem = document.getElementById('menu-item-profile');
     const settingsItem = document.getElementById('menu-item-settings');
     const adminItem = document.getElementById('menu-item-admin');
     
     if (profileItem) {
-        profileItem.style.display = showProfile ? 'flex' : 'none';
+        if (showProfile) {
+            profileItem.classList.remove('is-hidden');
+            profileItem.style.display = 'flex';
+        } else {
+            profileItem.classList.add('is-hidden');
+            profileItem.style.display = 'none';
+        }
     }
     
     if (settingsItem) {
-        settingsItem.style.display = showSettings ? 'flex' : 'none';
+        if (showSettings) {
+            settingsItem.classList.remove('is-hidden');
+            settingsItem.style.display = 'flex';
+        } else {
+            settingsItem.classList.add('is-hidden');
+            settingsItem.style.display = 'none';
+        }
     }
     
     if (adminItem) {
-        adminItem.style.display = showAdmin ? 'flex' : 'none';
+        if (showAdmin) {
+            adminItem.classList.remove('is-hidden');
+            adminItem.style.display = 'flex';
+        } else {
+            adminItem.classList.add('is-hidden');
+            adminItem.style.display = 'none';
+        }
     }
 }
 
@@ -123,7 +141,23 @@ function openMenu() {
     if (!menuDropdown || !line1 || !line2) return;
     
     menuOpen = true;
+    // Устанавливаем display: block и гарантируем правильный z-index через inline стили
+    // (CSS селектор [style*="display: block"] должен сработать, но на всякий случай явно задаем z-index)
     menuDropdown.style.display = 'block';
+    // НЕ задаем z-index через inline стили - пусть CSS правило с !important работает
+    // Это гарантирует, что меню всегда будет выше страниц (z-index: 1000)
+    
+    // КРИТИЧНО: Убеждаемся, что backdrop имеет правильные стили
+    // Удаляем все inline стили с backdrop, чтобы CSS правила с !important работали правильно
+    if (menuBackdrop) {
+        // Удаляем все inline стили, которые могли быть установлены где-то еще
+        menuBackdrop.style.pointerEvents = '';
+        menuBackdrop.style.opacity = '';
+        menuBackdrop.style.display = '';
+        // CSS правила с !important должны установить правильные значения:
+        // - opacity: 1 !important (из правила для открытого меню)
+        // - pointer-events: auto !important (из правила для открытого меню)
+    }
     
     // Обновляем индикаторы активности при открытии меню
     // (чтобы всегда показывать актуальное состояние)
@@ -148,8 +182,9 @@ function openMenu() {
 
 /**
  * Закрытие меню
+ * Экспортируется для использования в других модулях (например, при открытии страниц)
  */
-function closeMenu() {
+export function closeMenu() {
     if (!menuDropdown || !line1 || !line2) return;
     
     menuOpen = false;

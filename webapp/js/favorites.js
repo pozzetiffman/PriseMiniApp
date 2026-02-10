@@ -1,6 +1,6 @@
 // Модуль для работы с избранным
 import { API_BASE, getBaseHeaders } from './api.js';
-import { hideAllPages } from './operationsBase.js';
+import { goToMainContent, hideAllPages } from './operationsBase.js';
 import { renderProducts, showProductModal } from './products.js';
 import {
     getBasePrice,
@@ -9,11 +9,25 @@ import {
     hasDiscount
 } from './utils/priceUtils.js';
 
-// Кэш избранных товаров
+// Кэш избранных товаров (заполняется только из syncFavoritesCache / getFavorites)
 let favoritesCache = new Set();
 
 // Счетчик избранных товаров
 let favoritesCount = 0;
+
+/**
+ * Возвращает копию набора id избранных товаров (по данным последнего sync/list).
+ */
+export function getFavoritesIdsSet() {
+    return new Set(favoritesCache);
+}
+
+/**
+ * Проверить по кэшу, в избранном ли товар (без запроса к API).
+ */
+export function isFavoriteCached(productId) {
+    return favoritesCache.has(productId);
+}
 
 /**
  * Проверить, добавлен ли товар в избранное
@@ -258,28 +272,29 @@ export async function openFavoritesPage() {
         
         // Единый способ: скрыть все страницы, затем показать избранное
         hideAllPages();
+        favoritesPage.classList.add('is-active');
         favoritesPage.style.display = 'block';
         
-        // Настраиваем кнопку "Назад" при открытии страницы (старая кнопка, если есть)
+        // Кнопки «Назад»/«Закрыть» — вешаем один раз (data-bound), чтобы не дублировать обработчики
         const favoritesPageBack = document.getElementById('favorites-page-back');
-        if (favoritesPageBack) {
-            favoritesPageBack.onclick = (e) => {
+        if (favoritesPageBack && !favoritesPageBack.dataset.bound) {
+            favoritesPageBack.dataset.bound = '1';
+            favoritesPageBack.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 closeFavoritesPage();
-            };
+            });
         }
-        
-        // Настраиваем кнопку закрытия в верхнем меню
         const favoritesPageClose = document.getElementById('favorites-page-close');
-        if (favoritesPageClose) {
-            favoritesPageClose.onclick = (e) => {
+        if (favoritesPageClose && !favoritesPageClose.dataset.bound) {
+            favoritesPageClose.dataset.bound = '1';
+            favoritesPageClose.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 closeFavoritesPage();
-            };
+            });
         }
-        
+
         // Обновляем счетчик в шапке при открытии страницы
         updateFavoritesCountUI();
         
@@ -291,26 +306,16 @@ export async function openFavoritesPage() {
 }
 
 /**
- * Закрыть страницу избранного
+ * Закрыть страницу избранного. Сначала снимаем is-active и скрываем, затем goToMainContent().
  */
 export async function closeFavoritesPage() {
     const favoritesPage = document.getElementById('favorites-page');
-    const mainContent = document.getElementById('main-content');
-    const productPage = document.getElementById('product-page');
-    const cartPage = document.getElementById('cart-page');
-    
     if (favoritesPage) {
-        // Скрываем все страницы сначала
-        if (productPage) productPage.style.display = 'none';
-        if (cartPage) cartPage.style.display = 'none';
+        favoritesPage.classList.remove('is-active');
         favoritesPage.style.display = 'none';
-        
-        // Показываем главный контент
-        if (mainContent) {
-            mainContent.style.display = 'block';
-        }
     }
-    
+    goToMainContent();
+
     // Синхронизируем кэш избранного и обновляем состояние сердечек на главной странице
     try {
         // Сначала синхронизируем кэш
@@ -715,8 +720,7 @@ export async function loadFavoritesPage() {
                             // Если товар удален из избранного, удаляем карточку со страницы
                             if (!result.is_favorite) {
                                 clonedCard.remove();
-                                // Обновляем счетчик
-                                await updateFavoritesCount();
+                                // Счетчик уже обновлен внутри toggleFavorite
                                 // Обновляем состояние на главной странице
                                 await refreshFavoritesOnMainPage();
                                 // Проверяем, остались ли еще товары
@@ -877,8 +881,7 @@ export async function loadFavoritesPage() {
             });
         }
         
-        // Обновляем счетчик
-        await updateFavoritesCount();
+        // Счетчик уже установлен из products.length и updateFavoritesCountUI() выше
     } catch (error) {
         console.error('❌ Error loading favorites page:', error);
         const favoritesGrid = document.getElementById('favorites-items');

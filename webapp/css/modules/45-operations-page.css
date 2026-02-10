@@ -1,0 +1,44 @@
+/* Stage 6 batch 1: extracted from 40-pages.css (move-only). */
+
+/* ========== Stage 5 batch 3: из 99-legacy — Operation detail Deals UI ========== */
+/* Deals UI */
+.operation-detail-deal-items {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.operation-detail-deal-item-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-glass);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+.operation-detail-deal-item-info {
+    flex: 1;
+    min-width: 0;
+}
+.operation-detail-deal-item-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0 0 4px 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+.operation-detail-deal-item-price {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+.operation-item-card-deal .operation-item-info {
+    flex: 1;
+    min-width: 0;
+}
+

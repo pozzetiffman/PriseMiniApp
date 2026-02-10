@@ -18,7 +18,7 @@
             </div>
             <div id="search-container" class="search-container">
                 <input type="text" id="search-input" class="search-input" placeholder="🔍 Поиск товаров..." enterkeyhint="done" />
-                <button id="card-view-toggle-button" class="card-view-toggle-button" style="display: none;">≡</button>
+                <button id="card-view-toggle-button" class="card-view-toggle-button" style="display: none;" aria-hidden="true">≡</button>
             </div>
             <div id="products-grid" class="products-grid-view">
                 <!-- Товары будут здесь -->
@@ -1514,8 +1514,8 @@
         </div>
         <h1 id="user-name">Загрузка...</h1>
         <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
-            <button id="cart-button" class="cart-button" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
-            <button id="favorites-button" class="favorites-button" style="display: none;">
+            <button id="cart-button" class="cart-button is-hidden" style="display: none;">🛒 (<span id="cart-count">0</span>)</button>
+            <button id="favorites-button" class="favorites-button is-hidden" style="display: none;">
                 <svg viewBox="0 0 24 24" class="heart-icon-menu" xmlns="http://www.w3.org/2000/svg">
                     <path class="heart-path-menu" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                 </svg>

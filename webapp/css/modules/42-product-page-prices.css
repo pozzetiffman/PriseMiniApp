@@ -1,0 +1,218 @@
+/* Stage 7 batch 2: extracted from 40-product-page.css (move-only). */
+
+/* Карточка цен на странице товара */
+#product-page-price-container.product-page-price-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 16px;
+    min-width: 0;
+    padding: 16px 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+/* Строки цен на странице товара: подпись слева, цена справа */
+#product-page-price-container .pp-price-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+#product-page-price-container .pp-price-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 13px;
+    color: var(--text-hint);
+}
+
+#product-page-price-container .pp-price-value {
+    margin-left: auto;
+    margin-right: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    text-align: right;
+    white-space: nowrap;
+    gap: 6px;
+    font-weight: 700;
+}
+
+#product-page-price-container .pp-price-value-main {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+#product-page-price-container .pp-price-value-main .product-price,
+#product-page-price-container .pp-price-value-main .product-card-icon,
+#product-page-price-container .pp-price-value-main .product-cash-price,
+#product-page-price-container .pp-price-value-main .product-cash-icon {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+#product-page-price-container .pp-price-value .product-card-icon,
+#product-page-price-container .pp-price-value .product-cash-icon {
+    margin-left: 6px;
+    margin-right: 0;
+    flex-shrink: 0;
+}
+
+#product-page-price-container .pp-discount-badge {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+#product-page-price-container .pp-savings-row {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-glass);
+}
+
+
+/* Контейнер цен — внутренние элементы (размеры шрифтов) */
+
+/* Размеры цен на странице товара — в 2 раза меньше, чем на grid/операциях */
+.product-page-price-container .product-price {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.product-page-price-container .product-cash-price {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.product-page-price-container .prices--has-cash .product-price {
+    color: var(--color-price-cash);
+}
+
+.product-page-price-container .prices--no-cash .product-price {
+    color: var(--color-price-card);
+}
+
+.product-page-price-container .prices--has-cash .product-card-icon {
+    color: var(--color-price-cash);
+}
+
+.product-page-price-container .prices--no-cash .product-card-icon {
+    color: var(--color-price-card);
+}
+
+.product-page-price-container .old-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-hint);
+    text-decoration: line-through;
+}
+
+.product-page-quantity {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-radius: 12px;
+    border: 1px solid var(--border-glass);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.product-page-reservation-status {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    padding: 12px;
+    background: rgba(255, 193, 7, 0.1);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.product-page-reservation-button {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.product-page-reservation-button .reserve-btn {
+    width: 100%;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+
+/* ========== Stage 5 batch 3: из 99-legacy — Product page price container fix ========== */
+/* Product Page — FIX: stretch price rows to full width and push values to right edge */
+#product-page-price-container.product-page-price-container {
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+#product-page-price-container .prices-wrap {
+    width: 100%;        /* ключ: обертка цен растягивается */
+    align-self: stretch; /* ключ: игнорируем align-items:flex-start родителя */
+}
+
+#product-page-price-container .pp-price-row {
+    width: 100%;        /* строка на всю ширину */
+    align-self: stretch; /* ключ: растягиваем flex-item */
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* гарантированно: слева/справа по краям */
+    gap: 10px;
+}
+
+#product-page-price-container .pp-price-label {
+    margin: 0;
+    padding: 0;
+    flex: 0 1 auto;                /* подпись не должна "выталкивать" правый край */
+    min-width: 0;
+}
+
+#product-page-price-container .pp-price-value {
+    margin: 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    text-align: right;
+    white-space: nowrap;
+    flex: 0 0 auto;                 /* значение фиксируется по контенту */
+}
+
+#product-page-price-container .pp-price-value .pp-price-value-main {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    white-space: nowrap;
+}
+
+#product-page-price-container .pp-price-value .product-card-icon,
+#product-page-price-container .pp-price-value .product-cash-icon {
+    margin-left: 6px;
+    margin-right: 0;
+    flex-shrink: 0;
+}
+

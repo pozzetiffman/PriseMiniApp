@@ -1,0 +1,36 @@
+:root {
+    /* Liquid Glass стиль с темным оттенком (Telegram iOS) */
+    --tg-theme-bg-color: #1c1c1e;
+    --tg-theme-text-color: #ffffff;
+    --tg-theme-hint-color: #8e8e93;
+    --tg-theme-link-color: #5ac8fa;
+    --tg-theme-button-color: #5ac8fa;
+    --tg-theme-button-text-color: #ffffff;
+    --tg-theme-secondary-bg-color: #2c2c2e;
+    
+    /* Liquid Glass цвета */
+    --bg-primary: rgba(28, 28, 30, 0.8);
+    --bg-secondary: rgba(44, 44, 46, 0.6);
+    --bg-glass: rgba(58, 58, 60, 0.75);
+    --bg-glass-light: rgba(72, 72, 74, 0.85);
+    --text-primary: #ffffff;
+    --text-secondary: #ebebf5;
+    --text-hint: #8e8e93;
+    --border-color: rgba(255, 255, 255, 0.1);
+    --border-glass: rgba(255, 255, 255, 0.15);
+    --shadow-light: rgba(0, 0, 0, 0.3);
+    --shadow-medium: rgba(0, 0, 0, 0.5);
+    --shadow-glass: rgba(0, 0, 0, 0.4);
+    
+    /* Design tokens: цены и акцент */
+    --color-price-cash: #E35E45;
+    --color-price-card: #00A82E;
+    --color-accent-rgb: 90, 200, 250;
+    --bg-base: #1c1c1e;
+    --bg-elevated: #2c2c2e;
+    
+    /* Blur эффекты */
+    --blur-small: blur(10px);
+    --blur-medium: blur(20px);
+    --blur-large: blur(30px);
+}

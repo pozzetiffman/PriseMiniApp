@@ -1,0 +1,3187 @@
+/* Модальное окно */
+.modal {
+    display: none; /* По умолчанию скрыто */
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background-color: rgba(0,0,0,0.7);
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    overflow-y: auto;
+    /* Flex для центрирования модального окна (применяется когда modal открыт) */
+    justify-content: center;
+    align-items: flex-start;
+    /* Safe-area ТОЛЬКО здесь, не в body и не в modal-content */
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 12px);
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + 12px);
+    padding-left: 0;
+    padding-right: 0;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+/* Этап 4: видимость по state-классу; inline style оставляем как fallback в JS */
+.modal.is-open {
+    display: flex !important;
+}
+
+.modal::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.modal-content {
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    width: 100%;
+    max-width: 420px;
+    min-width: 280px;
+    padding: 24px;
+    border-radius: 24px;
+    position: relative;
+    animation: modalSlideInFromBottom 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 20px 60px var(--shadow-glass),
+                0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    border: 1px solid var(--border-glass);
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 100%;
+    margin: 0 20px;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.modal-content::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+@keyframes modalSlideInFromBottom {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Кнопка меню (Apple-like Menu Morph) */
+.menu-btn {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.04),
+        0 10px 28px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10012;
+    align-self: center;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.menu-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.06),
+        0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.menu-btn:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.menu-btn svg {
+    width: 22px;
+    height: 22px;
+}
+
+.menu-btn svg line {
+    stroke: rgba(255, 255, 255, 0.85);
+    stroke-width: 2;
+    stroke-linecap: round;
+    transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Выпадающее меню на всю ширину экрана */
+.main-menu-dropdown {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10008;
+    pointer-events: none;
+    /* КРИТИЧНО: НЕ создаем новый stacking context здесь, чтобы меню всегда было в корневом контексте */
+    /* НЕТ transform, filter, opacity < 1, will-change, isolation на самом контейнере */
+}
+
+/* Открытое меню — выше header (10010) и всех страниц (1000), чтобы backdrop и клики работали; кнопка меню 10012 остаётся сверху */
+.main-menu-dropdown[style*="display: block"],
+.main-menu-dropdown[style*="display:block"],
+.main-menu-dropdown[style*="display: block;"],
+.main-menu-dropdown[style*="display:block;"] {
+    z-index: 10011 !important; /* !important чтобы страницы (z-index: 1000) не перекрывали меню */
+    pointer-events: auto !important; /* !important чтобы гарантировать кликабельность */
+}
+
+.main-menu-dropdown-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5) !important; /* !important чтобы гарантировать цвет фона */
+    backdrop-filter: blur(8px) !important; /* !important чтобы гарантировать blur */
+    -webkit-backdrop-filter: blur(8px) !important;
+    opacity: 0; /* По умолчанию backdrop скрыт (БЕЗ !important, чтобы правило для открытого меню могло переопределить) */
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* КРИТИЧНО: backdrop должен быть видимым только когда родитель открыт */
+    pointer-events: none; /* По умолчанию backdrop не перехватывает клики */
+    /* КРИТИЧНО: НЕ создаем новый stacking context здесь, чтобы backdrop был в том же контексте что и меню */
+    /* НЕТ transform, filter (кроме backdrop-filter), opacity < 1 уже задан выше, will-change, isolation */
+}
+
+/* Открытое меню — backdrop становится видимым и кликабельным */
+/* Используем множественные селекторы для надежности */
+.main-menu-dropdown[style*="display: block"] .main-menu-dropdown-backdrop,
+.main-menu-dropdown[style*="display:block"] .main-menu-dropdown-backdrop,
+.main-menu-dropdown[style*="display: block;"] .main-menu-dropdown-backdrop,
+.main-menu-dropdown[style*="display:block;"] .main-menu-dropdown-backdrop,
+.main-menu-dropdown:not([style*="display: none"]) .main-menu-dropdown-backdrop:not([style*="opacity: 0"]) {
+    opacity: 1 !important; /* !important чтобы гарантировать видимость backdrop */
+    pointer-events: auto !important; /* Backdrop должен перехватывать клики для закрытия меню */
+}
+
+.main-menu-dropdown-content {
+    position: absolute;
+    bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + 40px);
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: rgba(28, 28, 30, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0;
+    padding: 20px 0;
+    padding-top: calc(20px + 24px);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.main-menu-dropdown[style*="display: block"] .main-menu-dropdown-content,
+.main-menu-dropdown[style*="display:block"] .main-menu-dropdown-content,
+.main-menu-dropdown[style*="display: block;"] .main-menu-dropdown-content,
+.main-menu-dropdown[style*="display:block;"] .main-menu-dropdown-content {
+    transform: translateY(0) !important; /* !important чтобы гарантировать видимость контента */
+}
+
+.main-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.main-menu-item:last-child {
+    border-bottom: none;
+}
+
+.main-menu-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.main-menu-item:active {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(0.98);
+}
+
+.main-menu-item-icon {
+    font-size: 24px;
+    width: 32px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.main-menu-item-text {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+/* Адаптивные стили для мобильных устройств */
+@media (max-width: 480px) {
+    .menu-btn {
+        width: 40px;
+        height: 40px;
+        min-height: 40px;
+        border-radius: 14px;
+        display: grid !important;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        vertical-align: middle;
+        line-height: 1;
+    }
+    
+    .menu-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+    
+    .main-menu-dropdown-content {
+        padding: 16px 0;
+    }
+    
+    .main-menu-item {
+        padding: 18px 20px;
+        font-size: 17px;
+    }
+    
+    .main-menu-item-icon {
+        font-size: 22px;
+        width: 28px;
+    }
+}
+
+/* Стили для личного кабинета (старые кнопки - оставляем для совместимости) */
+.profile-button,
+.settings-button,
+.admin-button {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.15) 0%, rgba(var(--color-accent-rgb), 0.08) 100%);
+    border: 1px solid rgba(var(--color-accent-rgb), 0.3);
+    color: var(--text-primary);
+    padding: 0;
+    border-radius: 16px;
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(var(--color-accent-rgb), 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+    align-self: center;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.profile-button:hover,
+.settings-button:hover,
+.admin-button:hover {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.25) 0%, rgba(var(--color-accent-rgb), 0.15) 100%);
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    box-shadow: 0 6px 24px rgba(var(--color-accent-rgb), 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-2px);
+}
+
+.profile-button:active,
+.settings-button:active,
+.admin-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.main-menu-item.is-hidden {
+    display: flex !important;
+    opacity: 0.3;
+    pointer-events: none;
+    cursor: default;
+}
+
+.settings-button {
+    background: linear-gradient(135deg, rgba(255, 149, 0, 0.15) 0%, rgba(255, 149, 0, 0.08) 100%);
+    border: 1px solid rgba(255, 149, 0, 0.3);
+    box-shadow: 0 4px 16px rgba(255, 149, 0, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
+
+.settings-button:hover {
+    background: linear-gradient(135deg, rgba(255, 149, 0, 0.25) 0%, rgba(255, 149, 0, 0.15) 100%);
+    border-color: rgba(255, 149, 0, 0.5);
+    box-shadow: 0 6px 24px rgba(255, 149, 0, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+.profile-button:hover {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.25) 0%, rgba(var(--color-accent-rgb), 0.15) 100%);
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    box-shadow: 0 6px 24px rgba(var(--color-accent-rgb), 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-2px);
+}
+
+.profile-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+/* Кнопка переключения вида карточек */
+.card-view-toggle-button {
+    background: linear-gradient(135deg, rgba(255, 149, 0, 0.15) 0%, rgba(255, 149, 0, 0.08) 100%);
+    border: 1px solid rgba(255, 149, 0, 0.3);
+    color: var(--text-primary);
+    padding: 0;
+    border-radius: 16px;
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.card-view-toggle-button:hover {
+    background: linear-gradient(135deg, rgba(255, 149, 0, 0.25) 0%, rgba(255, 149, 0, 0.15) 100%);
+    border-color: rgba(255, 149, 0, 0.5);
+    box-shadow: 0 6px 24px rgba(255, 149, 0, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-2px);
+}
+
+.card-view-toggle-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.card-view-toggle-button:not(.is-visible) {
+    display: flex;
+    opacity: 0.3;
+    pointer-events: none;
+    cursor: default;
+}
+.card-view-toggle-button.is-visible {
+    display: flex;
+    opacity: 1;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* Модальное окно личного кабинета */
+.profile-modal-content {
+    max-width: 500px;
+    width: 100%;
+    padding: 0;
+    overflow-y: auto;
+    background: var(--bg-glass);
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-height: 100%;
+    margin: 0 20px;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.profile-modal-content::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.profile-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    padding: 24px 24px 16px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-content {
+    padding: 24px;
+}
+
+.profile-avatar-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.profile-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(var(--color-accent-rgb), 0.3);
+    box-shadow: 0 8px 24px rgba(var(--color-accent-rgb), 0.2);
+}
+
+.profile-avatar-placeholder {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.2) 0%, rgba(var(--color-accent-rgb), 0.1) 100%);
+    border: 3px solid rgba(var(--color-accent-rgb), 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: var(--text-primary);
+    box-shadow: 0 8px 24px rgba(var(--color-accent-rgb), 0.2);
+}
+
+.profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.profile-field label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-hint);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.profile-value {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-primary);
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-height: 24px;
+}
+
+.profile-admin-button {
+    width: 100%;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.2) 0%, rgba(var(--color-accent-rgb), 0.1) 100%);
+    border: 1px solid rgba(var(--color-accent-rgb), 0.3);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    box-shadow: 0 4px 16px rgba(var(--color-accent-rgb), 0.15);
+}
+
+.profile-admin-button:hover {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.3) 0%, rgba(var(--color-accent-rgb), 0.2) 100%);
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    box-shadow: 0 6px 24px rgba(var(--color-accent-rgb), 0.25);
+    transform: translateY(-2px);
+}
+
+.profile-admin-button:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Адаптивные стили для личного кабинета */
+@media (max-width: 768px) {
+    .profile-modal-content {
+        max-width: 95%;
+        width: 100%;
+        margin: 0 10px;
+        max-height: 100%;
+    }
+    
+    .profile-title {
+        font-size: 20px;
+        padding: 20px 20px 12px 20px;
+    }
+    
+    .profile-content {
+        padding: 20px;
+    }
+    
+    .profile-avatar,
+    .profile-avatar-placeholder {
+        width: 100px;
+        height: 100px;
+    }
+    
+    .profile-avatar-placeholder {
+        font-size: 40px;
+    }
+    
+    .profile-value {
+        font-size: 16px;
+        padding: 10px 14px;
+    }
+    
+    .profile-page {
+        padding: 0;
+    }
+    
+    .profile-page-content {
+        padding: 20px;
+    }
+    
+    .profile-button,
+    .settings-button,
+    .admin-button {
+        min-width: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
+    
+    .card-view-toggle-button {
+        min-width: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
+}
+
+/* ========== СТРАНИЦА ЛИЧНОГО КАБИНЕТА (отдельная страница вместо модального окна) ========== */
+.profile-page {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    /* Фон под общий стиль проекта - градиент как в body */
+    background: linear-gradient(135deg, var(--bg-base) 0%, var(--bg-elevated) 50%, var(--bg-base) 100%);
+    background-attachment: scroll;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.profile-page::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(var(--color-accent-rgb), 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(var(--color-accent-rgb), 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.profile-page::-webkit-scrollbar {
+    display: none;
+}
+
+#profile-page.is-active {
+    display: block !important;
+}
+
+/* Верхнее меню страницы профиля (аналогично странице товара) */
+.profile-new-top-menu {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    padding-top: calc(20px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
+    padding-left: calc(16px + env(safe-area-inset-left, 0px));
+    margin: 0;
+    background: transparent;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1001;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#profile-page.is-active .profile-new-top-menu {
+    display: flex;
+}
+
+/* Фон меню при прокрутке вниз */
+.profile-new-top-menu.scrolled {
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-bottom: 1px solid var(--border-glass);
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+.profile-top-menu-close {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 600;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1002;
+    flex-shrink: 0;
+}
+
+.profile-top-menu-close:hover {
+    background: var(--bg-glass-light);
+}
+
+.profile-top-menu-close:active {
+    transform: scale(0.95);
+    background: var(--bg-glass-light);
+}
+
+.profile-top-menu-title-container {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1001;
+}
+
+.profile-top-menu-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.profile-top-menu-right {
+    flex: 0 0 40px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.profile-page-content {
+    padding: 0 16px 20px 16px;
+    padding-top: calc(56px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 4px);
+    padding-bottom: calc(20px + var(--tg-safe-area-inset-bottom, 0px));
+    max-width: 600px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+}
+
+.profile-page .profile-content {
+    padding: 0;
+}
+
+.profile-page .profile-avatar-container {
+    margin-bottom: 32px;
+    margin-top: 20px;
+}
+
+.profile-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 24px 0;
+    width: 100%;
+}
+
+.profile-section {
+    margin-top: 24px;
+}
+
+.profile-section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+}
+
+.profile-page .profile-value-editable {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    font-size: 16px;
+    box-sizing: border-box;
+    font-family: inherit;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-page .profile-value-editable:focus {
+    outline: none;
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.1);
+}
+
+.profile-page .profile-value-editable::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Стили для раздела "Мои заказы и операции" */
+.profile-orders-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-orders-tab {
+    flex: 1;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-hint, rgba(255, 255, 255, 0.6));
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: center;
+}
+
+.profile-orders-tab.active {
+    color: var(--text-primary, #ffffff);
+    border-bottom-color: rgba(var(--color-accent-rgb), 0.8);
+}
+
+.profile-orders-tab:hover {
+    color: var(--text-primary, #ffffff);
+}
+
+.profile-orders-content {
+    margin-top: 16px;
+}
+
+.profile-orders-section {
+    display: none;
+}
+
+.profile-orders-section.active {
+    display: block;
+}
+
+.profile-orders-subtabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.profile-orders-subtab {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: var(--text-hint, rgba(255, 255, 255, 0.6));
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+}
+
+.profile-orders-subtab.active {
+    background: rgba(var(--color-accent-rgb), 0.2);
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    color: var(--text-primary, #ffffff);
+}
+
+.profile-orders-subtab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary, #ffffff);
+}
+
+.profile-orders-items {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.profile-order-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-order-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.profile-order-item[data-type="reserve"] {
+    border-left: 3px solid #FFA500;
+}
+
+.profile-order-item[data-type="order"] {
+    border-left: 3px solid #4CAF50;
+}
+
+.profile-order-item[data-type="sale"] {
+    border-left: 3px solid #9C27B0;
+}
+
+.profile-order-item[data-type="sale-order"] {
+    border-left: 3px solid #2196F3;
+}
+
+.profile-order-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.profile-order-info h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #ffffff);
+    margin: 0;
+}
+
+.profile-order-price {
+    font-size: 14px;
+    color: var(--text-primary, #ffffff);
+    font-weight: 500;
+}
+
+.profile-order-time {
+    font-size: 13px;
+    color: var(--text-hint, rgba(255, 255, 255, 0.6));
+}
+
+.profile-order-date {
+    font-size: 12px;
+    color: var(--text-hint, rgba(255, 255, 255, 0.5));
+    margin-top: 4px;
+}
+
+.order-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 8px;
+    align-self: flex-start;
+}
+
+.order-badge-active {
+    background: rgba(255, 165, 0, 0.2);
+    color: #FFA500;
+    border: 1px solid rgba(255, 165, 0, 0.3);
+}
+
+.order-badge-completed {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4CAF50;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.order-badge-cancelled {
+    background: rgba(244, 67, 54, 0.2);
+    color: #F44336;
+    border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+/* ========== КНОПКИ-КАРТОЧКИ ОПЕРАЦИЙ В ПРОФИЛЕ ========== */
+.profile-operations-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.profile-operation-card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 12px 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: left;
+    min-height: auto;
+    gap: 12px;
+}
+
+.profile-operation-card:hover {
+    background: var(--bg-glass-light);
+    border-color: rgba(var(--color-accent-rgb), 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px var(--shadow-glass);
+}
+
+.profile-operation-card:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.profile-operation-icon {
+    font-size: 24px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+    width: 32px;
+    text-align: center;
+}
+
+.profile-operation-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.profile-operation-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary, #ffffff);
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+
+.profile-operation-subtitle {
+    font-size: 12px;
+    color: var(--text-hint, rgba(255, 255, 255, 0.6));
+    line-height: 1.3;
+}
+
+/* Индикаторы активности */
+.activity-indicator {
+    position: absolute;
+    background: rgba(255, 59, 48, 0.95);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: 0 0 0 2px var(--bg-primary, var(--bg-base));
+}
+
+/* Индикатор на иконке выпадающего меню (main-menu-button) (без анимации) */
+.activity-indicator-menu {
+    top: 8px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    box-shadow: 0 0 0 2px var(--bg-primary, var(--bg-base));
+    /* Без анимации для основного меню */
+}
+
+/* Индикатор на пункте "Личный кабинет" внутри выпадающего меню (без анимации) */
+.activity-indicator-menu-item {
+    top: 12px;
+    right: 12px;
+    width: 8px;
+    height: 8px;
+    box-shadow: 0 0 0 2px var(--bg-primary, var(--bg-base));
+    /* Без анимации для пункта меню */
+}
+
+/* Индикатор на кнопках в профиле (с анимацией) */
+.activity-indicator-profile {
+    animation: activityPulse 2s ease-in-out infinite;
+}
+
+@keyframes activityPulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.1);
+    }
+}
+
+/* Индикатор на кнопках в профиле */
+.activity-indicator-profile {
+    top: 12px;
+    right: 12px;
+    width: 10px;
+    height: 10px;
+    box-shadow: 0 0 0 2px var(--bg-glass, rgba(58, 58, 60, 0.75));
+}
+
+/* Позиционирование для кнопок профиля */
+.profile-operation-card {
+    position: relative;
+}
+
+/* Позиционирование для иконки выпадающего меню */
+.menu-btn {
+    position: relative; /* Уже есть в стилях, но для ясности */
+}
+
+/* Позиционирование для пункта "Личный кабинет" в выпадающем меню */
+.main-menu-item {
+    position: relative;
+}
+
+/* ========== СТРАНИЦЫ ОПЕРАЦИЙ (эталон: profile-page) ========== */
+/* fixed + inset: 0 — скролл на контейнере страницы; min-height: 100vh — страница всегда прокручиваема */
+.operation-page {
+    display: none;
+    position: fixed;
+    inset: 0;
+    min-height: 100vh;
+    z-index: 1000;
+    background: linear-gradient(135deg, var(--bg-base) 0%, var(--bg-elevated) 50%, var(--bg-base) 100%);
+    background-attachment: scroll;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
+    overscroll-behavior-x: none;
+    touch-action: pan-y;
+    -webkit-scroll-behavior: smooth;
+    scroll-behavior: smooth;
+}
+
+.operation-page::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(var(--color-accent-rgb), 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(var(--color-accent-rgb), 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.operation-page::-webkit-scrollbar {
+    display: none;
+}
+
+.operation-page.is-active {
+    display: block !important;
+}
+
+/* Изолированный scroll-контейнер (как .operation-page): главная, избранное, корзина */
+#main-content,
+#favorites-page,
+#cart-page-new {
+    position: fixed;
+    inset: 0;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+
+    -webkit-overflow-scrolling: touch;
+
+    background: linear-gradient(
+        135deg,
+        var(--bg-base) 0%,
+        var(--bg-elevated) 50%,
+        var(--bg-base) 100%
+    );
+}
+
+/* Корзина: фон на ВНЕШНЕМ контейнере, без vh — покрывает весь scroll-контейнер включая padding-bottom контента */
+#cart-page-new {
+    background-attachment: scroll;
+    box-sizing: border-box;
+}
+
+/* Верхний отступ главной как до fixed: 12px + safe area (чтобы не уезжало под статус-бар) */
+#main-content {
+    padding-top: calc(12px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+}
+
+/* Верхнее меню страницы операции */
+.operation-top-menu {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    padding-top: calc(20px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
+    padding-left: calc(16px + env(safe-area-inset-left, 0px));
+    margin: 0;
+    background: transparent;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1001;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.operation-page.is-active .operation-top-menu {
+    display: flex;
+}
+
+.operation-top-menu.scrolled {
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-bottom: 1px solid var(--border-glass);
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+/* Mobile: фон top-bar при прокрутке (синхронизация с desktop) */
+@media (max-width: 768px) {
+    .operation-top-menu.scrolled {
+        background: var(--bg-glass);
+        -webkit-backdrop-filter: var(--blur-medium);
+        backdrop-filter: var(--blur-medium);
+    }
+}
+
+.operation-top-menu-close {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 600;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1002;
+    flex-shrink: 0;
+}
+
+.operation-top-menu-close:hover {
+    background: var(--bg-glass-light);
+}
+
+.operation-top-menu-close:active {
+    transform: scale(0.95);
+    background: var(--bg-glass-light);
+}
+
+.operation-top-menu-title-container {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1001;
+}
+
+.operation-top-menu-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.operation-top-menu-right {
+    flex: 0 0 40px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+/* Контент под fixed top-menu; снизу — высота меню + 8px зазор */
+.operation-page-content {
+    padding: 0 16px 20px 16px;
+    padding-top: calc(56px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 4px);
+    padding-bottom: calc(8px + 88px + var(--tg-safe-area-inset-bottom, 0px));
+    min-height: 100%;
+    max-width: 600px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 auto;
+    position: relative;
+    overflow: visible;
+    z-index: 2;
+}
+
+.operation-page-content::after {
+    content: '';
+    display: block;
+    height: calc(88px + 8px + var(--tg-safe-area-inset-bottom, 0px));
+}
+
+/* Контент форм на страницах edit-product, order, purchase, settings */
+.form-page-content {
+    padding-bottom: calc(40px + 160px + var(--tg-safe-area-inset-bottom, 0px));
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.form-page-content::after {
+    height: calc(40px + 160px + var(--tg-safe-area-inset-bottom, 0px));
+}
+
+/* ========== Страница «Контактная информация» (profile-details-page) ========== */
+#profile-details-page .profile-details-page-content {
+    padding-top: calc(56px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 4px);
+    padding-bottom: calc(40px + 160px + var(--tg-safe-area-inset-bottom, 0px));
+    padding-left: 16px;
+    padding-right: 16px;
+    max-width: 600px;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    #profile-details-page .profile-details-page-content {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+}
+
+/* Профильный блок: аватар слева, имя и ссылка справа */
+.profile-details-profile-block {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 0;
+}
+
+.profile-details-avatar-wrap {
+    flex-shrink: 0;
+}
+
+.profile-details-avatar,
+.profile-details-avatar-placeholder {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+.profile-details-avatar {
+    border: 2px solid rgba(var(--color-accent-rgb), 0.3);
+    box-shadow: 0 4px 12px rgba(var(--color-accent-rgb), 0.15);
+}
+
+.profile-details-avatar-placeholder {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.2) 0%, rgba(var(--color-accent-rgb), 0.1) 100%);
+    border: 2px solid rgba(var(--color-accent-rgb), 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: var(--text-primary);
+    box-shadow: 0 4px 12px rgba(var(--color-accent-rgb), 0.15);
+}
+
+.profile-details-profile-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.profile-details-display-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.profile-details-username {
+    font-size: 14px;
+    color: var(--text-hint, rgba(255, 255, 255, 0.6));
+    line-height: 1.3;
+}
+
+.profile-details-open-profile {
+    font-size: 14px;
+    color: var(--tg-theme-link-color, #5ac8fa);
+    text-decoration: none;
+    margin-top: 4px;
+    display: inline-block;
+    transition: opacity 0.2s;
+}
+
+.profile-details-open-profile:hover {
+    opacity: 0.9;
+}
+
+#profile-details-page .profile-value-editable {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    font-size: 16px;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+#profile-details-page .profile-value-editable:focus {
+    outline: none;
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+#profile-details-page .profile-value-editable::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Приветствие на странице личного кабинета */
+.profile-greeting {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+/* Кнопка перехода к контактной информации (как карточка операции) */
+.profile-contact-info-card {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-contact-info-card:hover {
+    background: var(--bg-glass-light);
+    border-color: rgba(var(--color-accent-rgb), 0.3);
+}
+
+/* Вкладки операций */
+.operation-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.operation-tab {
+    flex: 1;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-hint, rgba(255, 255, 255, 0.6));
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: center;
+}
+
+.operation-tab.active {
+    color: var(--text-primary, #ffffff);
+    border-bottom-color: rgba(var(--color-accent-rgb), 0.8);
+}
+
+.operation-tab:hover {
+    color: var(--text-primary, #ffffff);
+}
+
+/* Видимость вкладок: JS ставит display + класс .active; без position/height, чтобы *-completed-content участвовал в скролле */
+.operation-content {
+    display: none;
+    width: 100%;
+}
+
+.operation-content.active {
+    display: block;
+}
+
+/* Карточки элементов операций */
+.operation-items {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.operation-item-card {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.operation-item-card:hover {
+    background: var(--bg-glass-light);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-glass);
+}
+
+.operation-item-card[data-type="reservations"] {
+    border-left: 3px solid #FFA500;
+}
+
+.operation-item-card[data-type="orders"] {
+    border-left: 3px solid #4CAF50;
+}
+
+.operation-item-card[data-type="purchases"] {
+    border-left: 3px solid #9C27B0;
+}
+
+.operation-item-card[data-type="sale-orders"] {
+    border-left: 3px solid #2196F3;
+}
+
+.operation-item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.operation-item-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #ffffff);
+    margin: 0;
+}
+
+.operation-item-price {
+    font-size: 14px;
+    color: var(--text-primary, #ffffff);
+    font-weight: 500;
+}
+
+.operation-item-time {
+    font-size: 13px;
+    color: var(--text-hint, rgba(255, 255, 255, 0.6));
+}
+
+.operation-item-date {
+    font-size: 12px;
+    color: var(--text-hint, rgba(255, 255, 255, 0.5));
+    margin-top: 4px;
+}
+
+.operation-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 8px;
+    align-self: flex-start;
+}
+
+.operation-badge-active {
+    background: rgba(255, 165, 0, 0.2);
+    color: #FFA500;
+    border: 1px solid rgba(255, 165, 0, 0.3);
+}
+
+.operation-badge-completed {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4CAF50;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.operation-badge-cancelled {
+    background: rgba(244, 67, 54, 0.2);
+    color: #F44336;
+    border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+/* Изображения в карточках операций */
+.operation-item-card .cart-item-image-container {
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.operation-item-card .cart-item-image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Карточки операций — кликабельные (заказы / покупки / продажи) */
+.operation-item-card-clickable {
+    cursor: pointer;
+}
+.operation-item-card-clickable:active {
+    opacity: 0.9;
+}
+
+/* Страница детали операции: снизу — высота меню + 8px зазор */
+.operation-detail-page .operation-detail-content {
+    padding: 0 16px 24px 16px;
+    padding-top: calc(56px + 16px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 4px);
+    padding-bottom: calc(8px + 88px + var(--tg-safe-area-inset-bottom, 0px));
+    min-height: 100%;
+    max-width: 600px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 auto;
+}
+
+.operation-detail-page .operation-detail-content::after {
+    content: '';
+    display: block;
+    height: calc(88px + 8px + var(--tg-safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 768px) {
+    .operation-detail-page .operation-detail-content {
+        padding-top: calc(56px + 16px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 4px);
+    }
+}
+
+/* Блок номера заказа под заголовком: одна строка «Номер заказа» + номер; копирование по клику */
+.operation-order-number-block {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--bg-glass);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.operation-order-number-block:active {
+    opacity: 0.9;
+}
+.operation-order-number-label {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+.operation-order-number-value {
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+}
+
+/* Строка статуса: дата слева, бейдж справа, одна линия; на узком экране допускается перенос */
+.operation-detail-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--bg-glass);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.operation-detail-status-badge {
+    flex-shrink: 0;
+}
+.operation-detail-date {
+    color: var(--text-secondary);
+    font-size: 14px;
+    min-width: 0;
+}
+.operation-detail-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+.operation-detail-field {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--bg-glass);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.operation-detail-label {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+.operation-detail-value {
+    color: var(--text-primary);
+    font-size: 14px;
+    text-align: right;
+}
+.operation-detail-no-fields {
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 12px 0;
+}
+.operation-detail-section {
+    margin-top: 20px;
+}
+.operation-detail-section-title {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+.operation-detail-product-section {
+    margin-top: 8px;
+}
+/* Один цельный блок «Детали заказа»: строки ключ–значение, итого и экономия выделены */
+.operation-detail-order-block {
+    padding: 14px 16px;
+    background: var(--bg-glass);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.operation-detail-order-block .operation-detail-order-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+}
+.operation-detail-order-block .operation-detail-order-row + .operation-detail-order-row {
+    margin-top: 8px;
+}
+.operation-detail-order-block .operation-detail-order-label {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+.operation-detail-order-block .operation-detail-order-value {
+    color: var(--text-primary);
+    text-align: right;
+    word-break: break-word;
+}
+.operation-detail-order-block .operation-detail-order-row-total .operation-detail-order-value {
+    font-weight: 700;
+}
+.operation-detail-order-block .operation-detail-order-row-savings .operation-detail-order-value {
+    color: var(--success-green, #2ecc71);
+    font-weight: 500;
+}
+.operation-detail-order-block .operation-detail-line {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin: 0;
+}
+.operation-detail-order-block .operation-detail-line + .operation-detail-line {
+    margin-top: 6px;
+}
+
+/* Один цельный блок «Контактная информация»: один контейнер, текст без рамок */
+.operation-detail-contact-block {
+    padding: 14px 16px;
+    background: var(--bg-glass);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.operation-detail-contact-block .operation-detail-line {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin: 0;
+}
+.operation-detail-contact-block .operation-detail-line + .operation-detail-line {
+    margin-top: 6px;
+}
+.operation-detail-product-card-wrap {
+    margin: 0;
+}
+/* Карточка товара в сделке (как в корзине: компактная, изображение + название + цена) */
+.operation-detail-product-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--bg-glass);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.operation-detail-product-card-link {
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+.operation-detail-product-card-link:hover {
+    background: var(--bg-glass-light);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+.operation-detail-product-card-link:active {
+    opacity: 0.95;
+}
+.operation-detail-product-card .operation-detail-product-card-image {
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.operation-detail-product-card .operation-detail-product-card-image img,
+.operation-detail-product-card .operation-detail-product-card-image .cart-item-image-placeholder {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.operation-detail-product-card-info {
+    flex: 1;
+    min-width: 0;
+}
+.operation-detail-product-card-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+.operation-detail-product-prices {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.operation-detail-product-price-line {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+.operation-detail-product-price-old .operation-detail-price-strike {
+    text-decoration: line-through;
+    opacity: 0.85;
+}
+.operation-detail-product-short-desc {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+.operation-detail-product-unavailable {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    opacity: 0.95;
+}
+.operation-detail-product-card:not(.operation-detail-product-card-link) {
+    cursor: default;
+}
+.operation-detail-product-card:not(.operation-detail-product-card-link):active {
+    opacity: 1;
+}
+
+/* Перенос строк и multi-line clamp в карточке товара на странице деталей операции */
+#operation-detail-page .operation-detail-product-card-info,
+#operation-detail-page .operation-detail-product-card-info * {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+#operation-detail-page .operation-detail-product-card-info .product-name,
+#operation-detail-page .operation-detail-product-card-info .operation-detail-product-card-name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+}
+#operation-detail-page .operation-detail-product-card-info .product-description {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+}
+
+/* Адаптивные стили для страниц операций */
+@media (max-width: 768px) {
+    .operation-page-content {
+        padding: 0 12px 20px 12px;
+        padding-top: calc(56px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 4px);
+    }
+
+    /* Фикс отступа снизу на #edit-product-page: shorthand padding выше перебивает padding-bottom — явно восстанавливаем */
+    #edit-product-page .operation-page-content,
+    #edit-product-page .form-page-content {
+        padding-bottom: calc(var(--edit-product-bottom-gap) + 88px + var(--tg-safe-area-inset-bottom, 0px)) !important;
+    }
+    #edit-product-page .operation-page-content::after,
+    #edit-product-page .form-page-content::after {
+        content: '' !important;
+        display: block !important;
+        height: calc(var(--edit-product-bottom-gap) + 88px + var(--tg-safe-area-inset-bottom, 0px)) !important;
+    }
+
+    .operation-top-menu-title {
+        font-size: 16px;
+    }
+    
+    .profile-operations-grid {
+        gap: 8px;
+    }
+    
+    .profile-operation-card {
+        padding: 10px 14px;
+    }
+    
+    .profile-operation-icon {
+        font-size: 20px;
+    }
+    
+    .profile-operation-title {
+        font-size: 14px;
+    }
+    
+    .profile-operation-subtitle {
+        font-size: 11px;
+    }
+    
+    .operation-item-card {
+        padding: 12px;
+    }
+    
+    .operation-item-card .cart-item-image-container {
+        width: 60px;
+        height: 60px;
+    }
+}
+
+.profile-page .profile-value-editable[type="textarea"],
+.profile-page textarea.profile-value-editable {
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+}
+
+.profile-phone-container {
+    display: flex;
+    gap: 8px;
+}
+
+.profile-phone-country-code {
+    flex: 0 0 100px;
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    font-size: 16px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-phone-country-code:focus {
+    outline: none;
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.1);
+}
+
+.profile-phone-number {
+    flex: 1;
+}
+
+.profile-save-container {
+    margin-top: 24px;
+    display: flex;
+    justify-content: center;
+}
+
+.profile-save-btn {
+    display: none;
+    padding: 14px 32px;
+    background: rgba(var(--color-accent-rgb), 0.2);
+    color: #5ac8fa;
+    border: 1px solid rgba(var(--color-accent-rgb), 0.4);
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+}
+
+.profile-save-btn:hover {
+    background: rgba(var(--color-accent-rgb), 0.3);
+    border-color: rgba(var(--color-accent-rgb), 0.6);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(var(--color-accent-rgb), 0.2);
+}
+
+.profile-save-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+#profile-page.is-active {
+    animation: profilePageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes profilePageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Адаптивные стили для страницы профиля */
+@media (max-width: 768px) {
+    .profile-page-content {
+        padding: 0 12px 20px 12px;
+        padding-top: calc(56px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 4px);
+    }
+    
+    .profile-top-menu-title {
+        font-size: 16px;
+    }
+    
+    .profile-page .profile-avatar,
+    .profile-page .profile-avatar-placeholder {
+        width: 100px;
+        height: 100px;
+    }
+    
+    .profile-page .profile-avatar-placeholder {
+        font-size: 40px;
+    }
+}
+
+/* Индикатор активных элементов в выпадающих секциях админки */
+.active-indicator-badge {
+    animation: activePulse 2s ease-in-out infinite;
+}
+
+@keyframes activePulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+        box-shadow: 0 0 8px rgba(255, 59, 48, 0.5);
+    }
+    50% {
+        opacity: 0.85;
+        transform: scale(1.08);
+        box-shadow: 0 0 12px rgba(255, 59, 48, 0.7);
+    }
+}
+
+/* ========== НОВАЯ КОРЗИНА ========== */
+
+/* Кнопка корзины на карточке товара */
+.cart-button-card {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    width: 36px;
+    height: 36px;
+    background: rgba(0, 0, 0, 0.4) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: none !important;
+    padding: 0;
+    margin: 0;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 12;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cart-button-card:hover {
+    background: rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.cart-button-card:active {
+    transform: scale(0.95);
+}
+
+.cart-button-card:focus,
+.cart-button-card:focus-visible {
+    outline: none !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.cart-button-card .cart-icon {
+    width: 20px;
+    height: 20px;
+    stroke: rgba(255, 255, 255, 0.95);
+    fill: none;
+    transition: all 0.15s ease;
+    display: block;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.cart-button-card .cart-icon-outline {
+    stroke: rgba(255, 255, 255, 0.95);
+    fill: none;
+    transition: all 0.15s ease;
+}
+
+/* Бейдж с количеством товаров в корзине */
+.cart-button-card .cart-icon-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: #4caf50;
+    color: #ffffff;
+    border-radius: 9px;
+    font-size: 10px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-shadow: 0 2px 6px rgba(76, 175, 80, 0.6);
+    border: 2px solid rgba(0, 0, 0, 0.3);
+    z-index: 13;
+    transition: all 0.15s ease;
+}
+
+/* Состояние: товар в корзине - показываем бейдж с количеством */
+.cart-button-card.cart-active .cart-icon-outline {
+    stroke: rgba(255, 255, 255, 0.95);
+}
+
+.cart-button-card.cart-active .cart-icon-badge {
+    display: flex;
+    opacity: 1;
+    transform: scale(1);
+}
+
+.cart-button-card:hover .cart-icon {
+    transform: scale(1.1);
+}
+
+/* Панель управления корзиной */
+.cart-new-controls {
+    padding: 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border-bottom: 1px solid var(--border-glass);
+    margin-bottom: 8px;
+}
+
+.cart-controls-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.cart-select-all-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.cart-select-all-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.cart-delete-btn {
+    padding: 8px 16px;
+    background: rgba(255, 59, 48, 0.2);
+    border: 1px solid rgba(255, 59, 48, 0.4);
+    border-radius: 8px;
+    color: #ff3b30;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cart-delete-btn:hover {
+    background: rgba(255, 59, 48, 0.3);
+    border-color: rgba(255, 59, 48, 0.6);
+}
+
+.cart-promo-container {
+    display: flex;
+    gap: 8px;
+}
+
+.cart-promo-input {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 16px; /* Минимум 16px предотвращает зум на iOS */
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.cart-promo-input::placeholder {
+    color: var(--text-hint);
+}
+
+.cart-promo-btn {
+    padding: 10px 20px;
+    background: rgba(var(--color-accent-rgb), 0.2);
+    border: 1px solid rgba(var(--color-accent-rgb), 0.4);
+    border-radius: 8px;
+    color: #5ac8fa;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cart-promo-btn:hover {
+    background: rgba(var(--color-accent-rgb), 0.3);
+    border-color: rgba(var(--color-accent-rgb), 0.6);
+}
+
+/* Блок промокода и итогов */
+.cart-new-summary {
+    margin: 16px 12px;
+    margin-bottom: 20px;
+    padding: 16px;
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + 4px);
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    box-shadow: 0 4px 16px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    position: relative; /* Убираем фиксированное позиционирование, если было */
+}
+
+.cart-summary-promo {
+    display: flex;
+    gap: 12px; /* Увеличен gap для лучшего визуального отступа */
+    margin-bottom: 16px;
+    padding: 0;
+    padding-right: 4px; /* Добавляем небольшой отступ справа от края блока */
+    align-items: stretch; /* Выравнивание по высоте */
+}
+
+.cart-summary-promo .cart-promo-input {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 16px; /* Минимум 16px предотвращает зум на iOS */
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.cart-summary-promo .cart-promo-input::placeholder {
+    color: var(--text-hint);
+}
+
+.cart-summary-promo .cart-promo-btn {
+    padding: 10px 12px; /* Уменьшен padding для более компактной кнопки */
+    background: rgba(var(--color-accent-rgb), 0.2);
+    border: 1px solid rgba(var(--color-accent-rgb), 0.4);
+    border-radius: 8px;
+    color: #5ac8fa;
+    font-size: 13px; /* Немного уменьшен шрифт */
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-width: auto; /* Убираем минимальную ширину */
+    box-sizing: border-box; /* Учитываем padding в размере */
+    margin-right: 0; /* Убираем margin справа, так как gap уже есть */
+}
+
+.cart-summary-promo .cart-promo-btn:hover {
+    background: rgba(var(--color-accent-rgb), 0.3);
+    border-color: rgba(var(--color-accent-rgb), 0.6);
+}
+
+.cart-summary-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.cart-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+
+.cart-summary-label {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.cart-summary-value {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.cart-summary-discount {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cart-summary-discount-value {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.cart-summary-savings-value {
+    color: #4caf50;
+    font-weight: 600;
+}
+
+.cart-summary-divider {
+    height: 1px;
+    background: var(--border-glass);
+    margin: 12px 0;
+    opacity: 0.5;
+}
+
+.cart-summary-total {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.cart-summary-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 15px;
+}
+
+.cart-summary-total-label {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.cart-summary-total-value {
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.cart-summary-total-green {
+    color: #4caf50;
+}
+
+.cart-payment-choice {
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 4px 0;
+    transition: background 0.15s;
+}
+.cart-payment-choice:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+.cart-payment-choice.cart-payment-selected {
+    background: transparent;
+}
+
+.cart-total-row--active .cart-summary-total-value {
+    color: #4caf50;
+}
+.cart-total-row--inactive .cart-summary-total-value {
+    color: var(--text-primary);
+}
+
+/* Список товаров в корзине */
+.cart-new-items {
+    padding: 12px 4px 0; /* Отступ сверху такой же как между карточками (12px) */
+    min-height: auto; /* Убрали фиксированную минимальную высоту, чтобы summary был сразу после товаров */
+    max-width: 100%;
+    width: 100%;
+}
+
+.cart-item-card {
+    display: flex;
+    gap: 16px;
+    padding: 20px 24px;
+    min-height: 200px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    margin-bottom: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    align-items: stretch;
+    cursor: pointer;
+}
+
+.cart-item-card--out-of-stock {
+    opacity: 0.75;
+}
+
+.cart-item-out-of-stock-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    padding: 4px 8px;
+    background: rgba(255, 59, 48, 0.9);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 6px;
+    z-index: 2;
+}
+
+.cart-item-prices-wrap {
+    margin-top: 4px;
+}
+.cart-item-prices-wrap .prices-wrap {
+    margin-bottom: 0;
+}
+
+.cart-item-card:hover {
+    background: var(--bg-glass-light);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px var(--shadow-light);
+}
+
+.cart-item-checkbox-container {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+}
+
+.cart-item-checkbox-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    position: relative;
+}
+
+.cart-item-checkbox {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    accent-color: #5ac8fa;
+}
+
+.cart-item-checkbox:disabled {
+    pointer-events: none;
+}
+
+.cart-item-image-container {
+    width: 140px;
+    height: 100%;
+    min-height: 160px;
+    flex-shrink: 0;
+    align-self: stretch;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg-glass-light);
+    position: relative;
+}
+
+.cart-item-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cart-item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 200px; /* Минимальная ширина для отображения 30 символов */
+    padding-right: 120px; /* Отступ для кнопок количества */
+    flex-grow: 1;
+    max-width: calc(100% - 140px); /* Ширина минус изображение и отступы */
+    overflow: visible; /* Разрешаем переполнение для многострочного текста */
+}
+
+.cart-item-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.cart-item-description {
+    font-size: 11px;
+    color: var(--text-hint);
+    line-height: 1.4;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    opacity: 0.85;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+    word-wrap: break-word;
+    word-break: break-word;
+    min-height: 36px; /* Минимальная высота для 2 строк (13px * 1.4 * 2 ≈ 36px) */
+    height: auto;
+    width: 140px; /* Ширина для примерно 17 символов в первой строке при шрифте 13px */
+    max-width: 140px;
+    box-sizing: border-box;
+}
+
+.cart-item-description:empty {
+    display: none;
+}
+
+.cart-item-quantity-controls {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 2px 8px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    z-index: 5;
+}
+
+.cart-quantity-btn {
+    width: 36px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+}
+
+.cart-quantity-btn:hover {
+    background: transparent;
+    transform: scale(1.05);
+    opacity: 0.8;
+}
+
+.cart-quantity-btn:active {
+    transform: scale(0.95);
+}
+
+.cart-quantity-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 24px;
+    text-align: center;
+}
+
+.cart-item-price-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+    margin-bottom: 8px;
+}
+
+.cart-item-old-price {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-hint);
+    text-decoration: line-through;
+    opacity: 0.7;
+    line-height: 1.2;
+}
+
+.cart-item-total-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: #4caf50;
+    line-height: 1.2;
+}
+
+/* Кнопка избранного на фото товара в корзине */
+.cart-item-favorite-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 12;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.cart-item-favorite-btn:hover {
+    background: rgba(0, 0, 0, 0.75);
+    transform: scale(1.1);
+}
+
+.cart-item-favorite-btn:active {
+    transform: scale(0.95);
+}
+
+.cart-item-favorite-btn .cart-favorite-heart {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: #ffffff;
+    stroke-width: 2;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cart-item-favorite-btn.favorite-active .cart-favorite-heart {
+    fill: #ff3b30;
+    stroke: #ff3b30;
+    filter: drop-shadow(0 0 4px rgba(255, 59, 48, 0.6));
+}
+
+/* Футер корзины (закреплен внизу) */
+.cart-new-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    --menu-height: 64px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    border-top: 1px solid var(--border-glass);
+    padding: 6px 12px;
+    padding-bottom: calc(4px + var(--tg-safe-area-inset-bottom, 0px));
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Уменьшен gap */
+    box-shadow: 0 -8px 32px var(--shadow-glass);
+    opacity: 0.95; /* Добавлена прозрачность для фона */
+}
+
+.cart-checkout-btn {
+    width: 100%;
+    padding: 12px 16px; /* Уменьшен padding для меньшей высоты кнопки */
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.75) 0%, rgba(var(--color-accent-rgb), 0.55) 100%); /* Увеличена прозрачность */
+    border: 1px solid rgba(var(--color-accent-rgb), 0.4); /* Увеличена прозрачность границы */
+    border-radius: 16px;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(var(--color-accent-rgb), 0.25); /* Увеличена прозрачность тени */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.cart-checkout-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: #ffffff;
+    opacity: 0.9;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cart-checkout-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #ffffff;
+    opacity: 0.8;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cart-checkout-price {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cart-checkout-old-price {
+    font-size: 12px;
+    font-weight: 500;
+    color: #ffffff;
+    text-decoration: line-through;
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cart-checkout-btn:hover {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.85) 0%, rgba(var(--color-accent-rgb), 0.65) 100%); /* Увеличена прозрачность */
+    box-shadow: 0 6px 24px rgba(var(--color-accent-rgb), 0.3); /* Увеличена прозрачность тени */
+    transform: translateY(-2px);
+}
+
+.cart-checkout-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Только для cart-page-new: футер всегда bottom: 0, отступ от меню — на кнопке через margin-bottom */
+#cart-page-new .cart-new-footer {
+    bottom: 0;
+}
+
+#cart-page-new .cart-checkout-btn {
+    margin-bottom: calc(
+        var(--menu-height, 64px)
+        + 10px
+        + var(--tg-safe-area-inset-bottom, 0px)
+    );
+}
+
+#cart-page-new #cart-new-footer #cart-new-checkout-btn {
+    position: relative;
+    top: 4px;
+}
+
+/* Отступ контента корзины: стандарт проекта (menu-height + 40px + safe-area), кнопка — overlay */
+#cart-page-new .cart-page-content {
+    padding-bottom: calc(
+        var(--menu-height, 64px)
+        + 40px
+        + 14px
+        + var(--tg-safe-area-inset-bottom, 0px)
+    );
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+    background: transparent; /* фон у внешнего #cart-page-new */
+}
+
+/* Mobile (≤768px): кнопка ближе к нижнему меню — 4px, селектор по id для приоритета */
+@media (max-width: 768px) {
+    #cart-page-new #cart-new-checkout-btn {
+        margin-bottom: calc(
+            var(--menu-height, 64px)
+            + 4px
+            + var(--tg-safe-area-inset-bottom, 0px)
+        );
+    }
+}
+
+/* ========== BOTTOM SHEET ДЛЯ ДОБАВЛЕНИЯ В КОРЗИНУ ========== */
+/* ВАЖНО: Порядок слоев:
+   СЛОЙ 1 (меню): z-index: 10010 - САМЫЙ ВЫСОКИЙ, всегда поверх всего
+   СЛОЙ 2 (bottom sheet): z-index: 5000 - СРЕДНИЙ, поверх карточек и других элементов, но под меню
+   СЛОЙ 3 (карточки): z-index: 0 - САМЫЙ НИЗКИЙ, под всем
+   
+   РЕГУЛИРОВКА ВЫСОТЫ:
+   Для легкой регулировки высоты bottom sheet используйте CSS переменные:
+   - --menu-height: высота меню (по умолчанию 64px)
+   - --bottom-sheet-offset: отступ bottom sheet от меню (по умолчанию 16px для страницы товара)
+   - --bottom-sheet-padding: внутренний отступ снизу (по умолчанию 16px)
+   - --body-bottom-offset: отступ body снизу (по умолчанию 14px для страницы товара)
+   - --actions-bottom-offset: отступ кнопок снизу (по умолчанию 14px для страницы товара)
+   
+   Пример изменения высоты:
+   .product-page-bottom-sheet .cart-bottom-sheet-content {
+       --menu-height: 80px;
+       --bottom-sheet-offset: 20px;
+   }
+*/
+.cart-bottom-sheet {
+    /* КРИТИЧНО: НЕТ transform, НЕТ filter, НЕТ opacity < 1 - чтобы НЕ создавать stacking context */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0; /* Полный размер экрана */
+    z-index: 5000 !important; /* СЛОЙ 2: Высокий - выше карточек (0) и других элементов, но ниже меню (10010) */
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    pointer-events: none; /* Контейнер не блокирует клики - клики проходят к элементам под ним */
+    /* ВАЖНО: transform, filter, opacity, will-change - НЕЛЬЗЯ здесь! */
+}
+
+.cart-bottom-sheet[style*="display: flex"],
+.cart-bottom-sheet[style*="display:flex"],
+.cart-bottom-sheet[style*="z-index"] {
+    pointer-events: none; /* Контейнер остается прозрачным для кликов */
+    z-index: 5000 !important; /* СЛОЙ 2: Всегда остается 5000, НИКОГДА не выше меню (10010) */
+}
+
+.cart-bottom-sheet-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: transparent;
+    opacity: 0;
+    pointer-events: none; /* Backdrop не должен перехватывать клики */
+}
+
+.cart-bottom-sheet-content {
+    /* КРИТИЧНО: position: absolute для правильного позиционирования */
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    /* Используем CSS переменные для легкой регулировки высоты меню */
+    --menu-height: 64px; /* Высота меню по умолчанию */
+    --bottom-sheet-padding: 16px; /* Отступ снизу для легкой регулировки */
+    max-height: calc(80vh - var(--menu-height) - var(--bottom-sheet-padding) - var(--tg-safe-area-inset-bottom, 0px)); /* Учитываем высоту меню */
+    background: var(--bg-glass);
+    /* ВАЖНО: backdrop-filter создает stacking context, но это нормально для дочернего элемента */
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+    /* transform создает stacking context для ЭТОГО элемента, но НЕ для родителя */
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    touch-action: pan-y;
+    cursor: grab;
+    padding-bottom: calc(var(--menu-height) + var(--bottom-sheet-padding) + var(--tg-safe-area-inset-bottom, 0px)); /* Padding снизу, чтобы контент не перекрывался меню */
+    margin-bottom: 0;
+    pointer-events: auto; /* Контент bottom sheet должен быть кликабельным */
+    /* z-index не нужен, так как мы в одном stacking context с родителем */
+}
+
+/* Убрали псевдоэлемент, так как bottom sheet больше не должен заходить под меню */
+
+.cart-bottom-sheet-content:active {
+    cursor: grabbing;
+}
+
+.cart-bottom-sheet[style*="display: flex"] .cart-bottom-sheet-content,
+.cart-bottom-sheet[style*="display:flex"] .cart-bottom-sheet-content {
+    transform: translateY(0);
+}
+
+/* Bottom sheet для страницы товара - показывается только для клиентов через JavaScript */
+.product-page-bottom-sheet {
+    display: none; /* По умолчанию скрыт, показывается только для клиентов через JS */
+    pointer-events: auto; /* Разрешаем взаимодействие */
+    z-index: 5000 !important; /* Выше контента, но ниже меню */
+    position: fixed; /* Фиксированное позиционирование внутри product-page */
+    bottom: 0; /* Внизу страницы */
+    left: 0;
+    right: 0;
+}
+
+/* Показываем bottom sheet только когда он явно установлен в flex через JavaScript (для клиентов) */
+.product-page-bottom-sheet[style*="display: flex"],
+.product-page-bottom-sheet[style*="display:flex"] {
+    display: flex !important;
+}
+
+.product-page-bottom-sheet .cart-bottom-sheet-content {
+    transform: translateY(0) !important; /* Всегда видимый, не скрывается */
+    /* Используем CSS переменную для легкой регулировки высоты меню */
+    --menu-height: 64px; /* Высота меню по умолчанию */
+    /* Уменьшено на 20px для опускания фона ближе к меню: было 16px, стало -4px */
+    --bottom-sheet-offset: -30px; /* Отступ от меню для легкой регулировки */
+    max-height: calc(80vh - var(--menu-height) - 16px - var(--tg-safe-area-inset-bottom, 0px)); /* Используем фиксированное значение для max-height */
+    /* Позиционируем выше меню с учетом отступа (меньше offset = ближе к меню) */
+    bottom: calc(var(--menu-height) + var(--bottom-sheet-offset)) !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end; /* Выравниваем контент внизу */
+}
+
+/* Скрываем backdrop на странице товара, так как bottom sheet постоянно видимый */
+.product-page-bottom-sheet .cart-bottom-sheet-backdrop {
+    display: none;
+}
+
+/* Скрываем handle (разделитель) на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-handle {
+    display: none;
+}
+
+/* Скрываем header с фото и названием на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-header {
+    display: none;
+}
+
+/* Уменьшаем размер кнопок на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-action-btn {
+    min-height: 40px;
+    height: 40px;
+    font-size: 14px;
+    padding: 0 16px;
+}
+
+/* ========== Stage 5 batch 2: общие стили bottom-sheet (из 99-legacy) ========== */
+/* Уменьшаем размер кнопок количества на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-quantity-controls {
+    height: 40px;
+}
+
+.product-page-bottom-sheet .cart-bottom-sheet-quantity-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+}
+
+/* Убираем лишний padding из body, так как header скрыт */
+.product-page-bottom-sheet .cart-bottom-sheet-body {
+    padding-top: 12px;
+    padding-bottom: 0;
+    margin-top: auto; /* Прижимаем body к низу */
+    --body-bottom-offset: -30px;
+    margin-bottom: var(--body-bottom-offset) !important;
+}
+
+.cart-bottom-sheet-handle {
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    margin: 8px auto 12px;
+    cursor: grab;
+    touch-action: none;
+}
+
+.cart-bottom-sheet-handle:active {
+    cursor: grabbing;
+}
+
+.cart-bottom-sheet-header {
+    padding: 0 16px 12px;
+    border-bottom: 1px solid var(--border-glass);
+}
+
+.cart-bottom-sheet-product {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.cart-bottom-sheet-product-image {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
+    border: 1px solid var(--border-glass);
+}
+
+.cart-bottom-sheet-product-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.cart-bottom-sheet-product-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.3;
+}
+
+.cart-bottom-sheet-product-price {
+    display: none;
+}
+
+.cart-bottom-sheet-body {
+    padding: 12px 16px;
+}
+
+.cart-bottom-sheet-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Опускаем кнопки на странице товара */
+.product-page-bottom-sheet .cart-bottom-sheet-actions-row {
+    --actions-bottom-offset: -12px;
+    margin-bottom: var(--actions-bottom-offset) !important;
+}
+
+.cart-bottom-sheet-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
+.cart-bottom-sheet-quantity-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    padding: 4px;
+    border: 1px solid var(--border-glass);
+    flex: 1;
+    justify-content: space-between;
+    min-width: 0;
+    height: 44px;
+}
+
+.cart-bottom-sheet-quantity-btn {
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 600;
+    border-radius: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+}
+
+.cart-bottom-sheet-quantity-btn:active {
+    background: var(--bg-glass);
+    transform: scale(0.95);
+}
+
+.cart-bottom-sheet-quantity-input {
+    min-width: 24px;
+    flex: 1;
+    text-align: center;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 700;
+    padding: 0;
+    -moz-appearance: textfield;
+    appearance: textfield;
+    pointer-events: none;
+}
+
+.cart-bottom-sheet-quantity-input::-webkit-outer-spin-button,
+.cart-bottom-sheet-quantity-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.cart-bottom-sheet-action-btn {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.cart-bottom-sheet-action-btn.primary {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.7) 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.cart-bottom-sheet-action-btn.primary:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.cart-bottom-sheet-action-btn.secondary {
+    background: var(--bg-glass);
+    color: var(--text-primary);
+    border: 1px solid var(--border-glass);
+}
+
+.cart-bottom-sheet-action-btn.secondary:active {
+    transform: scale(0.98);
+    background: var(--bg-secondary);
+}
+
+/* Анимация появления */
+@keyframes slideUpBottomSheet {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideDownBottomSheet {
+    from {
+        transform: translateY(0);
+    }
+    to {
+        transform: translateY(100%);
+    }
+}
+

@@ -5,9 +5,9 @@ import { API_BASE } from './api/config.js';
 import { initCart, loadCart, loadOrders, loadPurchases, loadSaleOrders, setupCartButton, setupCartModal, updateCartUI } from './cart.js';
 import { initCartBottomSheet } from './cart/cartBottomSheet.js';
 import { initCartNew, updateCartButtonCount, updateCartButtonsState } from './cart/cartNew.js';
+import { initDealCheckoutPage } from './dealCheckout.js';
 import { initSettingsModal } from './handlers/admin_settings_modal.js';
 import { initMainMenu, setupMainMenuButton } from './menu.js';
-import { initDealCheckoutPage } from './dealCheckout.js';
 import { initOrdersPage } from './operationsOrders.js';
 import { initPurchasesPage } from './operationsPurchases.js';
 import { initReservationsPage } from './operationsReservations.js';
@@ -28,15 +28,15 @@ import { initProductsDependencies, renderProducts, showProductModal } from './pr
 // Импорт функции закрытия страницы товара
 import { closeProductPage } from './handlers/products_modal.js';
 // Импорт функций редактирования товаров из отдельного модуля (рефакторинг)
-import { deleteProduct, initProductEditDependencies, markAsSold, showEditProductModal, showEditProductPage, showSellModal } from './product-edit.js';
+import { deleteProduct, initProductEditDependencies, markAsSold, showEditProductPage, showSellModal } from './product-edit.js';
 // Импорт функций резерваций из отдельного модуля (рефакторинг)
 import { cancelReservation, initReservationsDependencies, showReservationModal } from './reservations.js';
 // Импорт функций заказов из отдельного модуля (рефакторинг)
-import { initOrdersDependencies, showOrderModal, showOrderPage } from './orders.js';
+import { initOrdersDependencies, showOrderPage } from './orders.js';
 // Импорт функций заказов на покупку из отдельного модуля
 import { initSaleOrdersDependencies, showSaleOrderModal } from './sale_orders.js';
 // Импорт функций продаж из отдельного модуля (рефакторинг)
-import { initPurchasesDependencies, showPurchaseModal, showPurchasePage } from './purchases.js';
+import { initPurchasesDependencies, showPurchasePage } from './purchases.js';
 // Импорт функций фильтров из отдельного модуля (рефакторинг)
 import { applyFilters, initFilters, initFiltersDependencies, updateProductFilterOptions } from './filters.js';
 // Импорт функций настройки модальных окон из отдельного модуля (рефакторинг)
@@ -597,6 +597,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 8.2 Инициализируем переключение вида карточек
     const cardViewToggleButton = document.getElementById('card-view-toggle-button');
     if (cardViewToggleButton && productsGrid) {
+        cardViewToggleButton.classList.add('is-visible');
         cardViewToggleButton.style.display = 'flex';
         initCardViewToggle(cardViewToggleButton, productsGrid);
     }
@@ -612,12 +613,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Показываем кнопку избранного для клиентов
             const favoritesButton = document.getElementById('favorites-button');
             if (favoritesButton) {
+                favoritesButton.classList.remove('is-hidden');
+                favoritesButton.classList.add('is-visible');
                 favoritesButton.style.display = 'flex';
             }
         } else {
             // Скрываем кнопку избранного для админа
             const favoritesButton = document.getElementById('favorites-button');
             if (favoritesButton) {
+                favoritesButton.classList.remove('is-visible');
+                favoritesButton.classList.add('is-hidden');
                 favoritesButton.style.display = 'none';
             }
         }

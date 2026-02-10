@@ -1,0 +1,14 @@
+{
+  "name": "prise-mini-app",
+  "private": true,
+  "scripts": {
+    "check:css": "bash scripts/check-css-entrypoint.sh",
+    "lint:css": "stylelint 'webapp/css/modules/**/*.css'",
+    "lint:css:fix": "stylelint 'webapp/css/modules/**/*.css' --fix"
+  },
+  "devDependencies": {
+    "stylelint": "^14.16.0",
+    "stylelint-config-standard": "^29.0.0",
+    "stylelint-order": "^5.0.0"
+  }
+}

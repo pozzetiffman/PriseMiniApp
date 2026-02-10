@@ -1,0 +1,187 @@
+/* Stage 7 batch 3: extracted from 91-admin-modals.css (move-only). */
+
+/* Улучшенная анимация модального окна */
+@keyframes modalSlideInFade {
+    from {
+        transform: translateY(20px) scale(0.95);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Стили для админки */
+.admin-button {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.15) 0%, rgba(var(--color-accent-rgb), 0.08) 100%);
+    border: 1px solid rgba(var(--color-accent-rgb), 0.3);
+    color: var(--text-primary);
+    padding: 0;
+    border-radius: 16px;
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(var(--color-accent-rgb), 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.admin-button:hover {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.25) 0%, rgba(var(--color-accent-rgb), 0.15) 100%);
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    box-shadow: 0 6px 24px rgba(var(--color-accent-rgb), 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    transform: translateY(-2px);
+}
+
+.admin-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.admin-button:hover {
+    background: var(--bg-glass);
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px var(--shadow-medium);
+}
+
+.admin-button:active {
+    transform: scale(0.95);
+}
+
+/* Модальное окно админки */
+.admin-modal {
+    display: none; /* По умолчанию скрыто */
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    overflow-y: auto;
+    /* Flex для центрирования модального окна (применяется когда modal открыт) */
+    justify-content: center;
+    align-items: flex-start;
+    /* Safe-area ТОЛЬКО здесь */
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 12px);
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + 12px);
+    padding-left: 0;
+    padding-right: 0;
+    animation: fadeIn 0.3s ease;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.admin-modal.is-open {
+    display: flex !important;
+}
+
+.admin-modal-content {
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    width: 100%;
+    max-width: 600px;
+    padding: 0;
+    border-radius: 24px;
+    box-shadow: 0 8px 32px var(--shadow-glass);
+    border: 1px solid var(--border-glass);
+    animation: modalSlideInFade 0.3s ease;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    margin: 0 20px;
+}
+
+.admin-modal-header {
+    padding: 20px 20px 16px 20px;
+    border-bottom: 1px solid var(--border-glass);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-glass-light);
+    flex-shrink: 0;
+}
+
+.admin-modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.admin-close {
+    color: var(--text-secondary);
+    font-size: 20px;
+    font-weight: 400;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(58, 58, 60, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.admin-close::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+    pointer-events: none;
+}
+
+.admin-close:hover {
+    color: var(--text-primary);
+    background: rgba(72, 72, 74, 0.75);
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 0 20px rgba(var(--color-accent-rgb), 0.2);
+}
+
+.admin-close:active {
+    transform: scale(0.95);
+    background: rgba(58, 58, 60, 0.8);
+}
+
+.admin-modal-body {
+    padding: 0;
+    margin: 0;
+    overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
+    flex: 1;
+    min-height: 0;
+    border: none;
+    border-top: none;
+    border-bottom: none;
+}
+

@@ -246,6 +246,7 @@ export function showReservationModal(productId) {
     }
     
     console.log('🔒 Opening reservation modal');
+    reservationModalElement.classList.add('is-open');
     reservationModalElement.style.display = 'flex';
     
     // Убеждаемся, что обработчики событий устанавливаются заново каждый раз

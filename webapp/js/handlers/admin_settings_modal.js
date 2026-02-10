@@ -6,7 +6,7 @@ import {
     handleAllProductsMadeToOrderToggle as handleAllProductsMadeToOrderToggleHandler
 } from './admin_settings.js';
 import { getCurrentShopSettings, loadShopSettings } from '../utils/admin_utils.js';
-import { hideAllPages } from '../operationsBase.js';
+import { goToMainContent, hideAllPages } from '../operationsBase.js';
 import { setupPageScrollHandler } from '../operationsBase.js';
 
 let shopSettings = null;
@@ -19,6 +19,14 @@ let allProductsMadeToOrderToggle = null;
  */
 export function initSettingsModal() {
     console.log('⚙️ Initializing settings...');
+    const settingsBackBtn = document.getElementById('settings-page-back');
+    if (settingsBackBtn) {
+        settingsBackBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeSettingsPage();
+        });
+    }
     quantityEnabledToggle = document.getElementById('quantity-enabled-toggle');
     reservationsToggle = document.getElementById('reservations-toggle');
     allProductsMadeToOrderToggle = document.getElementById('all-products-made-to-order-toggle');
@@ -41,17 +49,20 @@ export function initSettingsModal() {
 }
 
 /**
- * Закрытие страницы настроек, возврат на profile-page
+ * Закрытие страницы настроек — возврат на главную (main-content), как у админки/профиля/корзины.
+ * Сначала снимаем is-active и скрываем, затем goToMainContent() (этап 4).
  */
 export function closeSettingsPage() {
     const settingsPage = document.getElementById('settings-page');
-    const profilePage = document.getElementById('profile-page');
-    if (settingsPage) settingsPage.style.display = 'none';
-    if (profilePage) profilePage.style.display = 'block';
+    if (settingsPage) {
+        settingsPage.classList.remove('is-active');
+        settingsPage.style.display = 'none';
+    }
+    goToMainContent();
 }
 
 /**
- * Открытие страницы настроек (вместо модального окна). «←» возвращает в profile-page.
+ * Открытие страницы настроек (вместо модального окна). «←» возвращает на главную (goToMainContent).
  */
 export async function openSettingsPage() {
     const settingsPage = document.getElementById('settings-page');
@@ -75,10 +86,9 @@ export async function openSettingsPage() {
             allProductsMadeToOrderToggle.checked = shopSettings.all_products_made_to_order === true;
         }
         hideAllPages();
+        settingsPage.classList.add('is-active');
         settingsPage.style.display = 'block';
         settingsPage.scrollTop = 0;
-        const backBtn = document.getElementById('settings-page-back');
-        if (backBtn) backBtn.onclick = closeSettingsPage;
         setupPageScrollHandler(settingsPage);
     } catch (error) {
         console.error('❌ Error loading shop settings:', error);

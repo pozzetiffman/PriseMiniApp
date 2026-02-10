@@ -1,0 +1,119 @@
+
+/* Фиксация цветов текста - предотвращает изменение при смене ориентации */
+/* Используем более специфичные селекторы для переопределения Telegram переменных */
+html,
+html[style*="--tg-theme-text-color"],
+body {
+    --tg-theme-text-color: #ffffff;
+    --tg-theme-hint-color: #8e8e93;
+    --tg-theme-button-text-color: #ffffff;
+    --text-primary: #ffffff;
+    --text-secondary: #ebebf5;
+    --text-hint: #8e8e93;
+}
+
+html {
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+    /* Разрешаем вертикальный bounce, запрещаем горизонтальный */
+    overscroll-behavior-y: auto;
+    overscroll-behavior-x: none;
+    overscroll-behavior-block: auto;
+    overscroll-behavior-inline: none;
+    /* Плавная прокрутка */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    position: relative;
+    /* Предотвращаем увеличение страницы при появлении клавиатуры */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(135deg, var(--bg-base) 0%, var(--bg-elevated) 50%, var(--bg-base) 100%);
+    /* Убираем background-attachment: fixed на десктопе - может вызывать проблемы с перекрытием */
+    background-attachment: fixed;
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0;
+    -webkit-user-select: none;
+    user-select: none;
+    width: 100%;
+    height: 100%;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+    /* На десктопе убираем overflow-y, чтобы не было двойной прокрутки */
+    overflow-y: auto;
+    /* Разрешаем вертикальный bounce, запрещаем горизонтальный */
+    overscroll-behavior-y: auto;
+    overscroll-behavior-x: none;
+    overscroll-behavior-block: auto;
+    overscroll-behavior-inline: none;
+    /* Плавная прокрутка */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    /* Скрываем scrollbar везде */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+/* На десктопе убираем background-attachment: fixed и body::before для body, когда открыта админка */
+@media (min-width: 768px) {
+    body:has(#admin-page.is-active) {
+        background-attachment: scroll !important;
+        overflow-y: hidden !important; /* Убираем прокрутку body, когда открыта админка */
+    }
+    
+    body:has(#admin-page.is-active)::before {
+        display: none !important; /* Скрываем body::before, чтобы не перекрывал контент */
+    }
+}
+
+body::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(var(--color-accent-rgb), 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(var(--color-accent-rgb), 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Исправления для body когда открыт bottom sheet - предотвращает серый фон при прокрутке */
+body.bottom-sheet-open {
+    background-attachment: scroll !important;
+    overscroll-behavior: contain !important;
+    overscroll-behavior-y: contain !important;
+}
+
+body.bottom-sheet-open::before {
+    position: absolute !important; /* Изменено с fixed на absolute для предотвращения проблем при прокрутке */
+}
+
+/* Глобальные стили для кнопок - убираем синий фон и белую рамку Telegram */
+button {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:focus,
+button:active,
+button:focus-visible {
+    outline: none !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+

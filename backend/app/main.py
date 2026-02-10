@@ -108,7 +108,7 @@ async def add_ngrok_headers(request, call_next):
 
     try:
         response = await call_next(request)
-        request_time_ms = (time.time() - request_start) * 1000
+        request_time_ms = float((time.time() - request_start) * 1000)
         status = response.status_code
 
         if path.startswith("/api/"):
@@ -150,7 +150,7 @@ async def add_ngrok_headers(request, call_next):
         
         return response
     except Exception as e:
-        request_time_ms = (time.time() - request_start) * 1000
+        request_time_ms = float((time.time() - request_start) * 1000)
         log.error("REQUEST: Error %s %s after %.0fms: %s request_id=%s", method, path, request_time_ms, str(e), request_id)
         raise
 

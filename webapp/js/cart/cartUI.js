@@ -165,6 +165,8 @@ export function updateCartButtonVisibility(cartButton, cartCount, totalItems, ha
     if (totalItems > 0 || hasHistory) {
         // Показываем кнопку корзины через CSS классы (без inline стилей, чтобы не ломать grid layout)
         cartButton.removeAttribute('hidden');
+        cartButton.classList.remove('is-hidden', 'is-disabled');
+        cartButton.classList.add('is-visible');
         cartButton.style.display = 'flex';
         cartButton.style.visibility = 'visible';
         cartButton.style.opacity = '1';
@@ -205,6 +207,8 @@ export function updateCartButtonVisibility(cartButton, cartCount, totalItems, ha
     } else {
         console.log(`❌ updateCartButtonVisibility: Cart button hidden - no active items or history (totalItems: ${totalItems}, hasHistory: ${hasHistory})`);
         // Для неактивной корзины используем opacity и pointer-events, но оставляем в grid layout
+        cartButton.classList.remove('is-visible', 'is-hidden');
+        cartButton.classList.add('is-disabled');
         cartButton.style.display = 'flex';
         cartButton.style.opacity = '0.3';
         cartButton.style.pointerEvents = 'none';
@@ -248,7 +252,8 @@ export async function updateCartUI() {
     } catch (e) {
         console.error('❌❌❌ КРИТИЧЕСКАЯ ОШИБКА в updateCartUI:', e);
         if (cartButton) {
-            // В случае ошибки тоже оставляем в grid layout
+            cartButton.classList.remove('is-visible', 'is-hidden');
+            cartButton.classList.add('is-disabled');
             cartButton.style.display = 'flex';
             cartButton.style.opacity = '0.3';
             cartButton.style.pointerEvents = 'none';

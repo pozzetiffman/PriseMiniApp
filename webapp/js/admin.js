@@ -219,6 +219,7 @@ export function initAdmin() {
     const adminClose = document.querySelector('.admin-close');
     if (adminClose) {
         adminClose.onclick = () => {
+            adminModal.classList.remove('is-open');
             adminModal.style.display = 'none';
         };
     }
@@ -226,6 +227,7 @@ export function initAdmin() {
     // Закрытие при клике вне модального окна
     adminModal.onclick = (e) => {
         if (e.target === adminModal) {
+            adminModal.classList.remove('is-open');
             adminModal.style.display = 'none';
         }
     };

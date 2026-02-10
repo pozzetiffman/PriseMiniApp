@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 import time
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./sql_app.db"
@@ -11,10 +12,12 @@ connect_args = {
     "timeout": 10.0,  # Таймаут для операций с БД (10 секунд)
 }
 
+# NullPool для SQLite: не держим пул соединений, чтобы избежать
+# QueuePool limit reached при большом числе одновременных запросов (favorites/check, PATCH и т.д.)
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args=connect_args,
-    pool_pre_ping=True,  # Проверка соединения перед использованием
+    poolclass=NullPool,
     echo=False  # Отключить SQL логирование для производительности
 )
 

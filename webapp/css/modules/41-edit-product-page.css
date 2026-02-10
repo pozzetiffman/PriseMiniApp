@@ -1,0 +1,130 @@
+/* Stage 5 batch 2: страница редактирования товара (из 99-legacy) */
+
+/* ========== EDIT PRODUCT UX — compact delivery button + saving state + reduced bottom spacing ========== */
+#edit-product-page .edit-delivery-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+#edit-product-page .edit-delivery-save-btn.glass-btn {
+    padding: 8px 12px;
+    min-height: 34px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.15;
+    font-weight: 600;
+}
+
+#edit-product-page .edit-delivery-save-btn.glass-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    filter: saturate(0.85);
+}
+
+#edit-product-page .edit-product-btn.is-saving,
+#edit-product-page .edit-delivery-save-btn.is-saving {
+    opacity: 0.75;
+    cursor: not-allowed;
+}
+
+#edit-product-page .edit-product-btn.is-saving::after {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-left: 10px;
+    border-radius: 999px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    vertical-align: -2px;
+    animation: ep-spin 0.8s linear infinite;
+}
+
+@keyframes ep-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* =========================================================
+   EDIT PRODUCT — HARD OVERRIDE bottom spacing (DEBUG + FIX)
+   Scope ONLY: #edit-product-page
+   ========================================================= */
+
+/* 0) На время диагностики: включи 1, потом вернёшь 0. Когда выключишь — добавь правило для ::before { display: none } */
+#edit-product-page {
+    --ep-debug: 0;
+    --edit-product-bottom-gap: 0px; /* максимально близко; дальше регулируем 0/2/4/6px */
+}
+
+/* 1) DEBUG: подсветка контейнеров (при --ep-debug: 0 outline исчезает) */
+#edit-product-page .operation-page-content {
+    outline: calc(var(--ep-debug) * 2px) dashed rgba(255, 0, 0, 0.6);
+}
+#edit-product-page .operation-page-content.form-page-content {
+    outline: calc(var(--ep-debug) * 2px) dashed rgba(0, 128, 255, 0.7);
+    position: relative;
+}
+
+/* Визуальный маркер внизу контейнера (при выключении дебага задай этому ::before { display: none }) */
+#edit-product-page .operation-page-content.form-page-content::before {
+    content: "EDIT-PRODUCT CSS OVERRIDE ACTIVE";
+    display: none; /* включить для отладки */
+    position: absolute;
+    bottom: 0;
+    left: 16px;
+    right: 16px;
+    font-size: 11px;
+    color: rgba(0, 128, 255, 0.8);
+    padding: 2px 6px;
+    pointer-events: none;
+}
+
+/* 2) ГЛАВНОЕ: убираем "пустоту" снизу — и padding-bottom, и ::after */
+#edit-product-page .operation-page-content.form-page-content {
+    padding-bottom: calc(var(--edit-product-bottom-gap) + 88px + var(--tg-safe-area-inset-bottom, 0px)) !important;
+}
+#edit-product-page .operation-page-content.form-page-content::after {
+    content: '' !important;
+    display: block !important;
+    pointer-events: none;
+    height: calc(var(--edit-product-bottom-gap) + 88px + var(--tg-safe-area-inset-bottom, 0px)) !important;
+}
+
+/* На всякий случай: перебиваем любые раздельные правила */
+#edit-product-page .operation-page-content,
+#edit-product-page .form-page-content {
+    padding-bottom: calc(var(--edit-product-bottom-gap) + 88px + var(--tg-safe-area-inset-bottom, 0px)) !important;
+}
+#edit-product-page .operation-page-content::after,
+#edit-product-page .form-page-content::after {
+    content: '' !important;
+    display: block !important;
+    pointer-events: none;
+    height: calc(var(--edit-product-bottom-gap) + 88px + var(--tg-safe-area-inset-bottom, 0px)) !important;
+}
+
+/* 3) ВТОРОЙ источник "высоко": внутренние отступы формы и расстояние до кнопок */
+#edit-product-page .edit-product-form {
+    padding-bottom: 8px;
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 16px;
+}
+
+#edit-product-page .edit-product-actions {
+    margin-top: 12px;
+    padding-bottom: 0;
+}
+
+/* 4) Убираем min-height, чтобы контент не растягивал блок */
+#edit-product-page .operation-page-content.form-page-content,
+#edit-product-page .operation-page-content,
+#edit-product-page .form-page-content {
+    min-height: auto;
+}
+
+/* 5) После проверки: поставь --ep-debug: 0; убери background у ::after (строки с rgba(0,128,255,0.15));
+   при необходимости скрой маркер: #edit-product-page .operation-page-content.form-page-content::before { display: none; }
+   и выставь --edit-product-bottom-gap в 0/2/4/6px по вкусу. */

@@ -1,0 +1,947 @@
+/* Stage 6 batch 3: extracted from 90-admin.css (move-only). */
+
+
+/* Статистика */
+.stats-content {
+    padding: 0;
+    overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
+    /* Предотвращаем перетаскивание на уровне контейнера */
+    -webkit-user-drag: none;
+}
+
+.stats-section {
+    margin-bottom: 20px;
+}
+
+.stats-section h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+/* Адаптивная сетка для статистики на больших экранах */
+@media (min-width: 600px) {
+    .stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.stat-card {
+    background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    /* Предотвращаем перетаскивание */
+    -webkit-user-drag: none;
+    -webkit-user-select: none;
+    user-select: none;
+    /* Для будущей функциональности клика */
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.stat-card:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #5ac8fa; /* Фиксированный цвет - не меняется при смене ориентации */
+    margin-bottom: 6px;
+    line-height: 1.2;
+}
+
+/* Tooltip с информацией о статистике */
+.stat-info-tooltip {
+    position: fixed;
+    max-width: 320px;
+    min-width: 280px;
+    background: var(--bg-glass-light, rgba(44, 44, 46, 0.95));
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border-radius: 16px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    z-index: 10000;
+    pointer-events: auto;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+
+.stat-info-content {
+    padding: 16px;
+}
+
+.stat-info-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--tg-theme-text-color, #ffffff);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stat-info-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--tg-theme-hint-color, #8e8e93);
+}
+
+.stat-info-text strong {
+    color: var(--tg-theme-text-color, #ffffff);
+    font-weight: 600;
+}
+
+.stat-info-text br {
+    line-height: 1.8;
+}
+
+/* Фильтр по периоду для статистики */
+.stats-filter-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stats-period-filter {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.stats-period-select {
+    padding: 8px 12px;
+    background: var(--bg-glass, rgba(58, 58, 60, 0.75));
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--tg-theme-text-color);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 140px;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235ac8fa' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+}
+
+.stats-period-select:hover {
+    background-color: rgba(var(--color-accent-rgb), 0.1);
+    border-color: rgba(var(--color-accent-rgb), 0.3);
+}
+
+.stats-period-select:focus {
+    background-color: rgba(var(--color-accent-rgb), 0.15);
+    border-color: var(--tg-theme-link-color, #5ac8fa);
+    box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
+}
+
+.stats-custom-dates {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.stats-date-input {
+    padding: 8px 12px;
+    background: var(--bg-glass, rgba(58, 58, 60, 0.75));
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--tg-theme-text-color);
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    outline: none;
+    min-width: 140px;
+}
+
+.stats-date-input:hover {
+    background-color: rgba(var(--color-accent-rgb), 0.1);
+    border-color: rgba(var(--color-accent-rgb), 0.3);
+}
+
+.stats-date-input:focus {
+    background-color: rgba(var(--color-accent-rgb), 0.15);
+    border-color: var(--tg-theme-link-color, #5ac8fa);
+    box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
+}
+
+/* Стилизация для date input в разных браузерах */
+.stats-date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    filter: invert(0.5) sepia(1) saturate(5) hue-rotate(175deg);
+}
+
+.stats-date-input::-webkit-datetime-edit-text {
+    color: var(--tg-theme-text-color);
+}
+
+.stats-date-input::-webkit-datetime-edit-month-field,
+.stats-date-input::-webkit-datetime-edit-day-field,
+.stats-date-input::-webkit-datetime-edit-year-field {
+    color: var(--tg-theme-text-color);
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--tg-theme-hint-color);
+    line-height: 1.3;
+}
+
+.top-products-list {
+    padding: 0;
+}
+
+.top-product-item {
+    /* Убраны все анимации и интерактивность */
+    -webkit-user-drag: none;
+    -webkit-user-select: none;
+    user-select: none;
+    pointer-events: none;
+}
+
+.recent-visits-list {
+    padding: 0;
+}
+
+.visit-item {
+    /* Убраны все анимации и интерактивность */
+    -webkit-user-drag: none;
+    -webkit-user-select: none;
+    user-select: none;
+    pointer-events: none;
+}
+
+/* Список проданных товаров */
+.sold-products-list {
+    padding: 0;
+    overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
+}
+
+.sold-product-item {
+    background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+.sold-product-item:hover {
+    background: rgba(28, 28, 30, 0.9);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--shadow-medium);
+}
+
+.orders-list,
+.reservations-list {
+    padding: 0;
+    overflow: visible; /* Убираем прокрутку - прокрутка только у .admin-page */
+}
+
+.admin-page .order-item {
+    background: var(--bg-glass, rgba(28, 28, 30, 0.8));
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 8px var(--shadow-light);
+    transition: all 0.2s ease;
+}
+
+.admin-page .order-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--shadow-medium);
+}
+
+.admin-setting {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-glass);
+}
+
+.admin-setting:last-child {
+    border-bottom: none;
+}
+
+.admin-setting-label {
+    flex: 1;
+    margin-right: 20px;
+}
+
+.admin-setting-label label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.admin-setting-description {
+    font-size: 12px;
+    color: var(--text-hint);
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* Переключатель (toggle switch) */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    transition: 0.3s;
+    border-radius: 28px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--text-primary);
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--tg-theme-button-color);
+    border-color: var(--tg-theme-button-color);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(22px);
+}
+
+.toggle-switch input:disabled + .toggle-slider {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--bg-glass);
+}
+
+.toggle-switch input:disabled {
+    cursor: not-allowed;
+}
+
+.admin-info {
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-radius: 12px;
+    border: 1px solid var(--border-glass);
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+.admin-info p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-hint);
+    line-height: 1.5;
+}
+
+/* Уведомления админки */
+.admin-notification {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Модальное окно редактирования товара */
+.edit-product-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.edit-product-form {
+    padding: 20px;
+}
+
+.edit-product-field {
+    margin-bottom: 20px;
+}
+
+.edit-product-field label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.edit-product-field input {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.edit-product-field input:focus,
+.edit-product-field textarea:focus {
+    outline: none;
+    border-color: var(--tg-theme-button-color, #5ac8fa);
+    box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
+}
+
+.edit-product-field textarea {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 80px;
+}
+
+.edit-product-field select {
+    width: 100%;
+    padding: 14px 16px;
+    background: var(--bg-glass-light);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%235ac8fa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    padding-right: 40px;
+}
+
+.edit-product-field select:focus {
+    outline: none;
+    border-color: var(--tg-theme-button-color, #5ac8fa);
+    box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
+}
+
+.edit-product-field select:hover {
+    border-color: var(--tg-theme-button-color, #5ac8fa);
+    background-color: rgba(var(--color-accent-rgb), 0.05);
+}
+
+/* Блок характеристик — компактный Liquid Glass */
+.edit-characteristics-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    padding: 12px;
+    margin-top: 12px;
+}
+.edit-characteristics-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+}
+.edit-characteristics-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin-bottom: 10px;
+    min-height: 4px;
+    scroll-behavior: smooth;
+}
+.edit-char-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    min-height: 34px;
+}
+.edit-char-name {
+    flex: 0 0 100px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.edit-char-value {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    font-size: 13px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    height: 32px;
+}
+.edit-char-delete {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-hint);
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.edit-char-delete:hover {
+    background: rgba(255, 59, 48, 0.2);
+    color: #ff3b30;
+}
+/* Строка добавления: select/manual + value + кнопка */
+.edit-char-add-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.edit-char-name-source {
+    flex: 1;
+    min-width: 100px;
+    min-height: 34px;
+    position: relative;
+}
+.edit-char-name-source select,
+.edit-char-name-source .edit-characteristics-name-manual {
+    width: 100%;
+    height: 34px;
+    padding: 6px 10px;
+    font-size: 13px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    box-sizing: border-box;
+}
+.edit-characteristics-name-select {
+    display: block;
+    pointer-events: auto;
+}
+.edit-characteristics-name-manual {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: auto;
+}
+.edit-characteristics-name-manual.offscreen-hidden {
+    position: absolute !important;
+    left: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden;
+}
+.edit-characteristics-name-select.offscreen-hidden {
+    position: absolute !important;
+    left: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden;
+}
+.edit-characteristics-value {
+    flex: 1;
+    min-width: 80px;
+    height: 34px;
+    padding: 6px 10px;
+    font-size: 13px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+}
+.edit-char-add-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    background: var(--tg-theme-button-color, #5ac8fa);
+    color: var(--tg-theme-button-text-color, #ffffff);
+    border: none;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.edit-char-toggle-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.edit-char-toggle-btn:hover {
+    background: var(--tg-theme-button-color, #5ac8fa);
+    color: var(--tg-theme-button-text-color, #ffffff);
+}
+
+/* Блок доставки на странице редактирования (Liquid Glass) */
+.edit-delivery-card {
+    margin-top: 16px;
+    margin-bottom: 16px;
+    padding: 14px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+}
+.edit-delivery-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.edit-delivery-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.edit-delivery-hint {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.edit-delivery-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.edit-delivery-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 2px;
+    cursor: pointer;
+    font-size: 15px;
+    color: var(--text-primary);
+    opacity: 0.95;
+}
+.edit-delivery-toggle input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--tg-theme-button-color, #5ac8fa);
+}
+.edit-delivery-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border-glass);
+    background: rgba(255, 255, 255, 0.04);
+}
+.edit-delivery-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    min-width: 60px;
+}
+.edit-delivery-row input {
+    flex: 1;
+    height: 34px;
+    border-radius: 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-glass);
+    background: var(--bg-glass-light);
+    color: var(--text-primary);
+    font-size: 15px;
+}
+.edit-delivery-row input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+.edit-delivery-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+.edit-delivery-save-btn.glass-btn {
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    background: var(--tg-theme-button-color, #5ac8fa);
+    color: var(--tg-theme-button-text-color, #ffffff);
+    border: none;
+    cursor: pointer;
+}
+.edit-delivery-save-btn.glass-btn:active {
+    opacity: 0.9;
+}
+.edit-delivery-status {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.edit-product-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.edit-product-btn {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.edit-product-btn.save {
+    background: var(--tg-theme-button-color, #5ac8fa);
+    color: var(--tg-theme-button-text-color, #ffffff);
+}
+
+.edit-product-btn.save:active {
+    opacity: 0.8;
+    transform: scale(0.98);
+}
+
+.edit-product-btn.cancel {
+    background: var(--bg-glass-light);
+    color: var(--text-primary);
+    border: 1px solid var(--border-glass);
+}
+
+.edit-product-btn.cancel:active {
+    opacity: 0.8;
+    transform: scale(0.98);
+}
+
+/* Стили для формы оформления заказа */
+.order-form-modal {
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.order-form-modal::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.order-step {
+    display: none;
+}
+
+.order-step.active {
+    display: block;
+}
+
+.order-product-summary {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.order-product-summary h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.order-product-summary .product-price {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-price-card);
+    margin: 8px 0;
+}
+
+.order-product-summary .product-quantity-info {
+    font-size: 14px;
+    color: var(--text-hint);
+    margin-top: 8px;
+}
+
+.order-total {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-glass);
+    border-radius: 8px;
+    border: 1px solid var(--border-glass);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-price-card);
+    text-align: center;
+}
+
+.order-form-field {
+    margin-bottom: 16px;
+}
+
+.order-form-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.delivery-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-glass);
+    border: 2px solid var(--border-glass);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.delivery-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--tg-theme-button-color, #5ac8fa);
+}
+
+.delivery-option input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--tg-theme-button-color, #5ac8fa);
+}
+
+.delivery-option input[type="radio"]:checked + span {
+    font-weight: 600;
+    color: var(--tg-theme-button-color, #5ac8fa);
+}
+
+.delivery-option span {
+    font-size: 16px;
+    color: var(--text-primary);
+    flex: 1;
+}
+

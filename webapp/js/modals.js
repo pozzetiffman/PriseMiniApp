@@ -81,6 +81,7 @@ export function setupModals() {
         modalCloseElement.onclick = () => {
             cleanupProductModal();
             if (modalElement) {
+                modalElement.classList.remove('is-open');
                 modalElement.style.display = 'none';
             }
             document.body.style.overflow = 'auto';
@@ -91,6 +92,7 @@ export function setupModals() {
         modalElement.onclick = (e) => {
             if (e.target === modalElement) {
                 cleanupProductModal();
+                if (modalElement) modalElement.classList.remove('is-open');
                 modalElement.style.display = 'none';
                 document.body.style.overflow = 'auto';
             }
@@ -101,6 +103,7 @@ export function setupModals() {
     if (reservationCloseElement) {
         reservationCloseElement.onclick = () => {
             if (reservationModalElement) {
+                reservationModalElement.classList.remove('is-open');
                 reservationModalElement.style.display = 'none';
             }
         };
@@ -109,6 +112,7 @@ export function setupModals() {
     if (reservationModalElement) {
         reservationModalElement.onclick = (e) => {
             if (e.target === reservationModalElement) {
+                reservationModalElement.classList.remove('is-open');
                 reservationModalElement.style.display = 'none';
             }
         };
@@ -118,11 +122,13 @@ export function setupModals() {
     if (orderCloseElement) {
         orderCloseElement.onclick = () => {
             if (orderModalElement) {
+                orderModalElement.classList.remove('is-open');
                 orderModalElement.style.display = 'none';
             }
             resetOrderForm();
             showOrderStep(1);
             if (orderModalElement) {
+                orderModalElement.classList.remove('is-open');
                 orderModalElement.style.display = 'none';
             }
         };
@@ -131,6 +137,7 @@ export function setupModals() {
     if (orderModalElement) {
         orderModalElement.onclick = (e) => {
             if (e.target === orderModalElement) {
+                orderModalElement.classList.remove('is-open');
                 orderModalElement.style.display = 'none';
                 resetOrderForm();
                 showOrderStep(1);
@@ -138,10 +145,11 @@ export function setupModals() {
         };
     }
     
-    // Закрытие модального окна продажи
+    // Закрытие модального окна продажи (этап 4: снять .is-open)
     if (sellCloseElement) {
         sellCloseElement.onclick = () => {
             if (sellModalElement) {
+                sellModalElement.classList.remove('is-open');
                 sellModalElement.style.display = 'none';
             }
         };
@@ -150,17 +158,19 @@ export function setupModals() {
     if (sellModalElement) {
         sellModalElement.onclick = (e) => {
             if (e.target === sellModalElement) {
+                sellModalElement.classList.remove('is-open');
                 sellModalElement.style.display = 'none';
             }
         };
     }
     
-    // Закрытие модального окна редактирования товара
+    // Закрытие модального окна редактирования товара (этап 4: снять .is-open)
     const editProductModal = document.getElementById('edit-product-modal');
     const editProductClose = document.querySelector('.edit-product-close');
     if (editProductClose) {
         editProductClose.onclick = () => {
             if (editProductModal) {
+                editProductModal.classList.remove('is-open');
                 editProductModal.style.display = 'none';
             }
         };
@@ -169,66 +179,77 @@ export function setupModals() {
     if (editProductModal) {
         editProductModal.onclick = (e) => {
             if (e.target === editProductModal) {
+                editProductModal.classList.remove('is-open');
                 editProductModal.style.display = 'none';
             }
         };
     }
     
-    // Обработчик кнопки "назад" на странице товара
+    // Обработчик кнопки "назад" на странице товара (state-класс is-active, без зависимости от style.display)
     const productPageBack = document.getElementById('product-page-back');
     if (productPageBack) {
-        productPageBack.onclick = () => {
+        productPageBack.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             closeProductPage();
-        };
+        });
     }
     
-    // Закрытие по Escape
+    // Закрытие по Escape — проверка по is-active, т.к. style.display может быть пустым после рефакторинга
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            // Закрываем страницу товара
             const productPage = document.getElementById('product-page');
-            if (productPage && (productPage.style.display === 'block' || productPage.style.display === 'flex')) {
+            if (productPage && productPage.classList.contains('is-active')) {
                 closeProductPage();
             }
+            const adminPage = document.getElementById('admin-page');
+            if (adminPage && adminPage.classList.contains('is-active')) {
+                adminPage.classList.remove('is-active');
+                adminPage.style.display = 'none';
+            }
             
-            if (modalElement && (modalElement.style.display === 'flex' || modalElement.style.display === 'block')) {
+            if (modalElement && (modalElement.style.display === 'flex' || modalElement.style.display === 'block' || modalElement.classList.contains('is-open'))) {
+                modalElement.classList.remove('is-open');
                 modalElement.style.display = 'none';
                 document.body.style.overflow = 'auto';
             }
-            if (reservationModalElement && (reservationModalElement.style.display === 'flex' || reservationModalElement.style.display === 'block')) {
+            if (reservationModalElement && (reservationModalElement.style.display === 'flex' || reservationModalElement.style.display === 'block' || reservationModalElement.classList.contains('is-open'))) {
+                reservationModalElement.classList.remove('is-open');
                 reservationModalElement.style.display = 'none';
             }
             const cartModal = document.getElementById('cart-modal');
-            if (cartModal && (cartModal.style.display === 'flex' || cartModal.style.display === 'block')) {
+            if (cartModal && (cartModal.style.display === 'flex' || cartModal.style.display === 'block' || cartModal.classList.contains('is-open'))) {
+                cartModal.classList.remove('is-open');
                 cartModal.style.display = 'none';
             }
-            const adminPage = document.getElementById('admin-page');
-            if (adminPage && (adminPage.style.display === 'flex' || adminPage.style.display === 'block')) {
-                adminPage.style.display = 'none';
-            }
-            if (editProductModal && (editProductModal.style.display === 'flex' || editProductModal.style.display === 'block')) {
+            if (editProductModal && (editProductModal.style.display === 'flex' || editProductModal.style.display === 'block' || editProductModal.classList.contains('is-open'))) {
+                editProductModal.classList.remove('is-open');
                 editProductModal.style.display = 'none';
             }
-            if (sellModalElement && (sellModalElement.style.display === 'flex' || sellModalElement.style.display === 'block')) {
+            if (sellModalElement && (sellModalElement.style.display === 'flex' || sellModalElement.style.display === 'block' || sellModalElement.classList.contains('is-open'))) {
                 sellModalElement.style.display = 'none';
+                sellModalElement.classList.remove('is-open');
             }
-            if (orderModalElement && (orderModalElement.style.display === 'flex' || orderModalElement.style.display === 'block')) {
+            if (orderModalElement && (orderModalElement.style.display === 'flex' || orderModalElement.style.display === 'block' || orderModalElement.classList.contains('is-open'))) {
+                orderModalElement.classList.remove('is-open');
                 orderModalElement.style.display = 'none';
             }
         }
     });
 }
 
-// Универсальная функция для показа модального окна
+// Универсальная функция для показа модального окна (этап 4: state-класс .is-open)
 export function showModal(modalElement) {
     if (modalElement) {
+        modalElement.classList.add('is-open');
         modalElement.style.display = 'flex';
     }
 }
 
-// Универсальная функция для скрытия модального окна
+// Универсальная функция для скрытия модального окна (этап 4: снять .is-open)
 export function hideModal(modalElement) {
     if (modalElement) {
+        modalElement.classList.remove('is-open');
         modalElement.style.display = 'none';
     }
 }

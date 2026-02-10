@@ -1,0 +1,307 @@
+/* Stage 7 batch 2: extracted from 40-product-page.css (move-only). */
+
+/* ========== СЛАЙДЕР ФОТО ТОВАРА (как в Яндекс Маркете) ========== */
+.product-slider-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    border-radius: 0 0 20px 20px; /* ТОЛЬКО снизу - фото приклеено к верху */
+    overflow: visible; /* Изменено с hidden на visible - чтобы слайды были видны */
+    /* Учитываем safe-area Telegram */
+    padding-top: 0;
+    padding-bottom: var(--tg-safe-area-inset-bottom, 0);
+    padding-left: 0; /* Убираем padding - он в slider */
+    padding-right: 0;
+    z-index: 1; /* Выше фона */
+}
+
+.product-slider {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+    /* Запрет выделения текста */
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    /* НЕ блокируем вертикальный overscroll - позволяем скроллить страницу */
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto; /* Разрешаем вертикальный скролл */
+    /* Плавная прокрутка с инерцией */
+    scroll-behavior: smooth;
+    -webkit-scroll-behavior: smooth;
+    /* Запрет контекстного меню на длинное нажатие */
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    /* Убираем padding - слайдер на весь экран */
+    padding-left: 0;
+    padding-right: 0;
+    /* НЕ используем touch-action: none - позволяем нативные жесты */
+}
+
+.product-slider::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+}
+
+.product-slider-track {
+    display: flex; /* Принудительно flex - важно для слайдера */
+    width: auto;
+    min-width: 100%;
+    height: 100%;
+    gap: 4px; /* Минимальный gap между слайдами (как тонкая линия) */
+    /* Позволяем видеть часть следующего изображения */
+    flex-direction: row; /* Явно указываем направление */
+    align-items: stretch; /* Растягиваем слайды по высоте */
+}
+
+/* Центрирование когда только одно фото */
+.product-slider-track:has(.product-slider-slide:only-child),
+.product-slider-track.single-slide {
+    justify-content: center; /* Центрируем единственный слайд */
+}
+
+.product-slider-slide {
+    flex: 0 0 92%; /* 92% ширины - виден кусочек следующего */
+    width: 92%;
+    min-width: 92%;
+    height: 100%;
+    scroll-snap-align: center; /* Snap в ЦЕНТР, а не в край */
+    scroll-snap-stop: always;
+    position: relative;
+    /* Запрет выделения */
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    /* Запрет drag изображения */
+    pointer-events: auto;
+    box-sizing: border-box;
+    /* Убираем padding - минимальный отступ только через gap */
+    padding: 0;
+}
+
+/* Когда только одно фото - делаем его 100% ширины и центрируем */
+.product-slider-slide:only-child {
+    flex: 0 0 100%; /* 100% ширины для единственного фото */
+    width: 100%;
+    min-width: 100%;
+}
+
+.product-slider-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    /* Запрет drag изображения */
+    pointer-events: none;
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    /* user-drag: none; - нестандартное свойство, оставлено для совместимости */
+    /* Тень для ощущения карточки */
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+/* Индикатор текущего слайда (мягкие капли как в Яндекс Маркете) */
+.product-slider-indicator {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    padding: 0; /* Убираем padding - точки без фона */
+    background: transparent; /* Прозрачный фон */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    border: none;
+}
+
+.product-slider-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 6px; /* Мягкие капли, не круглые */
+    background: rgba(255, 255, 255, 0.4); /* Полупрозрачные */
+    transition: all 0.25s ease; /* Плавный переход */
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.product-slider-dot.active {
+    width: 14px; /* Чуть шире активная */
+    height: 6px;
+    border-radius: 6px;
+    background: #fff; /* Полностью белая активная */
+    box-shadow: none; /* Убираем тень */
+}
+
+/* Placeholder для загрузки */
+.product-slider-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+    color: var(--text-hint);
+    font-size: 48px;
+    position: relative;
+}
+
+#product-page-hot-offer-control {
+    display: none;
+}
+
+.product-top-menu-admin-toggles {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: 6px;
+}
+
+.product-top-menu-toggle-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: var(--bg-glass);
+}
+
+.product-top-menu-toggle-emoji {
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.9;
+}
+
+.toggle-switch.toggle--sm {
+    width: 36px;
+    height: 20px;
+}
+
+.toggle-switch.toggle--sm .toggle-slider:before {
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+}
+
+.toggle-switch.toggle--sm input:checked + .toggle-slider:before {
+    transform: translateX(16px);
+}
+
+.product-hot-controls-row {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.product-hot-control-item {
+    flex: 0 0 auto;
+    width: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.product-hot-control-item .product-hot-control-emoji {
+    font-size: 22px;
+    line-height: 1;
+}
+
+/* Блок кнопок управления товаром — всегда скрыт, управление перенесено в top-menu */
+#product-page-edit-control {
+    display: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    margin-top: 12px;
+}
+
+#product-page-edit-control .reserve-btn {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 8px;
+    border: 1px solid var(--border-glass);
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+}
+
+#product-page-edit-control .reserve-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+#product-page-edit-control .reserve-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+#product-page-edit-control .btn-edit {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.2) 0%, rgba(var(--color-accent-rgb), 0.1) 100%);
+    border-color: rgba(var(--color-accent-rgb), 0.3);
+}
+
+#product-page-edit-control .btn-edit:hover {
+    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.35) 0%, rgba(var(--color-accent-rgb), 0.2) 100%);
+}
+
+#product-page-edit-control .btn-sold {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(76, 175, 80, 0.1) 100%);
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+#product-page-edit-control .btn-sold:hover {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.35) 0%, rgba(76, 175, 80, 0.2) 100%);
+}
+
+#product-page-edit-control .btn-delete {
+    background: linear-gradient(135deg, rgba(255, 77, 77, 0.2) 0%, rgba(255, 77, 77, 0.1) 100%);
+    border-color: rgba(255, 77, 77, 0.3);
+}
+
+#product-page-edit-control .btn-delete:hover {
+    background: linear-gradient(135deg, rgba(255, 77, 77, 0.35) 0%, rgba(255, 77, 77, 0.2) 100%);
+}
+
+.product-page-name {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+

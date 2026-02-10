@@ -1,0 +1,185 @@
+/* Stage 6 batch 3: extracted from 90-admin.css (move-only). */
+
+/* ========== СТРАНИЦА АДМИНКИ (отдельная страница вместо модального окна) ========== */
+.admin-page {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1001 !important; /* Выше чем header (z-index: 300) */
+    /* Фон под общий стиль проекта - градиент как в body */
+    background: linear-gradient(135deg, var(--bg-base) 0%, var(--bg-elevated) 50%, var(--bg-base) 100%);
+    /* Убран background-attachment: fixed - может вызывать проблемы с перекрытием */
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Запрещаем горизонтальный скролл */
+    max-width: 100vw;
+    width: 100%;
+    padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--tg-safe-area-inset-bottom, 0px) + 80px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: auto;
+    overscroll-behavior-x: none;
+    overscroll-behavior-block: auto;
+    overscroll-behavior-inline: none;
+    touch-action: pan-y;
+    -webkit-scroll-behavior: smooth;
+}
+
+/* Дубликат удален - правило уже есть выше */
+
+/* Удален псевдоэлемент ::before который перекрывал контент */
+
+.admin-page::-webkit-scrollbar {
+    display: none;
+}
+
+/* z-index уже установлен выше в .admin-page */
+
+#admin-page.is-active {
+    display: block !important;
+}
+
+.admin-page-header {
+    position: relative;
+    z-index: 100;
+    background: transparent;
+    padding: 12px 12px 8px 12px;
+    margin: 0;
+    border: none;
+    border-bottom: none;
+}
+
+.admin-page-back {
+    /* Кнопка как часть контента - двигается вместе со страницей */
+    position: relative;
+    z-index: 101;
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 12px;
+    margin-top: 0;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.admin-page-back:hover {
+    background: var(--bg-glass);
+    transform: translateX(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.admin-page-back:active {
+    transform: translateX(0);
+    background: var(--bg-glass-light);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.admin-page-content {
+    padding: 0 12px;
+    padding-top: 0;
+    padding-bottom: calc(80px + var(--tg-safe-area-inset-bottom, 0px));
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+    /* Запрещаем горизонтальный скролл */
+    overflow-x: hidden;
+    min-width: 0;
+    scroll-behavior: smooth;
+    -webkit-scroll-behavior: smooth;
+}
+
+/* На десктопе увеличиваем padding-bottom для контента */
+@media (min-width: 768px) {
+    .admin-page-content {
+        padding-bottom: calc(100px + var(--tg-safe-area-inset-bottom, 0px));
+    }
+}
+
+/* Стили для элементов внутри admin-page */
+.admin-page .admin-tabs {
+    margin: 12px 0;
+    padding: 0;
+}
+
+.admin-page .admin-modal-body {
+    padding: 0;
+}
+
+.admin-page .admin-tab-content {
+    padding: 0;
+}
+
+.admin-page .orders-list,
+.admin-page .reservations-list,
+.admin-page .sold-products-list,
+.admin-page .purchases-list,
+.admin-page .stats-content {
+    padding: 0;
+}
+
+/* Информационное сообщение о вкладках на странице админки */
+.admin-page #admin-tabs-info {
+    position: relative;
+    padding: 10px 40px 10px 16px;
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, #999);
+    text-align: center;
+    background: rgba(var(--color-accent-rgb), 0.1);
+    border-radius: 8px;
+    margin: 0 0 12px 0;
+    border: 1px solid rgba(var(--color-accent-rgb), 0.2);
+    line-height: 1.4;
+}
+
+.admin-page .admin-tabs-info-close {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--tg-theme-hint-color, #999);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.admin-page .admin-tabs-info-close:hover {
+    opacity: 1;
+}
+
+/* Анимация появления страницы админки */
+@keyframes adminPageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+#admin-page.is-active {
+    animation: adminPageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}

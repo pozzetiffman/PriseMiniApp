@@ -1,0 +1,659 @@
+header {
+    padding: 12px 16px;
+    padding-bottom: max(12px, calc(12px + var(--tg-safe-area-inset-bottom, 0px)));
+    text-align: center;
+    background: var(--bg-glass) !important;
+    backdrop-filter: var(--blur-large);
+    -webkit-backdrop-filter: var(--blur-large);
+    border-top: 1px solid var(--border-glass);
+    border-bottom: none;
+    position: fixed !important;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10010 !important; /* СЛОЙ 1: Самый высокий - меню всегда поверх всего */
+    pointer-events: auto !important; /* Меню всегда должно быть кликабельным */
+    box-shadow: 0 -8px 32px var(--shadow-glass),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    min-height: 64px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    justify-items: center;
+    gap: 12px;
+    border-radius: 24px 24px 0 0;
+    transition: transform 0.25s ease-out;
+}
+
+/* Нижнее меню скрыто при фокусе на input/textarea (клавиатура открыта) */
+header.header-keyboard-hidden {
+    transform: translateY(100%);
+    pointer-events: none;
+}
+
+/* Header всегда виден, даже в админке */
+
+/* Кнопка избранного в нижнем меню */
+.favorites-button {
+    padding: 0 12px;
+    background: linear-gradient(135deg, rgba(58, 58, 60, 0.75) 0%, rgba(44, 44, 46, 0.65) 100%);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    gap: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    height: 44px;
+    line-height: 1;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 10;
+    white-space: nowrap;
+}
+
+.favorites-button .heart-icon-menu {
+    width: 20px;
+    height: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.favorites-button .heart-path-menu {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* КРИТИЧНО: По умолчанию сердечко БЕЗ заливки (пустое) */
+    fill: none !important;
+    stroke: rgba(255, 255, 255, 0.5) !important;
+    stroke-width: 1.5 !important;
+}
+
+/* Состояние: есть избранные - красное свечение (как у корзины зеленое) */
+.favorites-button.favorites-has-items {
+    box-shadow: 0 4px 16px rgba(255, 59, 48, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(255, 59, 48, 0.15);
+}
+
+.favorites-button.favorites-has-items .heart-path-menu {
+    fill: #ff3b30 !important;
+    stroke: none !important;
+    stroke-width: 0 !important;
+    filter: drop-shadow(0 0 6px rgba(255, 59, 48, 0.6));
+}
+
+/* Состояние: нет избранных - тонкий контур нейтрального цвета (БЕЗ ЗАЛИВКИ) */
+.favorites-button:not(.favorites-has-items) .heart-path-menu {
+    fill: none !important;
+    stroke: rgba(255, 255, 255, 0.5) !important;
+    stroke-width: 1.5 !important;
+}
+
+.favorites-button:hover {
+    background: linear-gradient(135deg, rgba(72, 72, 74, 0.85) 0%, rgba(58, 58, 60, 0.75) 100%);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px var(--shadow-medium),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    transform: translateY(-1px);
+}
+
+.favorites-button.favorites-has-items:hover {
+    box-shadow: 0 6px 24px rgba(255, 59, 48, 0.35),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+                0 4px 12px rgba(255, 59, 48, 0.25);
+}
+
+.favorites-button.favorites-has-items:hover .heart-path-menu {
+    filter: drop-shadow(0 0 8px rgba(255, 59, 48, 0.8));
+}
+
+.favorites-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+/* Скрытие кнопки избранного для админа */
+.favorites-button.is-hidden {
+    display: none;
+}
+.favorites-button.is-visible {
+    display: flex;
+}
+
+/* Иконка избранного на фото товара */
+/* Кнопка избранного - привязана к фото товара (imageDiv) */
+/* КРИТИЧНО: .product-image должен иметь position: relative для позиционирования сердечка */
+/* NOTE: position устанавливается явно в JS через imageDiv.style.position = 'relative' */
+.product-image {
+    position: relative; /* Контейнер для абсолютного позиционирования сердечка */
+}
+
+.favorite-button-card {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    background: rgba(0, 0, 0, 0.4) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: none !important;
+    padding: 6px;
+    margin: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 16;
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s ease;
+}
+
+/* Убираем все focus/active стили браузера */
+.favorite-button-card:focus,
+.favorite-button-card:focus-visible {
+    outline: none !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.favorite-button-card:active {
+    outline: none !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    transform: scale(0.95);
+}
+
+/* SVG сердечко - маленькое, пушистое */
+.favorite-heart {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.95);
+    stroke-width: 2;
+    transition: all 0.15s ease;
+}
+
+/* Состояние: выбрано - красная заливка + свечение */
+.favorite-button-card.favorite-active .favorite-heart {
+    fill: #ff3b30;
+    stroke: #ff3b30;
+    filter: drop-shadow(0 0 6px rgba(255, 59, 48, 0.6));
+}
+
+.favorite-button-card:hover {
+    background: rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.favorite-button-card:hover .favorite-heart {
+    transform: scale(1.1);
+}
+
+.favorite-button-card:active .favorite-heart {
+    transform: scale(0.95);
+}
+
+header > div:first-child {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+header h1 {
+    font-size: 14px;
+    margin: 0;
+    color: var(--text-primary);
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    justify-self: center;
+    align-self: center;
+    max-width: 100%;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    height: 100%;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+.cart-button {
+    padding: 0 14px;
+    background: linear-gradient(135deg, rgba(58, 58, 60, 0.75) 0%, rgba(44, 44, 46, 0.65) 100%);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    box-shadow: 0 2px 8px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    min-height: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    line-height: 1;
+    vertical-align: middle;
+    align-self: center;
+}
+
+/* Состояние: есть товары в корзине - зеленое свечение (как у избранного красное) */
+.cart-button.cart-has-items {
+    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 2px 8px rgba(76, 175, 80, 0.15);
+    border-color: rgba(76, 175, 80, 0.4);
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(76, 175, 80, 0.12) 100%);
+}
+
+.cart-button:hover {
+    background: linear-gradient(135deg, rgba(72, 72, 74, 0.85) 0%, rgba(58, 58, 60, 0.75) 100%);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px var(--shadow-medium),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    transform: translateY(-1px);
+}
+
+.cart-button.cart-has-items:hover {
+    box-shadow: 0 6px 24px rgba(76, 175, 80, 0.35),
+                0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+                0 4px 12px rgba(76, 175, 80, 0.25);
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.3) 0%, rgba(76, 175, 80, 0.2) 100%);
+    border-color: rgba(76, 175, 80, 0.5);
+}
+
+.cart-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+/* Состояние неактивной корзины (когда пуста, но в layout) */
+.cart-button.is-disabled {
+    display: flex !important;
+    opacity: 0.3 !important;
+    pointer-events: none !important;
+    cursor: default;
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.1) 0%, rgba(128, 128, 128, 0.05) 100%);
+    border-color: rgba(128, 128, 128, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    min-height: 44px;
+    line-height: 1;
+    vertical-align: middle;
+    align-self: center;
+    gap: 0;
+    position: static !important;
+    transform: none !important;
+    right: auto !important;
+    top: auto !important;
+}
+
+.cart-button.is-hidden:hover,
+.cart-button.is-disabled:hover {
+    transform: none;
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.1) 0%, rgba(128, 128, 128, 0.05) 100%);
+    border-color: rgba(128, 128, 128, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+/* Скрытая корзина (не в layout) */
+.cart-button.is-hidden {
+    display: none !important;
+}
+
+/* Активное состояние корзины (когда есть товары) */
+.cart-button.is-visible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    min-height: 44px;
+    line-height: 1;
+    vertical-align: middle;
+    align-self: center;
+    gap: 0;
+    position: static !important;
+    transform: none !important;
+    right: auto !important;
+    top: auto !important;
+}
+
+#cart-count {
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.3) 0%, rgba(128, 128, 128, 0.2) 100%);
+    color: rgba(255, 255, 255, 0.5);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 20px;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    line-height: 1;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Счетчик корзины с товарами - зеленый фон */
+.cart-button.cart-has-items #cart-count,
+button.cart-button.cart-has-items #cart-count,
+#cart-button.cart-has-items #cart-count {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.7) 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: baseline;
+    margin-left: 2px;
+}
+
+.cart-button.is-hidden #cart-count,
+.cart-button.is-disabled #cart-count {
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.3) 0%, rgba(128, 128, 128, 0.2) 100%);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Убеждаемся, что когда корзина имеет товары, счетчик зеленый */
+.cart-button.cart-has-items.is-visible #cart-count {
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(76, 175, 80, 0.7) 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+}
+
+
+.cart-title {
+    font-size: 20px;
+    margin: 0 0 20px 0;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.cart-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-glass);
+    background: var(--bg-glass-light);
+    margin-bottom: 15px;
+    border-radius: 12px 12px 0 0;
+}
+
+.cart-tab {
+    flex: 1;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-hint);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cart-tab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.cart-tab.active {
+    color: #5ac8fa; /* Фиксированный цвет - не меняется при смене ориентации */
+    border-bottom-color: #5ac8fa;
+    background: rgba(var(--color-accent-rgb), 0.1);
+}
+
+/* Секции корзины */
+.cart-section {
+    display: block;
+}
+
+/* Подвкладки внутри секций */
+.cart-subtabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 0 4px;
+}
+
+.cart-subtab {
+    flex: 1;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    color: var(--text-hint);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cart-subtab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--tg-theme-link-color, #5ac8fa);
+}
+
+.cart-subtab.active {
+    color: #5ac8fa; /* Фиксированный цвет - не меняется при смене ориентации */
+    background: rgba(var(--color-accent-rgb), 0.15);
+    border-color: #5ac8fa;
+}
+
+.cart-items {
+    max-height: 70vh;
+    overflow-y: auto;
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.cart-items::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.cart-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    padding: 15px;
+    margin-bottom: 10px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    gap: 12px;
+}
+
+.cart-item-image-container {
+    width: 60px;
+    height: 60px;
+    min-width: 60px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-glass);
+}
+
+.cart-item-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cart-item-image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: var(--text-hint);
+}
+
+.cart-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.cart-item-info h3 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+    color: var(--text-primary);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cart-item-price {
+    margin: 4px 0;
+    font-size: 16px;
+    color: var(--color-price-card);
+    font-weight: 700;
+}
+
+.cart-item-time {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: var(--text-hint);
+}
+
+.cancel-reservation-btn-small {
+    padding: 8px 12px;
+    background: rgba(255, 59, 48, 0.2);
+    border: 1px solid rgba(255, 59, 48, 0.4);
+    border-radius: 8px;
+    color: #ff3b30;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cancel-reservation-btn-small:hover {
+    background: rgba(255, 59, 48, 0.3);
+    border-color: rgba(255, 59, 48, 0.6);
+    transform: scale(1.1);
+}
+
+/* Контейнер для действий с заказом (кнопка отмены) */
+.cart-item-actions {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+
+/* Кнопка отмены заказа - компактная, в нижней части справа */
+.cancel-order-btn {
+    padding: 4px 10px;
+    background: rgba(255, 59, 48, 0.15);
+    border: 1px solid rgba(255, 59, 48, 0.3);
+    border-radius: 6px;
+    color: #ff3b30;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.cancel-order-btn:hover {
+    background: rgba(255, 59, 48, 0.25);
+    border-color: rgba(255, 59, 48, 0.5);
+}
+
+.cancel-order-btn:active {
+    transform: scale(0.95);
+    background: rgba(255, 59, 48, 0.3);
+}
+
+.scroll-x {
+    /* Убираем display: none, так как теперь используем выпадающие списки */
+    overflow-x: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
+    overflow-y: visible !important;
+    padding: 0; /* Убираем padding, так как он задается в #categories-nav */
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+    position: relative; /* Для правильного позиционирования выпадающих списков */
+    z-index: 10002; /* Выше чем products-grid */
+}
+
+.scroll-x::-webkit-scrollbar {
+    display: none;
+}
+
+.category-badge {
+    padding: 6px 14px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.category-badge.active {
+    background: rgba(var(--color-accent-rgb), 0.25);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    color: #5ac8fa; /* Фиксированный цвет - не меняется при смене ориентации */
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    box-shadow: 0 2px 8px rgba(var(--color-accent-rgb), 0.15), 
+                0 0 0 1px rgba(var(--color-accent-rgb), 0.2) inset;
+    transform: scale(1.01);
+}
+
+/* Контейнер для выпадающих списков категорий */

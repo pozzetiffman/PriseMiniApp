@@ -2,7 +2,7 @@
 // Старая корзина отключена, но сохранена для возможности восстановления
 
 import { API_BASE, fetchProducts } from '../api.js';
-import { hideAllPages } from '../operationsBase.js';
+import { goToMainContent, hideAllPages } from '../operationsBase.js';
 import { renderProductPricesBlock } from '../utils/productCardParts.js';
 import {
     addToCart,
@@ -70,14 +70,17 @@ async function showCartToast(message, type = 'success') {
 export function initCartNew() {
     console.log('[CART NEW] Initializing new cart...');
     
-    // Настраиваем кнопку закрытия в верхнем меню
+    // Кнопка закрытия корзины — вешаем один раз (data-bound)
     const cartPageNewClose = document.getElementById('cart-page-new-close');
-    if (cartPageNewClose) {
-        cartPageNewClose.onclick = () => {
+    if (cartPageNewClose && !cartPageNewClose.dataset.bound) {
+        cartPageNewClose.dataset.bound = '1';
+        cartPageNewClose.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             closeCartPageNew();
-        };
+        });
         console.log('[CART NEW] ✅ Close button initialized');
-    } else {
+    } else if (!cartPageNewClose) {
         console.warn('[CART NEW] ⚠️ Close button not found');
     }
     
@@ -256,6 +259,7 @@ export async function openCartPageNew() {
     
     // Единый способ: скрыть все страницы, затем показать корзину
     hideAllPages();
+    cartPageNew.classList.add('is-active');
     cartPageNew.style.display = 'block';
     
     // Синхронизируем корзину с сервером (это загрузит актуальные данные)
@@ -743,7 +747,7 @@ export async function addProductToCart(product, quantity = 1) {
         }
         
         const cartPageNew = document.getElementById('cart-page-new');
-        if (cartPageNew && cartPageNew.style.display !== 'none') {
+        if (cartPageNew && cartPageNew.classList.contains('is-active')) {
             renderCart();
         }
         
@@ -776,8 +780,16 @@ export function updateCartButtonCount() {
     if (cartButton) {
         const count = getCartItemsCount();
         
-        // Показываем/скрываем кнопку корзины
-        cartButton.style.display = count > 0 ? '' : 'none';
+        // Показываем/скрываем кнопку корзины через классы состояния (fallback: inline style)
+        if (count > 0) {
+            cartButton.classList.remove('is-hidden', 'is-disabled');
+            cartButton.classList.add('is-visible');
+            cartButton.style.display = '';
+        } else {
+            cartButton.classList.remove('is-visible', 'is-disabled');
+            cartButton.classList.add('is-hidden');
+            cartButton.style.display = 'none';
+        }
         
         // Добавляем/удаляем класс для подсветки (как у избранного)
         if (count > 0) {
@@ -823,28 +835,14 @@ export function updateCartButtonsState() {
 }
 
 /**
- * Закрытие новой страницы корзины
- * Скрывает новую корзину и показывает главный контент
+ * Закрытие новой страницы корзины. Сначала снимаем is-active и скрываем, затем goToMainContent().
  */
 export function closeCartPageNew() {
     console.log('[CART NEW] Closing new cart page...');
-    
     const cartPageNew = document.getElementById('cart-page-new');
-    const mainContent = document.getElementById('main-content');
-    const productPage = document.getElementById('product-page');
-    const favoritesPage = document.getElementById('favorites-page');
-    
     if (cartPageNew) {
-        // Скрываем все страницы сначала
-        if (productPage) productPage.style.display = 'none';
-        if (favoritesPage) favoritesPage.style.display = 'none';
+        cartPageNew.classList.remove('is-active');
         cartPageNew.style.display = 'none';
-        
-        // Показываем главный контент
-        if (mainContent) {
-            mainContent.style.display = 'block';
-        }
-        
-        console.log('[CART NEW] ✅ Cart page closed');
     }
+    goToMainContent();
 }

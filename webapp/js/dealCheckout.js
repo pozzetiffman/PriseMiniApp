@@ -112,8 +112,17 @@ export function openDealCheckoutPage(dealId, summary, options = {}) {
     currentCheckoutSource = options.source === 'single' ? 'single' : 'cart';
     const page = document.getElementById(PAGE_ID);
     if (!page) return;
+    // Откуда нажали — туда и вернёмся: берём страницу, у которой сейчас is-active (до hideAllPages)
+    const fromProduct = document.getElementById('product-page')?.classList.contains('is-active');
+    const fromFavorites = document.getElementById('favorites-page')?.classList.contains('is-active');
+    const fromCart = document.getElementById('cart-page-new')?.classList.contains('is-active');
+    if (fromProduct) page.dataset.returnTo = 'product-page';
+    else if (fromFavorites) page.dataset.returnTo = 'favorites-page';
+    else if (fromCart) page.dataset.returnTo = 'cart-page-new';
+    else page.dataset.returnTo = 'main-content';
 
     hideAllPages();
+    page.classList.add('is-active');
     page.style.display = 'block';
     if (page.scrollTo) page.scrollTo(0, 0);
     setupPageScrollHandler(page);
@@ -138,24 +147,47 @@ export function openDealCheckoutPage(dealId, summary, options = {}) {
 }
 
 /**
- * Закрыть страницу оформления: при source 'cart' — возврат в корзину, при 'single' — главная/избранное.
+ * Закрыть страницу оформления. Цель возврата: dataset.returnTo (если задан), иначе по source: cart → корзина, single → главная/избранное.
+ * Этап 4: сначала снять is-active и скрыть, затем hideAllPages(), затем показать целевую страницу.
  */
 export function closeDealCheckoutPage() {
     clearOverlaysAndBodyClasses();
     const page = document.getElementById(PAGE_ID);
-    if (page) page.style.display = 'none';
+    if (page) {
+        page.classList.remove('is-active');
+        page.style.display = 'none';
+    }
+    const returnToId = (page && page.dataset.returnTo) || null;
     const source = currentCheckoutSource;
     currentDealId = null;
     currentSummary = null;
     currentCheckoutSource = 'cart';
+
+    hideAllPages();
+    if (returnToId) {
+        const target = document.getElementById(returnToId);
+        if (target) {
+            target.classList.add('is-active');
+            target.style.display = 'block';
+        }
+        return;
+    }
     if (source === 'single') {
         const mainContent = document.getElementById('main-content');
         const favoritesPage = document.getElementById('favorites-page');
-        if (favoritesPage) favoritesPage.style.display = 'block';
-        else if (mainContent) mainContent.style.display = 'block';
+        if (favoritesPage) {
+            favoritesPage.classList.add('is-active');
+            favoritesPage.style.display = 'block';
+        } else if (mainContent) {
+            mainContent.classList.add('is-active');
+            mainContent.style.display = 'block';
+        }
     } else {
         const cartPage = document.getElementById('cart-page-new');
-        if (cartPage) cartPage.style.display = 'block';
+        if (cartPage) {
+            cartPage.classList.add('is-active');
+            cartPage.style.display = 'block';
+        }
     }
 }
 

@@ -91,13 +91,20 @@ function setupGlobalFunctions() {
 }
 
 /**
- * Закрытие страницы заказа, возврат на product-page или cart-page-new
+ * Закрытие страницы заказа, возврат на product-page или cart-page-new.
+ * Сначала снимаем is-active и скрываем (state-класс после батча #2), затем показываем целевую страницу.
  */
 export function closeOrderPage() {
     const orderPage = document.getElementById('order-page');
     const returnPage = document.getElementById(orderPageReturnTo);
-    if (orderPage) orderPage.style.display = 'none';
-    if (returnPage) returnPage.style.display = 'block';
+    if (orderPage) {
+        orderPage.classList.remove('is-active');
+        orderPage.style.display = 'none';
+    }
+    if (returnPage) {
+        returnPage.classList.add('is-active');
+        returnPage.style.display = 'block';
+    }
 }
 
 /**
@@ -118,6 +125,7 @@ export function showOrderPage(productId, fromCart = false) {
         return;
     }
     hideAllPages();
+    orderPage.classList.add('is-active');
     orderPage.style.display = 'block';
     orderPage.scrollTop = 0;
     const backBtn = document.getElementById('order-page-back');
@@ -198,6 +206,7 @@ export function showOrderModal(productId) {
     updateOrderProductSummary(product);
     showOrderStep(1);
     setupOrderFormHandlers(productId);
+    orderModalElement.classList.add('is-open');
     orderModalElement.style.display = 'flex';
 }
 
@@ -458,7 +467,7 @@ export async function submitOrder(productId) {
         alert(`✅ Заказ оформлен! Статус: ожидание`);
         
         const orderPage = document.getElementById('order-page');
-        if (orderPage && (orderPage.style.display === 'block' || orderPage.style.display === 'flex')) {
+        if (orderPage && orderPage.classList.contains('is-active')) {
             closeOrderPage();
         } else {
             if (orderModalElement) orderModalElement.style.display = 'none';

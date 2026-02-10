@@ -1,0 +1,1332 @@
+#categories-nav {
+    display: block !important; /* Показываем контейнер категорий */
+    overflow: visible !important; /* Разрешаем выпадающие списки выходить за границы */
+    padding: 8px 0; /* Убираем горизонтальный padding, так как он задается в .category-dropdowns-container */
+    position: relative; /* Для правильного позиционирования выпадающих списков */
+    z-index: 10002; /* Выше чем products-grid, чтобы фильтр не перекрывался */
+    isolation: isolate; /* Создаем новый контекст наложения */
+}
+
+/* Поисковая строка */
+.search-container {
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 10001; /* Ниже чем категории, но выше чем товары */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    box-shadow: 0 2px 8px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    box-sizing: border-box;
+    font-family: inherit;
+    min-width: 0; /* Позволяет input сжиматься в flex контейнере */
+}
+
+.search-input::placeholder {
+    color: var(--text-hint);
+    opacity: 0.7;
+}
+
+.search-input:focus {
+    background: var(--bg-glass-light);
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    box-shadow: 0 4px 16px rgba(var(--color-accent-rgb), 0.15),
+                0 0 0 1px rgba(var(--color-accent-rgb), 0.2) inset,
+                0 2px 8px rgba(var(--color-accent-rgb), 0.1);
+    transform: translateY(-1px);
+}
+
+.search-input:hover:not(:focus) {
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 2px 12px var(--shadow-light),
+                0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+.category-dropdowns-container {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 12px;
+    padding: 0 12px; /* Отступы выровнены с поиском */
+    justify-content: space-between;
+    align-items: flex-start;
+    overflow: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
+    position: relative; /* Для правильного позиционирования */
+}
+
+.category-dropdowns-left {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    align-items: flex-start;
+    flex: 1;
+    overflow: visible !important; /* Разрешаем выпадающим спискам выходить за границы */
+    position: relative; /* Для правильного позиционирования */
+}
+
+/* Выпадающий список категорий */
+.category-dropdown {
+    position: relative;
+    flex: 0 0 auto; /* Не растягивается, занимает только необходимое место */
+    min-width: 120px; /* Минимальная ширина */
+    max-width: min(300px, 90vw); /* Адаптивная максимальная ширина - не больше 300px или 90% ширины экрана */
+}
+
+.category-dropdown-button {
+    width: 100%;
+    padding: 6px 10px; /* Еще более уменьшенные отступы */
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px; /* Уменьшенный радиус */
+    font-size: 12px; /* Еще более уменьшенный размер шрифта */
+    font-weight: 500;
+    color: var(--tg-theme-text-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    white-space: nowrap; /* Не переносим текст в кнопке */
+    overflow: hidden;
+    text-overflow: ellipsis; /* Многоточие для длинного текста в кнопке */
+    min-height: 32px; /* Уменьшенная высота */
+}
+
+.category-dropdown-button:hover {
+    background: rgba(var(--color-accent-rgb), 0.1);
+    border-color: rgba(var(--color-accent-rgb), 0.3);
+}
+
+.category-dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: rgba(60, 60, 62, 0.75); /* Более прозрачный фон */
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px; /* Уменьшенный радиус */
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 10000; /* Высокий z-index для Telegram WebView */
+    max-height: 250px; /* Уменьшенная высота */
+    overflow-y: auto;
+    animation: slideDown 0.3s ease-out;
+    display: none; /* По умолчанию скрыт */
+    -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
+    min-width: 100%; /* Минимальная ширина равна ширине кнопки */
+    width: max-content; /* Расширяется по содержимому */
+    max-width: min(300px, 90vw); /* Максимальная ширина - не больше 300px или 90% ширины экрана */
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+}
+
+.category-dropdown-list::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.category-dropdown-item {
+    padding: 6px 10px; /* Еще более уменьшенные отступы */
+    font-size: 12px; /* Еще более уменьшенный размер шрифта */
+    color: var(--tg-theme-text-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    white-space: normal; /* Разрешаем перенос текста */
+    word-wrap: break-word; /* Переносим длинные слова */
+    overflow-wrap: break-word; /* Альтернативное свойство для переноса */
+    min-width: 0; /* Позволяет flex-элементу сжиматься */
+    gap: 8px; /* Отступ между текстом и чекбоксом */
+}
+
+/* Стили для текста внутри элемента категории */
+.category-dropdown-item > span {
+    flex: 1; /* Занимает доступное пространство */
+    min-width: 0; /* Позволяет сжиматься */
+    white-space: normal; /* Разрешаем перенос текста */
+    word-wrap: break-word; /* Переносим длинные слова */
+    overflow-wrap: break-word; /* Альтернативное свойство для переноса */
+    line-height: 1.4; /* Улучшаем читаемость при переносе */
+}
+
+/* Стили для чекбокса в элементах категории */
+.category-dropdown-item > input[type="checkbox"] {
+    flex-shrink: 0; /* Чекбокс не сжимается */
+    margin-left: 8px; /* Отступ слева от текста */
+    width: 14px; /* Уменьшенная ширина чекбокса */
+    height: 14px; /* Уменьшенная высота чекбокса */
+    min-width: 14px; /* Минимальная ширина */
+    min-height: 14px; /* Минимальная высота */
+    cursor: pointer;
+    accent-color: var(--tg-theme-button-color, #3390ec); /* Цвет чекбокса */
+}
+
+/* Контейнер для кнопки фильтра */
+.category-filter-container {
+    position: relative;
+    flex: 0 0 auto;
+    flex-shrink: 0; /* Зафиксированная ширина, не сжимается */
+    z-index: 10003; /* Выше чем categories-nav, чтобы фильтр всегда был виден */
+    isolation: isolate; /* Создаем новый контекст наложения */
+    overflow: visible !important; /* Разрешаем dropdown выходить за границы */
+}
+
+/* Кнопка фильтра со стрелками */
+.category-filter-button {
+    flex: 0 0 auto;
+    width: 32px; /* Уменьшенный размер */
+    height: 32px;
+    padding: 6px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    color: var(--tg-theme-text-color);
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.category-filter-button:hover {
+    background: rgba(var(--color-accent-rgb), 0.1);
+    border-color: rgba(var(--color-accent-rgb), 0.3);
+}
+
+.category-filter-button.active {
+    background: rgba(var(--color-accent-rgb), 0.15);
+    border-color: rgba(var(--color-accent-rgb), 0.4);
+}
+
+.category-filter-button svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Выпадающий список фильтра категорий */
+.category-filter-dropdown {
+    position: fixed !important; /* Используем fixed для избежания обрезания */
+    /* top и right будут установлены через JavaScript */
+    background: rgba(60, 60, 62, 0.75) !important; /* Более прозрачный фон */
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 99999 !important; /* Максимальный z-index */
+    min-width: 200px;
+    max-width: 280px;
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: hidden; /* Скрываем горизонтальный скролл */
+    animation: slideDown 0.3s ease-out;
+    -webkit-overflow-scrolling: touch;
+    pointer-events: auto !important; /* Разрешаем клики */
+    will-change: transform; /* Оптимизация для анимации */
+    margin: 0 !important; /* Убираем margin */
+    /* Скрываем scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE и Edge */
+    /* Убеждаемся, что dropdown не обрезается */
+    contain: layout style paint; /* Оптимизация рендеринга */
+    transform: translateZ(0); /* Создаем новый слой для GPU ускорения */
+}
+
+.category-filter-dropdown::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.category-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.category-dropdown-item:hover {
+    background: rgba(var(--color-accent-rgb), 0.1);
+}
+
+.category-dropdown-item.active {
+    background: rgba(var(--color-accent-rgb), 0.2);
+    color: var(--tg-theme-button-color);
+    font-weight: 600;
+}
+
+/* Выпадающий список подкатегорий */
+.subcategories-dropdown {
+    animation: slideDown 0.3s ease-out;
+    margin-top: 6px;
+    margin-left: 12px;
+    padding-left: 12px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    border-left: 2px solid rgba(var(--color-accent-rgb), 0.3);
+    background: rgba(var(--color-accent-rgb), 0.05);
+    border-radius: 8px;
+    margin-right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Стили для подкатегорий */
+.subcategory-badge {
+    font-size: 11px;
+    padding: 4px 12px;
+    margin-bottom: 4px;
+    opacity: 0.85;
+    transition: all 0.2s ease;
+}
+
+.subcategory-badge:hover {
+    opacity: 1;
+    transform: translateX(4px);
+}
+
+.subcategory-badge.active {
+    opacity: 1;
+    background: rgba(var(--color-accent-rgb), 0.2);
+    border-color: rgba(var(--color-accent-rgb), 0.4);
+    transform: translateX(4px) scale(1.02);
+}
+
+#products-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    row-gap: 36px;
+    column-gap: 12px;
+    position: relative;
+    z-index: 0; /* СЛОЙ 3: Самый низкий - карточки товаров под всем */
+    padding: 4px;
+    max-width: 100%;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 0 !important; /* Ниже чем фильтры, чтобы не перекрывать их */
+    pointer-events: none; /* Не блокируем клики на фильтры */
+    margin-top: 0; /* Убираем отступ сверху, чтобы не перекрывать фильтр */
+    min-height: 0; /* Убираем минимальную высоту, чтобы не перекрывать фильтр */
+}
+
+#products-grid > * {
+    pointer-events: auto; /* Восстанавливаем клики для содержимого */
+    z-index: 0; /* Ниже чем фильтры */
+}
+
+/* Адаптивность для больших экранов */
+@media (min-width: 768px) {
+    #products-grid {
+        grid-template-columns: repeat(3, 1fr);
+        row-gap: 40px;
+        column-gap: 14px;
+        padding: 6px;
+    }
+}
+
+/* Адаптивность для очень больших экранов */
+@media (min-width: 1024px) {
+    #products-grid {
+        grid-template-columns: repeat(4, 1fr);
+        row-gap: 48px;
+        column-gap: 16px;
+        padding: 8px;
+    }
+}
+
+/* Уменьшаем отступы при горизонтальной ориентации */
+@media (orientation: landscape) and (max-height: 600px) {
+    #products-grid {
+        row-gap: 18px;
+        column-gap: 12px;
+    }
+}
+
+@media (orientation: landscape) and (min-width: 768px) and (max-height: 600px) {
+    #products-grid {
+        row-gap: 20px;
+        column-gap: 14px;
+    }
+}
+
+@media (orientation: landscape) and (min-width: 1024px) and (max-height: 600px) {
+    #products-grid {
+        row-gap: 24px;
+        column-gap: 16px;
+    }
+}
+
+/* Скрываем элементы списка в режиме сетки */
+#products-grid.products-grid-view .product-top-badges-list,
+#products-grid.products-grid-view .product-name-list,
+#products-grid.products-grid-view .product-description-list,
+#products-grid.products-grid-view .product-list-prices,
+#products-grid.products-grid-view .product-quantity-badge-list,
+#products-grid.products-grid-view .cart-button-list {
+    display: none;
+}
+
+/* Режим списка товаров */
+#products-grid.products-list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+}
+
+#products-grid.products-list-view .product-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px;
+    gap: 8px;
+    min-height: auto;
+    position: relative; /* Для позиционирования кнопки избранного */
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+/* Скрываем изображение в режиме списка */
+#products-grid.products-list-view .product-image {
+    display: none;
+}
+
+/* Скрываем индикаторы слайдера в режиме списка */
+#products-grid.products-list-view .product-image-indicators {
+    display: none;
+}
+
+/* Скрываем кнопку избранного на изображении в режиме списка */
+#products-grid.products-list-view .product-image .favorite-button-card:not(.favorite-button-list) {
+    display: none;
+}
+
+/* Скрываем кнопку избранного для режима списка в обычном режиме сетки */
+#products-grid:not(.products-list-view) .favorite-button-list {
+    display: none;
+}
+
+/* Скрываем оригинальные элементы в режиме списка */
+#products-grid.products-list-view .product-name {
+    display: none;
+}
+
+#products-grid.products-list-view .product-description {
+    display: none;
+}
+
+#products-grid.products-list-view .old-price-container {
+    display: none;
+}
+
+#products-grid.products-list-view .product-price-container {
+    display: none;
+}
+
+#products-grid.products-list-view .product-cash-price-container {
+    display: none;
+}
+
+#products-grid.products-list-view .product-quantity-text {
+    display: none;
+}
+
+#products-grid.products-list-view .product-quantity-badge:not(.product-quantity-badge-list) {
+    display: none;
+}
+
+/* Контейнер верхних бейджей (скидка, горящее предложение, резерв) */
+#products-grid.products-list-view .product-top-badges-list {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+/* Бейдж скидки в списке */
+#products-grid.products-list-view .discount-badge-list {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(255, 77, 77, 0.9);
+    color: white;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* Бейдж горящего предложения в списке */
+#products-grid.products-list-view .hot-offer-badge-list {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-weight: inherit;
+    white-space: nowrap;
+    overflow: visible;
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Анимированный огонь для режима списка (меньший размер) */
+.fire-wrap-list {
+    width: 20px;
+    height: 20px;
+}
+
+.fire-wrap-list .fire-back {
+    font-size: 18px;
+}
+
+.fire-wrap-list .fire-front {
+    font-size: 16px;
+}
+
+.fire-wrap-list .spark {
+    bottom: 4px;
+    width: 2px;
+    height: 2px;
+}
+
+/* Бейдж резервации в списке */
+#products-grid.products-list-view .reservation-badge-list {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(255, 193, 7, 0.95);
+    color: #1a1a1a;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* Название товара в списке (новое) */
+#products-grid.products-list-view .product-name-list {
+    width: 100%;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-align: left;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+/* Описание товара в списке */
+#products-grid.products-list-view .product-description-list {
+    width: 100%;
+    font-size: 13px;
+    font-weight: 400;
+    margin-bottom: 4px;
+    text-align: left;
+    color: var(--text-hint);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Контейнер для цен и правой части (корзина + статус) в режиме списка */
+#products-grid.products-list-view .product-list-prices-right-container {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch; /* Растягиваем дочерние элементы на всю высоту */
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+/* Контейнер для цен в списке (каждая цена на отдельной строке) - левая часть */
+#products-grid.products-list-view .product-list-prices {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* Правая часть: корзина и статус */
+#products-grid.products-list-view .product-list-right-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-end; /* Корзина и статус всегда внизу */
+    gap: 6px; /* Небольшой отступ между корзиной и статусом */
+    flex-shrink: 0;
+    align-self: stretch; /* Растягиваем на всю высоту контейнера */
+    min-height: 100%; /* Минимальная высота равна высоте контейнера с ценами */
+}
+
+/* Старая цена в списке (зачеркнутая серая) */
+#products-grid.products-list-view .product-list-old-price {
+    font-size: 14px;
+    color: var(--text-hint);
+    text-decoration: line-through;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+/* Цена по карте в списке: карта + иконка + " / " + старая в одну строку */
+#products-grid.products-list-view .product-list-card-price {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-price-cash);
+    white-space: nowrap;
+    line-height: 1.4;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+}
+
+#products-grid.products-list-view .product-list-card-price .product-list-old-price {
+    font-size: 14px;
+    color: var(--text-hint);
+    text-decoration: line-through;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Обычная цена в списке (если нет скидки) */
+#products-grid.products-list-view .product-list-price-single {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+/* Цена наличными в списке */
+#products-grid.products-list-view .product-list-cash-price {
+    font-size: 17px;
+    font-weight: 400;
+    color: var(--color-price-card);
+    white-space: nowrap;
+    line-height: 1.4;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+}
+
+#products-grid.products-list-view .product-list-cash-price .product-cash-icon {
+    flex-shrink: 0;
+}
+
+/* Статус товара в списке (мелкий, справа внизу, с цветом как в режиме сетки) */
+#products-grid.products-list-view .product-quantity-badge-list {
+    font-size: 11px;
+    font-weight: 400;
+    margin: 0;
+    padding: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    text-align: right;
+    line-height: 1.3;
+    order: 2; /* Статус идет вторым (под корзиной) */
+}
+
+/* Скрываем кнопку корзины из режима сетки в режиме списка */
+#products-grid.products-list-view .product-image .cart-button-card:not(.cart-button-list) {
+    display: none;
+}
+
+/* Кнопка корзины в режиме списка (в правой части, над статусом) */
+#products-grid.products-list-view .cart-button-list {
+    position: static;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    align-self: flex-end; /* Выравниваем по правому краю */
+    margin: 0; /* Убираем все отступы */
+    order: 1; /* Корзина идет первой (над статусом) */
+}
+
+/* Кнопка избранного в режиме списка (правый верхний угол карточки) */
+#products-grid.products-list-view .favorite-button-list {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    bottom: auto;
+    width: 32px;
+    height: 32px;
+    z-index: 15;
+}
+
+/* Размер иконки избранного в режиме списка */
+#products-grid.products-list-view .favorite-button-list .favorite-heart {
+    width: 22px;
+    height: 22px;
+}
+
+/* Размер иконки корзины в режиме списка */
+#products-grid.products-list-view .cart-button-list .cart-icon {
+    width: 22px;
+    height: 22px;
+}
+
+/* Адаптивность списка для мобильных */
+@media (max-width: 768px) {
+    #products-grid.products-list-view .product-card {
+        padding: 10px;
+        gap: 8px;
+        min-height: auto;
+        border-radius: 10px;
+    }
+    
+    #products-grid.products-list-view .product-name-list {
+        font-size: 15px;
+    }
+    
+    #products-grid.products-list-view .product-list-prices {
+        gap: 3px;
+    }
+    
+    #products-grid.products-list-view .product-list-card-price,
+    #products-grid.products-list-view .product-list-price-single {
+        font-size: 16px;
+    }
+    
+    #products-grid.products-list-view .product-list-cash-price {
+        font-size: 15px;
+    }
+    
+    #products-grid.products-list-view .product-quantity-badge-list {
+        font-size: 10px;
+    }
+    
+    #products-grid.products-list-view .cart-button-list {
+        width: 30px;
+        height: 30px;
+    }
+    
+    #products-grid.products-list-view .product-list-prices-right-container {
+        gap: 8px;
+    }
+    
+    #products-grid.products-list-view .product-list-right-side {
+        gap: 6px;
+    }
+    
+    #products-grid.products-list-view .favorite-button-list {
+        top: 6px;
+        right: 6px;
+        width: 30px;
+        height: 30px;
+    }
+    
+    #products-grid.products-list-view .favorite-button-list .favorite-heart {
+        width: 20px;
+        height: 20px;
+    }
+    
+    #products-grid.products-list-view .cart-button-list .cart-icon {
+        width: 20px;
+        height: 20px;
+    }
+}
+
+.product-card {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    transition: none;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+    height: 100%;
+    touch-action: pan-y; /* Разрешаем только вертикальную прокрутку для карточки */
+}
+
+
+.product-card::before {
+    display: none;
+}
+
+.product-card:hover {
+    transform: none;
+}
+
+.product-card:active {
+    transform: none;
+}
+
+.product-image {
+    width: 95%;
+    max-width: 95%;
+    aspect-ratio: 3/4.3;
+    margin: 0 auto 4px auto;
+    background: #ffffff;
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-radius: 12px;
+    position: relative; /* КРИТИЧНО: для позиционирования сердечка - устанавливается также в JS */
+    overflow: hidden;
+    border: none;
+    box-shadow: none;
+    flex-shrink: 0;
+}
+
+/* Разрешаем горизонтальный свайп только если есть несколько изображений */
+.product-image .product-image-slider-multiple {
+    touch-action: pan-x;
+}
+
+/* Слайдер изображений */
+.product-image-slider {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    isolation: isolate; /* Создаем новый контекст наложения */
+    touch-action: auto; /* По умолчанию свайп отключен */
+}
+
+/* Свайп разрешен только если есть несколько изображений */
+.product-image-slider.product-image-slider-multiple {
+    touch-action: pan-x pan-y; /* Разрешаем оба направления, JavaScript определит какое использовать */
+}
+
+.product-images-wrapper {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.3s ease;
+    will-change: transform;
+}
+
+.product-image-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.product-image-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 12px;
+}
+
+/* Индикаторы (точки) - под фото, между фото и названием */
+.product-image-indicators {
+    position: relative;
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    align-items: center;
+    padding: 6px 0;
+    margin: 0 auto;
+    background: transparent;
+    z-index: 1;
+}
+
+.product-image-indicator {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(200, 200, 200, 0.5);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.product-image-indicator.active {
+    width: 6px;
+    height: 6px;
+    background: rgba(240, 240, 240, 0.95);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+}
+
+.discount-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(255, 77, 77, 0.9);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(255, 77, 77, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    z-index: 10;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.hot-offer-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    font-size: 0;
+    box-shadow: none;
+    border: none;
+    z-index: 11;
+    animation: none;
+    cursor: default;
+    overflow: visible;
+}
+
+/* Анимированный огонь для горящего предложения */
+.fire-wrap {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 34px;
+    overflow: visible;
+}
+
+.fire-back {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -58%);
+    line-height: 1;
+    font-size: 28px;
+    transform-origin: 50% 85%;
+    opacity: .75;
+    filter: blur(0.35px)
+            drop-shadow(0 0 7px rgba(255, 170, 70, .55))
+            drop-shadow(0 0 18px rgba(255, 70, 30, .25));
+    animation: burn-back 1600ms infinite cubic-bezier(.45,0,.2,1);
+    will-change: transform, filter, opacity;
+    pointer-events: none;
+}
+
+.fire-front {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -58%);
+    line-height: 1;
+    font-size: 26px;
+    transform-origin: 50% 85%;
+    filter: drop-shadow(0 0 6px rgba(255, 170, 70, .55))
+            drop-shadow(0 0 16px rgba(255, 70, 30, .22));
+    animation: burn-front 1350ms infinite cubic-bezier(.45,0,.2,1);
+    will-change: transform, filter;
+    pointer-events: none;
+}
+
+.fire-front::before,
+.fire-front::after {
+    content: "🔥";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.fire-front::before {
+    transform: scale(1.18);
+    opacity: .10;
+    filter: blur(5px);
+    animation: glow-outer 1900ms infinite cubic-bezier(.45,0,.2,1);
+}
+
+.fire-front::after {
+    transform: scale(1.08);
+    opacity: .12;
+    filter: blur(2.6px);
+    animation: glow-inner 1200ms infinite cubic-bezier(.45,0,.2,1);
+}
+
+/* Искры */
+.spark {
+    position: absolute;
+    bottom: 7px;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: radial-gradient(circle,
+        rgba(255,245,210,1) 0%,
+        rgba(255,170,70,1) 45%,
+        rgba(255,170,70,0) 78%
+    );
+    opacity: 0;
+    filter: blur(.15px);
+    pointer-events: none;
+    will-change: transform, opacity;
+}
+
+.s1 { animation: spark-up-1 1400ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 0ms; }
+.s2 { animation: spark-up-2 1700ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 160ms; width:3px;height:3px; }
+.s3 { animation: spark-up-3 1550ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 320ms; width:3px;height:3px; }
+.s4 { animation: spark-up-4 1850ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 510ms; width:4px;height:4px; }
+.s5 { animation: spark-up-5 1650ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 690ms; width:2px;height:2px; }
+.s6 { animation: spark-up-6 1950ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 860ms; width:3px;height:3px; }
+.s7 { animation: spark-up-7 1500ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 1020ms; width:2px;height:2px; }
+.s8 { animation: spark-up-8 1750ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 1180ms; width:4px;height:4px; }
+.s9 { animation: spark-up-9 1600ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 1340ms; width:3px;height:3px; }
+.s10 { animation: spark-up-10 2050ms infinite cubic-bezier(.22,.61,.36,1); animation-delay: 1510ms; width:2px;height:2px; }
+
+/* Анимации огня */
+@keyframes burn-front {
+    0%   { transform: translate(-50%, -58%) scale(1.00, 1.00); }
+    28%  { transform: translate(-50%, -63%) scale(0.98, 1.12); }
+    55%  { transform: translate(-50%, -57%) scale(1.04, 0.96); }
+    78%  { transform: translate(-50%, -61%) scale(0.99, 1.08); }
+    100% { transform: translate(-50%, -58%) scale(1.00, 1.00); }
+}
+
+@keyframes burn-back {
+    0%   { transform: translate(-50%, -58%) scale(1.02, 1.02); opacity:.70; }
+    30%  { transform: translate(-50%, -65%) scale(0.96, 1.16); opacity:.78; }
+    60%  { transform: translate(-50%, -57%) scale(1.06, 0.94); opacity:.68; }
+    82%  { transform: translate(-50%, -62%) scale(1.00, 1.10); opacity:.75; }
+    100% { transform: translate(-50%, -58%) scale(1.02, 1.02); opacity:.70; }
+}
+
+@keyframes glow-inner {
+    0%   { opacity:.10; transform: scale(1.06); }
+    45%  { opacity:.34; transform: scale(1.16); }
+    75%  { opacity:.14; transform: scale(1.10); }
+    100% { opacity:.10; transform: scale(1.06); }
+}
+
+@keyframes glow-outer {
+    0%   { opacity:.06; transform: scale(1.16); }
+    40%  { opacity:.22; transform: scale(1.32); }
+    70%  { opacity:.09; transform: scale(1.22); }
+    100% { opacity:.06; transform: scale(1.16); }
+}
+
+/* Траектории искр */
+@keyframes spark-up-1  { 0%{opacity:0;transform:translate(-6px,0) scale(.8);} 10%{opacity:.95;} 65%{opacity:.35;} 100%{opacity:0;transform:translate(-18px,-46px) scale(1.25);} }
+@keyframes spark-up-2  { 0%{opacity:0;transform:translate( 4px,0) scale(.7);} 12%{opacity:.9;}  60%{opacity:.25;} 100%{opacity:0;transform:translate( 14px,-40px) scale(1.15);} }
+@keyframes spark-up-3  { 0%{opacity:0;transform:translate(-2px,0) scale(.7);} 10%{opacity:.9;}  62%{opacity:.3;}  100%{opacity:0;transform:translate(-8px,-34px) scale(1.10);} }
+@keyframes spark-up-4  { 0%{opacity:0;transform:translate( 8px,0) scale(.8);} 14%{opacity:.95;} 58%{opacity:.22;} 100%{opacity:0;transform:translate( 26px,-52px) scale(1.30);} }
+@keyframes spark-up-5  { 0%{opacity:0;transform:translate(-10px,0) scale(.6);} 12%{opacity:.85;} 60%{opacity:.18;} 100%{opacity:0;transform:translate(-22px,-32px) scale(1.05);} }
+@keyframes spark-up-6  { 0%{opacity:0;transform:translate( 1px,0) scale(.7);} 10%{opacity:.9;}  63%{opacity:.25;} 100%{opacity:0;transform:translate( 6px,-50px) scale(1.22);} }
+@keyframes spark-up-7  { 0%{opacity:0;transform:translate(-4px,0) scale(.55);} 15%{opacity:.8;}  55%{opacity:.14;} 100%{opacity:0;transform:translate(-12px,-28px) scale(1.0);} }
+@keyframes spark-up-8  { 0%{opacity:0;transform:translate( 12px,0) scale(.75);} 10%{opacity:.92;} 60%{opacity:.28;} 100%{opacity:0;transform:translate( 18px,-44px) scale(1.22);} }
+@keyframes spark-up-9  { 0%{opacity:0;transform:translate(-14px,0) scale(.7);} 11%{opacity:.9;}  62%{opacity:.22;} 100%{opacity:0;transform:translate(-28px,-48px) scale(1.20);} }
+@keyframes spark-up-10 { 0%{opacity:0;transform:translate( 6px,0) scale(.55);} 14%{opacity:.85;} 58%{opacity:.15;} 100%{opacity:0;transform:translate( 10px,-30px) scale(1.0);} }
+
+/* Отключение анимации для пользователей с prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    .fire-back, .fire-front, .fire-front::before, .fire-front::after, .spark {
+        animation: none;
+    }
+}
+
+/* Блок карты: цена по карте + иконка + " / " + старая цена в одну строку, без переносов */
+.product-price-container {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    margin-left: 2.5%; /* Выравнивание по левому краю фото (фото 95% ширины, центрировано) */
+    flex-shrink: 0;
+    width: 95%;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
+.product-price-container .product-price,
+.product-price-container .product-card-icon,
+.product-price-container .old-price {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.old-price-container {
+    margin-bottom: 4px;
+    margin-left: 2.5%; /* Выравнивание по левому краю фото (фото 95% ширины, центрировано) */
+    width: 95%; /* Соответствует ширине фото */
+    box-sizing: border-box;
+}
+
+.product-cash-price-container {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    margin-left: 2.5%; /* Выравнивание по левому краю фото (фото 95% ширины, центрировано) */
+    flex-shrink: 0;
+    width: 95%; /* Соответствует ширине фото */
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
+.product-cash-price-container .product-cash-price,
+.product-cash-price-container .product-cash-icon {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Цвет цены по карте задаётся обёрткой: .prices--has-cash → красный, .prices--no-cash → зелёный */
+.product-price {
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: -0.3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Цена карты в мини-карточке — на 1px меньше базового */
+.product-price-container .product-price {
+    font-size: 13px;
+}
+
+.prices--has-cash .product-price {
+    color: var(--color-price-cash);
+}
+
+.prices--no-cash .product-price {
+    color: var(--color-price-card);
+}
+
+.product-card-icon {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.prices--has-cash .product-card-icon {
+    color: var(--color-price-cash);
+}
+
+.prices--no-cash .product-card-icon {
+    color: var(--color-price-card);
+}
+
+.product-card-icon svg {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.product-cash-price {
+    font-size: 17px;
+    color: var(--color-price-card);
+    font-weight: 400;
+    letter-spacing: -0.3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.product-cash-icon {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.product-cash-icon svg {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.old-price {
+    font-size: 13px;
+    color: var(--text-hint);
+    text-decoration: line-through;
+    opacity: 0.7;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.delete-btn {
+    background-color: #ff4d4d;
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: auto;
+}
+
+.loading {
+    grid-column: 1 / -1; /* Занимает все колонки */
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--text-secondary);
+    font-size: 15px;
+    position: relative;
+    z-index: 0; /* Ниже чем фильтры */
+    pointer-events: none; /* Не блокируем клики на фильтры */
+}
+
+.product-name {
+    font-size: 13px;
+    font-weight: 400;
+    margin-bottom: 6px;
+    margin-left: 2.5%; /* Выравнивание по левому краю фото (фото 95% ширины, центрировано) */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    letter-spacing: -0.2px;
+    flex-shrink: 0;
+    min-height: 0;
+    width: 95%; /* Соответствует ширине фото */
+    box-sizing: border-box;
+}
+
+.product-description {
+    font-size: 12px;
+    font-weight: 400;
+    margin-bottom: 6px;
+    margin-left: 2.5%; /* Выравнивание по левому краю фото (фото 95% ширины, центрировано) */
+    color: var(--text-hint);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-wrap: break-word;
+    word-break: break-word;
+    flex-shrink: 0;
+    width: 95%; /* Соответствует ширине фото */
+    box-sizing: border-box;
+}
+
+.product-quantity-badge {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    margin-top: auto;
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    letter-spacing: 0.2px;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.product-quantity-text {
+    font-size: 12px;
+    font-weight: 400;
+    margin-top: 0;
+    margin-bottom: 16px; /* Увеличенный отступ от статуса до нижней части карточки */
+    margin-left: 2.5%; /* Выравнивание по левому краю фото (фото 95% ширины, центрировано) */
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.1px;
+    text-align: left;
+    flex-shrink: 0;
+    width: 95%; /* Соответствует ширине фото */
+    box-sizing: border-box;
+}
+
+/* Уменьшаем отступ статуса на планшете */
+@media (min-width: 768px) {
+    .product-quantity-text {
+        margin-bottom: 8px;
+    }
+}
+
+/* Уменьшаем отступ статуса в горизонтальной ориентации */
+@media (orientation: landscape) {
+    .product-quantity-text {
+        margin-bottom: 6px;
+    }
+}
+
+.product-card {
+    cursor: pointer;
+    transition: none;
+}
+
+.product-card:active {
+    transform: none;
+}

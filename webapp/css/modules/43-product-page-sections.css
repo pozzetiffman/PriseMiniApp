@@ -1,0 +1,164 @@
+/* Stage 7 batch 2: extracted from 40-product-page.css (move-only). */
+
+/* Карточка доставки (как у цен) */
+#product-page-delivery.product-page-delivery-card {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    font-size: 15px;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+#product-page-delivery.product-page-delivery-card p {
+    margin: 0 0 4px 0;
+}
+
+#product-page-delivery.product-page-delivery-card p:last-child {
+    margin-bottom: 0;
+}
+
+/* Блок отзывов без карточки */
+#product-page-reviews.product-page-reviews-text {
+    margin-bottom: 20px;
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Секция "О товаре" */
+.product-page-about-section {
+    margin-bottom: 20px;
+}
+
+.product-page-section-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px 0;
+}
+
+.product-page-description {
+    font-size: 16px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+    min-width: 0;
+}
+
+/* Свернутое описание (line-clamp, только страница товара) */
+#product-page-description.collapsed,
+.product-page-about-section .product-page-description.collapsed {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* переносы и длинные слова сохраняем */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.product-page-about-section .product-page-description.expanded {
+    display: block;
+    overflow: visible;
+}
+
+.product-page-toggle-btn {
+    margin-top: 8px;
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    text-decoration: underline;
+}
+
+.product-page-toggle-btn:hover {
+    opacity: 0.9;
+}
+
+/* Секция "Все характеристики" */
+.product-page-specs-section {
+    margin-bottom: 20px;
+}
+
+.product-page-specs-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border-glass);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    text-align: left;
+}
+
+.product-page-specs-toggle:hover {
+    opacity: 0.9;
+}
+
+.product-page-specs-toggle::after {
+    content: '›';
+    font-size: 20px;
+    transition: transform 0.25s ease;
+}
+
+.product-page-specs-section.expanded .product-page-specs-toggle::after {
+    transform: rotate(90deg);
+}
+
+.product-page-specs-content {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.25s ease;
+}
+
+.product-page-specs-section.expanded .product-page-specs-content {
+    max-height: 500px;
+    opacity: 1;
+    padding-top: 12px;
+}
+
+.product-page-specs-content .product-page-spec-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 15px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.product-page-specs-content .product-page-spec-row:last-child {
+    border-bottom: none;
+}
+
+.product-page-specs-content .product-page-spec-label {
+    color: var(--text-secondary);
+}
+
+.product-page-specs-content .product-page-spec-value {
+    color: var(--text-primary);
+}
+

@@ -166,11 +166,12 @@ export function showSaleOrderModal(product) {
     openBuyCheckoutForProduct(product, 1);
 }
 
-// Закрытие страницы заказа на покупку
+// Закрытие страницы заказа на покупку. Сначала снимаем is-active (state-класс после батча #2), затем показываем целевую страницу.
 function closeSaleOrderPage() {
     console.log('📦 [SALE ORDER] Closing sale order page');
     
     if (saleOrderPageElement) {
+        saleOrderPageElement.classList.remove('is-active');
         saleOrderPageElement.style.display = 'none';
     }
     
@@ -188,11 +189,11 @@ function closeSaleOrderPage() {
     // Возвращаемся на страницу товара
     const productPage = document.getElementById('product-page');
     if (productPage && currentSaleOrderProduct) {
-        // Показываем страницу товара
+        productPage.classList.add('is-active');
         productPage.style.display = 'block';
     } else {
-        // Если страницы товара нет, возвращаемся на главную
         if (mainContent) {
+            mainContent.classList.add('is-active');
             mainContent.style.display = 'block';
         }
     }

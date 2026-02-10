@@ -54,6 +54,9 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Node
+node_modules/
+
 
 
 # Uploaded images

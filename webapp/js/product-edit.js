@@ -90,6 +90,28 @@ function escapeHtml(s) {
 }
 
 /**
+ * UX: установка состояния "сохранение" на кнопке (текст, disabled, класс is-saving).
+ * @param {HTMLButtonElement} btn - кнопка
+ * @param {boolean} isSaving - true = показать прогресс, false = вернуть исходное состояние
+ * @param {string} [savingText] - текст при сохранении (по умолчанию "Сохранение…")
+ */
+function setButtonSavingState(btn, isSaving, savingText) {
+    if (!btn) return;
+    if (!btn.dataset.originalText) {
+        btn.dataset.originalText = (btn.textContent || '').trim();
+    }
+    if (isSaving) {
+        btn.disabled = true;
+        btn.classList.add('is-saving');
+        btn.textContent = savingText || 'Сохранение…';
+    } else {
+        btn.disabled = false;
+        btn.classList.remove('is-saving');
+        btn.textContent = btn.dataset.originalText || btn.textContent;
+    }
+}
+
+/**
  * Сбор характеристик из DOM списка в payload для API.
  */
 function collectEditCharacteristics() {
@@ -114,13 +136,22 @@ function collectEditCharacteristics() {
 }
 
 /**
- * Закрытие страницы редактирования товара, возврат на product-page
+ * Закрытие страницы редактирования товара. Возврат из dataset.returnTo (по умолчанию product-page).
+ * Этап 4: сначала снять is-active и скрыть, затем hideAllPages(), затем показать целевую страницу.
  */
 export function closeEditProductPage() {
     const editProductPage = document.getElementById('edit-product-page');
-    const productPage = document.getElementById('product-page');
-    if (editProductPage) editProductPage.style.display = 'none';
-    if (productPage) productPage.style.display = 'block';
+    if (editProductPage) {
+        editProductPage.classList.remove('is-active');
+        editProductPage.style.display = 'none';
+    }
+    const returnToId = (editProductPage && editProductPage.dataset.returnTo) || 'product-page';
+    hideAllPages();
+    const target = document.getElementById(returnToId);
+    if (target) {
+        target.classList.add('is-active');
+        target.style.display = 'block';
+    }
 }
 
 /**
@@ -134,12 +165,29 @@ export function showEditProductPage(prod) {
         alert('❌ Ошибка: страница редактирования не найдена');
         return;
     }
+    // Возврат по "Назад": редактирование открыто из карточки товара → вернуть в product-page (этап 4)
+    editProductPage.dataset.returnTo = 'product-page';
+    editProductPage.classList.add('is-active');
     editProductPage.style.display = 'block';
     editProductPage.scrollTop = 0;
     const backBtn = document.getElementById('edit-product-page-back');
     if (backBtn) backBtn.onclick = closeEditProductPage;
     setupPageScrollHandler(editProductPage);
     showEditProductForm(prod, closeEditProductPage);
+
+    /* DEBUG отступов: удалить после проверки — логирует padding-bottom и высоту ::after скролл-контента */
+    const contentEl = editProductPage.querySelector('.operation-page-content');
+    if (contentEl && typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => {
+            const style = getComputedStyle(contentEl);
+            let afterHeight = 'N/A';
+            try {
+                const afterStyle = getComputedStyle(contentEl, '::after');
+                afterHeight = afterStyle ? afterStyle.height : 'N/A';
+            } catch (_) { /* старые браузеры */ }
+            console.log('[edit-product-page] .operation-page-content paddingBottom:', style.paddingBottom, '::after height:', afterHeight);
+        });
+    }
 }
 
 /**
@@ -470,6 +518,7 @@ function showEditProductForm(prod, onCancel) {
     if (editDeliveryStatus) editDeliveryStatus.textContent = '';
     if (editDeliverySaveBtn) {
         editDeliverySaveBtn.onclick = async () => {
+            if (editDeliverySaveBtn.disabled || editDeliverySaveBtn.classList.contains('is-saving')) return;
             const appContext = appContextGetter ? appContextGetter() : null;
             if (!appContext || !appContext.shop_owner_id) {
                 if (editDeliveryStatus) editDeliveryStatus.textContent = 'Ошибка: нет контекста';
@@ -489,6 +538,8 @@ function showEditProductForm(prod, onCancel) {
                 delivery_time: editDeliveryTime ? (editDeliveryTime.value || '').trim() || null : null
             };
             try {
+                editDeliverySaveBtn.disabled = true;
+                editDeliverySaveBtn.classList.add('is-saving');
                 if (editDeliveryStatus) editDeliveryStatus.textContent = 'Сохранение…';
                 await updateProductDeliveryAPI(productId, appContext.shop_owner_id, payload);
                 if (editDeliveryStatus) editDeliveryStatus.textContent = 'Сохранено';
@@ -496,6 +547,9 @@ function showEditProductForm(prod, onCancel) {
             } catch (e) {
                 console.error('Failed to save delivery:', e);
                 if (editDeliveryStatus) editDeliveryStatus.textContent = e.message || 'Ошибка сохранения';
+            } finally {
+                editDeliverySaveBtn.classList.remove('is-saving');
+                editDeliverySaveBtn.disabled = false;
             }
         };
     }
@@ -628,11 +682,18 @@ function showEditProductForm(prod, onCancel) {
     const newCancelBtn = cancelBtn.cloneNode(true);
     cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
     
-    // Добавляем новые обработчики
-    newSaveBtn.onclick = async () => {
-        await saveProductEdit(prod.id);
+    // Добавляем новые обработчики (с защитой от двойного клика и индикатором сохранения)
+    newSaveBtn.onclick = async (e) => {
+        e.preventDefault();
+        if (newSaveBtn.disabled || newSaveBtn.classList.contains('is-saving')) return;
+        try {
+            setButtonSavingState(newSaveBtn, true, 'Сохранение…');
+            await saveProductEdit(prod.id);
+        } finally {
+            setButtonSavingState(newSaveBtn, false);
+        }
     };
-    
+
     newCancelBtn.onclick = onCancel;
     } catch (error) {
         console.error('❌ Error in showEditProductForm:', error);
@@ -644,7 +705,8 @@ function showEditProductForm(prod, onCancel) {
 export function showEditProductModal(prod) {
     const editProductModal = document.getElementById('edit-product-modal');
     if (!editProductModal) return;
-    showEditProductForm(prod, () => { editProductModal.style.display = 'none'; });
+    showEditProductForm(prod, () => { editProductModal.classList.remove('is-open'); editProductModal.style.display = 'none'; });
+    editProductModal.classList.add('is-open');
     editProductModal.style.display = 'flex';
 }
 
@@ -988,9 +1050,9 @@ export async function saveProductEdit(productId) {
         
         // ВАЖНО: freshOwnerProduct, freshClientProduct и clientVisibleId уже получены выше (перед синхронизацией корзины)
         
-        // Закрываем страницу или модальное окно редактирования
+        // Закрываем страницу или модальное окно редактирования (проверка по is-active)
         const editProductPage = document.getElementById('edit-product-page');
-        if (editProductPage && (editProductPage.style.display === 'block' || editProductPage.style.display === 'flex')) {
+        if (editProductPage && editProductPage.classList.contains('is-active')) {
             closeEditProductPage();
         } else {
             const editProductModal = document.getElementById('edit-product-modal');
@@ -1077,7 +1139,7 @@ export async function saveProductEdit(productId) {
                     if (DEBUG_PRODUCT_EDIT && (freshOwnerProduct || freshClientProduct)) {
                         // ВАЖНО: Вычисляем isProductPageOpen ДО использования в debug-логе
                         const productPageForDebug = document.getElementById('product-page');
-                        const isProductPageOpenForDebug = productPageForDebug && (productPageForDebug.style.display === 'block' || productPageForDebug.style.display === 'flex');
+                        const isProductPageOpenForDebug = productPageForDebug && productPageForDebug.classList.contains('is-active');
                         const favoritesPageEl = document.getElementById('favorites-page');
                         const productForDebug = freshClientProduct || freshOwnerProduct;
                         console.log(`[PRODUCT EDIT DEBUG] After save - Product ${productId}:`, {
@@ -1092,7 +1154,7 @@ export async function saveProductEdit(productId) {
                             is_reservation_enabled: productForDebug.is_reservation_enabled,
                             allProductsCacheUpdated: changed,
                             productPageOpen: isProductPageOpenForDebug,
-                            favoritesPageOpen: favoritesPageEl && (favoritesPageEl.style.display === 'block' || favoritesPageEl.style.display === 'flex')
+                            favoritesPageOpen: favoritesPageEl && favoritesPageEl.classList.contains('is-active')
                         });
                     }
                     // ========== КОНЕЦ DEBUG ==========
@@ -1115,9 +1177,9 @@ export async function saveProductEdit(productId) {
             }
         }
 
-        // ========== ВАЖНО: Вычисляем isProductPageOpen ДО использования в debug-логах ==========
+        // ========== ВАЖНО: Вычисляем isProductPageOpen по state-классу is-active ==========
         const productPage = document.getElementById('product-page');
-        const isProductPageOpen = productPage && (productPage.style.display === 'block' || productPage.style.display === 'flex');
+        const isProductPageOpen = productPage && productPage.classList.contains('is-active');
         const productForModal = freshClientProduct || freshOwnerProduct;
         
         // Страница товара (модалка): переоткрыть с товаром, который видит клиент (кнопка Купить/Заказ/Резерв)
@@ -1177,9 +1239,9 @@ export async function saveProductEdit(productId) {
         }
         // ========== КОНЕЦ ИСПРАВЛЕНИЯ ==========
 
-        // Избранное: перезагрузить страницу (иконки действий на карточках строятся по getProductActionType(prod))
+        // Избранное: перезагрузить страницу (проверка по is-active)
         const favoritesPageEl = document.getElementById('favorites-page');
-        if (favoritesPageEl && (favoritesPageEl.style.display === 'block' || favoritesPageEl.style.display === 'flex')) {
+        if (favoritesPageEl && favoritesPageEl.classList.contains('is-active')) {
             try {
                 if (typeof window.loadFavoritesPage === 'function') await window.loadFavoritesPage();
             } catch (_) {}
@@ -1405,6 +1467,7 @@ export function showSellModal(productId, product) {
         };
     }
     
+    sellModalElement.classList.add('is-open');
     sellModalElement.style.display = 'flex';
 }
 

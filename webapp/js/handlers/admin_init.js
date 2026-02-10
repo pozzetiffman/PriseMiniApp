@@ -3,7 +3,7 @@
 // Дата начала: 2024-12-19
 // Статус: В процессе
 
-import { hideAllPages } from '../operationsBase.js';
+import { goToMainContent, hideAllPages } from '../operationsBase.js';
 
 /**
  * Инициализация админки
@@ -376,14 +376,18 @@ export async function openAdmin(dependencies) {
         
         // Единый способ: скрыть все страницы, затем показать админку
         hideAllPages();
+        adminPage.classList.add('is-active');
         adminPage.style.display = 'block';
         
-        // Настраиваем кнопку "Назад"
+        // Кнопка «Назад» админки — вешаем один раз (data-bound)
         const adminPageBack = document.getElementById('admin-page-back');
-        if (adminPageBack) {
-            adminPageBack.onclick = () => {
+        if (adminPageBack && !adminPageBack.dataset.bound) {
+            adminPageBack.dataset.bound = '1';
+            adminPageBack.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 closeAdminPage();
-            };
+            });
         }
         
         // Настройка вкладок
@@ -450,29 +454,17 @@ export async function openAdmin(dependencies) {
 }
 
 /**
- * Закрытие страницы админки
- * Скрывает страницу админки и показывает главный контент
+ * Закрытие страницы админки. Сначала снимаем is-active и скрываем, затем goToMainContent().
+ * body:has(#admin-page.is-active) в CSS сбрасывается автоматически при снятии is-active.
  */
 export function closeAdminPage() {
     console.log('[ADMIN PAGE] Closing admin page');
     const adminPage = document.getElementById('admin-page');
-    const mainContent = document.getElementById('main-content');
-    const productPage = document.getElementById('product-page');
-    const cartPage = document.getElementById('cart-page');
-    const favoritesPage = document.getElementById('favorites-page');
-    
     if (adminPage) {
-        // Скрываем все страницы сначала
-        if (productPage) productPage.style.display = 'none';
-        if (cartPage) cartPage.style.display = 'none';
-        if (favoritesPage) favoritesPage.style.display = 'none';
+        adminPage.classList.remove('is-active');
         adminPage.style.display = 'none';
-        
-        // Показываем главный контент
-        if (mainContent) {
-            mainContent.style.display = 'block';
-        }
     }
+    goToMainContent();
 }
 // ========== END REFACTORING STEP 2.3 ==========
 

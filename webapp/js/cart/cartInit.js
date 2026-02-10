@@ -4,6 +4,7 @@
 // Статус: ✅ ЗАВЕРШЕНО (STEP 7.1 завершен, STEP 7.2 завершен, STEP 7.3 завершен)
 
 // Импорты зависимостей
+import { goToMainContent } from '../operationsBase.js';
 import { switchCartSubtab, switchCartTab, updateCartTabsVisibility } from './cartTabs.js';
 import { openCartPageNew, initCartNew } from './cartNew.js';
 
@@ -117,12 +118,15 @@ export function setupCartModal() {
     
     console.log('[CART INIT] Cart page found, initializing...');
     
-    // Настраиваем кнопку "Назад" для закрытия страницы корзины
+    // Кнопка «Назад» для cart-page — вешаем один раз (data-bound)
     const cartPageBack = document.getElementById('cart-page-back');
-    if (cartPageBack) {
-        cartPageBack.onclick = () => {
+    if (cartPageBack && !cartPageBack.dataset.bound) {
+        cartPageBack.dataset.bound = '1';
+        cartPageBack.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             closeCartPage();
-        };
+        });
         console.log('✅ Cart page back button initialized');
     }
     
@@ -168,27 +172,16 @@ export function setupCartModal() {
 }
 
 /**
- * Закрытие страницы корзины
- * Скрывает страницу корзины и показывает главный контент
+ * Закрытие страницы корзины (cart-page). Сначала снимаем is-active и скрываем, затем goToMainContent().
  */
 export function closeCartPage() {
     console.log('[CART PAGE] Closing cart page');
     const cartPage = document.getElementById('cart-page');
-    const mainContent = document.getElementById('main-content');
-    const productPage = document.getElementById('product-page');
-    const favoritesPage = document.getElementById('favorites-page');
-    
     if (cartPage) {
-        // Скрываем все страницы сначала
-        if (productPage) productPage.style.display = 'none';
-        if (favoritesPage) favoritesPage.style.display = 'none';
+        cartPage.classList.remove('is-active');
         cartPage.style.display = 'none';
-        
-        // Показываем главный контент
-        if (mainContent) {
-            mainContent.style.display = 'block';
-        }
     }
+    goToMainContent();
 }
 // ========== END REFACTORING STEP 7.3 ==========
 

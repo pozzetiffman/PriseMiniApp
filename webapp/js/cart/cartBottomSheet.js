@@ -651,9 +651,9 @@ export async function showCartBottomSheet(product) {
         return;
     }
     
-    // Проверяем, что мы на странице избранного - bottom sheet показывается только там
+    // Проверяем, что мы на странице избранного (по is-active)
     const favoritesPage = document.getElementById('favorites-page');
-    const isOnFavoritesPage = favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex');
+    const isOnFavoritesPage = favoritesPage && favoritesPage.classList.contains('is-active');
     
     if (!isOnFavoritesPage) {
         console.log('⚠️ Bottom sheet can only be shown on favorites page');

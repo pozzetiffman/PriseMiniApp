@@ -1,7 +1,7 @@
 // Модуль личного кабинета пользователя
 import { updateActivityCounts } from './activityIndicators.js';
 import { getMyContactInfoAPI, updateMyContactInfoAPI } from './api/clients.js';
-import { clearOverlaysAndBodyClasses, hideAllPages } from './operationsBase.js';
+import { clearOverlaysAndBodyClasses, goToMainContent, hideAllPages } from './operationsBase.js';
 import { openOrdersPage } from './operationsOrders.js';
 import { openPurchasesPage } from './operationsPurchases.js';
 import { openReservationsPage } from './operationsReservations.js';
@@ -25,14 +25,15 @@ export function initProfile() {
         return;
     }
     
-    // Настройка кнопки закрытия страницы
+    // Кнопка закрытия профиля — вешаем один раз при init (data-bound защита от повторной навески)
     const profilePageClose = document.getElementById('profile-page-close');
-    if (profilePageClose) {
-        profilePageClose.onclick = (e) => {
+    if (profilePageClose && !profilePageClose.dataset.bound) {
+        profilePageClose.dataset.bound = '1';
+        profilePageClose.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             closeProfilePage();
-        };
+        });
     }
     
     // Кнопка перехода к контактной информации
@@ -116,6 +117,7 @@ export async function openProfile() {
     // Единый способ: скрыть все страницы, затем показать профиль
     hideAllPages();
     clearOverlaysAndBodyClasses();
+    profilePage.classList.add('is-active');
     profilePage.style.display = 'block';
     
     // Сбрасываем позицию скролла
@@ -353,6 +355,7 @@ export async function openProfileDetailsPage() {
     }
     
     hideAllPages();
+    profileDetailsPage.classList.add('is-active');
     profileDetailsPage.style.display = 'block';
     profileDetailsPage.scrollTop = 0;
     if (profileDetailsPage.scrollTo) {
@@ -390,7 +393,7 @@ export async function openProfileDetailsPage() {
 
 /**
  * Закрытие страницы «Контактная информация», возврат в личный кабинет.
- * Не использует history браузера.
+ * Сначала снимаем is-active и скрываем (state-класс после батча #2), затем показываем profile-page.
  */
 export function closeProfileDetailsPage() {
     if (!profileDetailsPage) {
@@ -398,15 +401,16 @@ export function closeProfileDetailsPage() {
     }
     if (!profileDetailsPage) return;
     
+    profileDetailsPage.classList.remove('is-active');
+    profileDetailsPage.style.display = 'none';
     const topMenu = profileDetailsPage.querySelector('.operation-top-menu');
     if (topMenu && window.profileDetailsPageScrollHandler) {
         profileDetailsPage.removeEventListener('scroll', window.profileDetailsPageScrollHandler);
         topMenu.classList.remove('scrolled');
         window.profileDetailsPageScrollHandler = null;
     }
-    
-    profileDetailsPage.style.display = 'none';
     if (profilePage) {
+        profilePage.classList.add('is-active');
         profilePage.style.display = 'block';
     }
 }
@@ -542,32 +546,22 @@ function showNotification(message, type) {
 }
 
 /**
- * Закрытие страницы профиля
+ * Закрытие страницы профиля. Сначала снимаем is-active (чтобы не оставался пустой экран), затем goToMainContent().
  */
 export function closeProfilePage() {
     console.log('[PROFILE PAGE] Closing profile page');
-    
-    if (!profilePage) {
-        return;
-    }
-    
-    // Убираем обработчик скролла и класс scrolled
+    if (!profilePage) return;
+
+    profilePage.classList.remove('is-active');
+    profilePage.style.display = 'none';
     const profileTopMenu = document.querySelector('.profile-new-top-menu');
     if (profileTopMenu && window.profilePageScrollHandler) {
         profilePage.removeEventListener('scroll', window.profilePageScrollHandler);
         profileTopMenu.classList.remove('scrolled');
         window.profilePageScrollHandler = null;
     }
-    
-    // Скрываем страницу профиля
-    profilePage.style.display = 'none';
-    
-    // Возвращаемся на главную страницу
-    const mainContent = document.getElementById('main-content');
-    if (mainContent) {
-        mainContent.style.display = 'block';
-    }
-    
+    goToMainContent();
+
     // Обновляем индикаторы активности при закрытии профиля
     // (чтобы отразить возможные изменения после просмотра операций)
     updateActivityCounts().catch(err => {

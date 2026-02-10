@@ -1,0 +1,138 @@
+/* Stage 7 batch 3: extracted from 91-admin-modals.css (move-only). */
+
+/* Вкладки админки */
+.admin-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    /* Убираем фон и границы */
+    background: transparent;
+    border: none;
+    border-bottom: none;
+    /* Показываем тонкий scrollbar на десктопе для прокрутки мышкой */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    /* Убираем перекрытия */
+    position: relative;
+    z-index: 1;
+}
+
+/* Тонкий scrollbar для прокрутки мышкой на десктопе */
+.admin-tabs::-webkit-scrollbar {
+    height: 6px;
+}
+
+.admin-tabs::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.admin-tabs::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.admin-tabs::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Скрываем scrollbar на мобильных устройствах */
+@media (max-width: 768px) {
+    .admin-tabs {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    
+    .admin-tabs::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+/* Стили для вкладок админки на странице */
+.admin-page .admin-tabs {
+    margin: 12px 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-bottom: none;
+}
+
+.admin-page .admin-modal-body {
+    padding: 0;
+}
+
+.admin-tab {
+    padding: 6px 12px;
+    margin: 0;
+    background: var(--bg-glass-light);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-bottom: 1px solid var(--border-glass);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+    min-height: 32px;
+    max-height: 32px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px var(--shadow-light);
+    flex-shrink: 0;
+    min-width: fit-content;
+    /* Убираем перекрытия */
+    position: relative;
+    z-index: 1;
+}
+
+.admin-tab span:first-child {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.admin-tab span:last-child {
+    white-space: nowrap;
+}
+
+.admin-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-glass);
+    transform: none;
+    box-shadow: 0 4px 12px var(--shadow-medium);
+    z-index: 3;
+}
+
+.admin-tab.active {
+    color: #5ac8fa; /* Фиксированный цвет - не меняется при смене ориентации */
+    background: rgba(var(--color-accent-rgb), 0.25);
+    backdrop-filter: var(--blur-small);
+    -webkit-backdrop-filter: var(--blur-small);
+    border-color: rgba(var(--color-accent-rgb), 0.5);
+    border-bottom-color: rgba(var(--color-accent-rgb), 0.5);
+    box-shadow: 0 2px 8px rgba(var(--color-accent-rgb), 0.15), 
+                0 0 0 1px rgba(var(--color-accent-rgb), 0.2) inset;
+    transform: none;
+    z-index: 2;
+}
+
+.admin-tab-content {
+    display: none;
+    animation: fadeIn 0.2s ease;
+}
+
+.admin-tab-content.active {
+    display: block;
+}

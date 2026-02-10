@@ -41,6 +41,7 @@ export function hideAllPages() {
     ALL_PAGE_IDS.forEach(id => {
         const element = document.getElementById(id);
         if (element) {
+            element.classList.remove('is-active');
             element.style.display = 'none';
         }
     });
@@ -54,7 +55,28 @@ export function showOnlyPage(pageId) {
     hideAllPages();
     const page = document.getElementById(pageId);
     if (page) {
+        page.classList.add('is-active');
         page.style.display = 'block';
+    }
+}
+
+/**
+ * Возврат на главный экран (main-content). Источник истины — .is-active.
+ * Использовать при закрытии profile/favorites/cart/admin.
+ */
+export function goToMainContent() {
+    hideAllPages();
+    const main = document.getElementById('main-content');
+    if (main) {
+        main.classList.add('is-active');
+        main.style.display = 'block';
+        main.scrollTop = 0;
+        if (main.scrollTo) main.scrollTo(0, 0);
+    }
+    // Диагностика (временно): при аномалии — не только main-content в is-active
+    const activeIds = [...document.querySelectorAll('.is-active')].map(el => el.id).filter(Boolean);
+    if (activeIds.length !== 1 || activeIds[0] !== 'main-content') {
+        console.log('[NAV] goToMainContent: is-active after', activeIds);
     }
 }
 
@@ -62,9 +84,9 @@ export function showOnlyPage(pageId) {
 const OVERLAY_SELECTORS = [
     '#cart-bottom-sheet',
     '#product-page-bottom-sheet',
-    '#main-menu-dropdown',
+    /* ИСКЛЮЧЕНО: '#main-menu-dropdown' и '.main-menu-dropdown-backdrop' — меню само управляет своим состоянием через menu.js */
+    /* Не очищаем меню, чтобы не ломать его работу после открытия profile-page */
     '.cart-bottom-sheet-backdrop',
-    '.main-menu-dropdown-backdrop'
 ];
 
 /** Классы body, которые могли быть добавлены при открытии sheet/modal. */
@@ -74,6 +96,8 @@ const BODY_CLEAN_CLASSES = ['bottom-sheet-open', 'modal-open', 'sheet-open', 'no
  * Жёсткая очистка оверлеев и классов body при закрытии экрана сделки.
  * Скрывает overlay-элементы и отключает pointer-events, чтобы клики доходили до профиля.
  * Не удаляет узлы из DOM — только скрывает и снимает классы.
+ * 
+ * ВАЖНО: Не трогает #main-menu-dropdown и .main-menu-dropdown-backdrop — меню само управляет своим состоянием.
  */
 export function clearOverlaysAndBodyClasses() {
     const body = document.body;
@@ -142,6 +166,7 @@ export function openOperationPage(pageId) {
     
     // Единый способ: скрыть все страницы, затем показать нужную
     hideAllPages();
+    page.classList.add('is-active');
     page.style.display = 'block';
     
     // Сбрасываем скролл
@@ -198,12 +223,14 @@ export function closeOperationPage(pageId) {
     
     const page = document.getElementById(pageId);
     if (page) {
+        page.classList.remove('is-active');
         page.style.display = 'none';
     }
     
-    // Возвращаемся в профиль
+    // Возвращаемся в профиль (state-класс + display для консистентности с навигацией)
     const profilePage = document.getElementById('profile-page');
     if (profilePage) {
+        profilePage.classList.add('is-active');
         profilePage.style.display = 'block';
     }
     

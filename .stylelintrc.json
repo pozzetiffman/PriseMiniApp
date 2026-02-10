@@ -1,0 +1,18 @@
+{
+  "ignoreFiles": [
+    "webapp/css/style.css",
+    "**/backup/**",
+    "**/vendor/**"
+  ],
+  "rules": {
+    "block-no-empty": true,
+    "declaration-block-no-duplicate-properties": null,
+    "color-no-invalid-hex": true,
+    "property-no-unknown": true,
+    "selector-type-no-unknown": [
+      true,
+      { "ignoreTypes": ["/^tg-/", "/^::?(-webkit-)?(scrollbar)/"] }
+    ],
+    "function-no-unknown": null
+  }
+}

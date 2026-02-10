@@ -1,0 +1,81 @@
+/* Stage 7 batch 2: extracted from 40-product-page.css (move-only). */
+
+/* Анимация появления страницы */
+@keyframes productPageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+#product-page.is-active {
+    animation: productPageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Toast для уведомлений (hot offer / visibility) — сверху справа, в пределах product-page */
+#product-page-toast-host,
+.product-page-toast-host {
+    position: fixed;
+    top: calc(var(--product-top-menu-height, 64px) + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px) + 8px);
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    z-index: 10000;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.product-toast {
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 4px 16px var(--shadow-light);
+    font-size: 13px;
+    color: var(--text-primary);
+    pointer-events: none;
+    animation: productToastFadeIn 0.2s ease-out;
+}
+
+.product-toast.toast--ok {
+    border: 1px solid rgba(0, 200, 120, 0.25);
+}
+
+.product-toast.toast--bad {
+    border: 1px solid rgba(255, 80, 80, 0.25);
+}
+
+@keyframes productToastFadeIn {
+    from { opacity: 0; transform: translateX(8px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.app-toast {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 80px;
+    z-index: 9999;
+    padding: 10px 18px;
+    background: var(--bg-glass);
+    backdrop-filter: var(--blur-medium);
+    -webkit-backdrop-filter: var(--blur-medium);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    font-size: 14px;
+    color: var(--text-primary);
+    box-shadow: 0 4px 16px var(--shadow-light);
+    pointer-events: none;
+    animation: appToastFadeIn 0.2s ease-out;
+}
+
+@keyframes appToastFadeIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+

@@ -87,9 +87,9 @@ async function openProductById(productId, isDeleted = false) {
             }
         }
         
-        // Проверяем, была ли открыта админка, и сохраняем это состояние
+        // Проверяем, была ли открыта админка (по state-классу is-active)
         const adminPage = document.getElementById('admin-page');
-        const wasAdminOpen = adminPage && (adminPage.style.display === 'block' || adminPage.style.display === 'flex');
+        const wasAdminOpen = adminPage && adminPage.classList.contains('is-active');
         
         // Определяем, пришли ли мы из админки
         // Используем сохраненную историю навигации ТОЛЬКО если:
@@ -1757,7 +1757,8 @@ function showEditContactModal(client) {
         </div>
     `;
     
-    // Показываем модальное окно
+    // Показываем модальное окно (этап 4: state-класс .is-open)
+    modal.classList.add('is-open');
     modal.style.display = 'block';
     
     // Обработчики закрытия
@@ -1765,6 +1766,7 @@ function showEditContactModal(client) {
     const cancelBtn = modal.querySelector('.edit-contact-cancel-btn');
     
     const closeModal = () => {
+        modal.classList.remove('is-open');
         modal.style.display = 'none';
     };
     

@@ -84,6 +84,7 @@ export function openOperationDetailPage(type, item) {
 
     // Единый способ: скрыть все страницы, затем показать деталь
     hideAllPages();
+    page.classList.add('is-active');
     page.style.display = 'block';
     if (page.scrollTo) page.scrollTo(0, 0);
 
@@ -95,7 +96,7 @@ export function openOperationDetailPage(type, item) {
         const topMenu = page.querySelector('.operation-top-menu');
         if (topMenu) {
             const updateTopBarScrolled = () => {
-                if (page.style.display !== 'block' && page.style.display !== 'flex') return;
+                if (!page.classList.contains('is-active')) return;
                 const scrollTop = page.scrollTop || 0;
                 if (scrollTop > 20) topMenu.classList.add('scrolled');
                 else topMenu.classList.remove('scrolled');
@@ -124,10 +125,14 @@ export function closeOperationDetailPage() {
     clearOverlaysAndBodyClasses();
     const page = document.getElementById(DETAIL_PAGE_ID);
     if (!page) return;
+    page.classList.remove('is-active');
     page.style.display = 'none';
     if (currentListPageId) {
         const listPage = document.getElementById(currentListPageId);
-        if (listPage) listPage.style.display = 'block';
+        if (listPage) {
+            listPage.classList.add('is-active');
+            listPage.style.display = 'block';
+        }
         currentListPageId = null;
     }
 }
@@ -146,6 +151,7 @@ export async function openDealDetailPage(dealSummaryOrFull) {
     if (titleEl) titleEl.textContent = '🛍️ Детали сделки';
 
     hideAllPages();
+    page.classList.add('is-active');
     page.style.display = 'block';
     if (page.scrollTo) page.scrollTo(0, 0);
 
@@ -181,7 +187,7 @@ export async function openDealDetailPage(dealSummaryOrFull) {
         const topMenu = page.querySelector('.operation-top-menu');
         if (topMenu) {
             const updateTopBarScrolled = () => {
-                if (page.style.display !== 'block' && page.style.display !== 'flex') return;
+                if (!page.classList.contains('is-active')) return;
                 const scrollTop = page.scrollTop || 0;
                 if (scrollTop > 20) topMenu.classList.add('scrolled');
                 else topMenu.classList.remove('scrolled');
