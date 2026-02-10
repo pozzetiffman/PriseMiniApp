@@ -53,7 +53,29 @@ async function safeToggleFavorite(productId) {
         // Игнорируем ошибку, модуль необязательный
     }
     return { is_favorite: false };
-} // Функция для получения актуального appContext
+}
+
+/**
+ * Единое обновление UI избранного по productId: только класс favorite-active на кнопках.
+ * Обновляет ТОЛЬКО кнопки с data-product-id === productId; НЕ трогает остальные товары.
+ */
+export function updateFavoriteUIForProduct(productId, isFavorite) {
+    const pid = String(productId);
+
+    // 1) Обновляем ТОЛЬКО кнопки карточек с этим productId
+    const buttons = document.querySelectorAll(
+        `.favorite-button-card[data-product-id="${pid}"]`
+    );
+    buttons.forEach((btn) => {
+        btn.classList.toggle('favorite-active', !!isFavorite);
+    });
+
+    // 2) Обновляем кнопку на странице товара только если она про этот же productId
+    const topBtn = document.getElementById('product-top-menu-favorite');
+    if (topBtn && String(topBtn.dataset.productId || '') === pid) {
+        topBtn.classList.toggle('favorite-active', !!isFavorite);
+    }
+}
 
 // Инициализация зависимостей для renderProducts
 export function initRenderProductsDependencies(dependencies) {
@@ -72,13 +94,16 @@ export async function renderProducts(products) {
     // Forced reflow для Telegram WebView (гарантирует обновление UI после очистки DOM)
     void productsGridElement.offsetHeight;
     
-    // СИНХРОНИЗАЦИЯ: Загружаем все избранные товары сразу для синхронизации сердечек
-    // Важно: синхронизируем кэш ДО рендеринга товаров, чтобы сердечки отображались правильно
-    // favorites.js - необязательный модуль
+    // СИНХРОНИЗАЦИЯ: один раз загружаем список избранного, дальше используем кэш (без N×check)
+    let favoritesIdsSet = new Set();
     try {
         const favoritesModule = await import('../favorites.js');
         if (favoritesModule.syncFavoritesCache) {
             await favoritesModule.syncFavoritesCache();
+        }
+        if (favoritesModule.getFavoritesIdsSet) {
+            const favoritesIdsSetRaw = favoritesModule.getFavoritesIdsSet();
+            favoritesIdsSet = new Set([...favoritesIdsSetRaw].map(String));
         }
     } catch (e) {
         // Игнорируем ошибку, модуль необязательный
@@ -225,16 +250,6 @@ export async function renderProducts(products) {
         let favoriteButton = null;
         let isFavorite = false;
         
-        // Функция обновления состояния кнопки избранного
-        function updateFavoriteButtonState(button, favorite) {
-            // Работаем с новым SVG классом .favorite-heart
-            if (favorite) {
-                button.classList.add('favorite-active');
-            } else {
-                button.classList.remove('favorite-active');
-            }
-        }
-        
         // Создаем кнопку избранного только для клиентов
         if (isClient) {
             favoriteButton = document.createElement('button');
@@ -249,20 +264,9 @@ export async function renderProducts(products) {
                 </svg>
             `;
             
-            // Проверяем статус избранного асинхронно (синхронизация с backend)
-            // Используем единый источник истины - API
-            // Проверяем что prod.id существует перед вызовом API
-            if (prod.id) {
-                safeCheckFavorite(prod.id).then(favorite => {
-                    isFavorite = favorite;
-                    updateFavoriteButtonState(favoriteButton, favorite);
-                }).catch(() => {
-                    updateFavoriteButtonState(favoriteButton, false);
-                });
-            } else {
-                console.warn('⚠️ Product without ID, skipping favorite check:', prod);
-                updateFavoriteButtonState(favoriteButton, false);
-            }
+            // Статус избранного из кэша (после syncFavoritesCache), без запросов check
+            isFavorite = prod.id ? favoritesIdsSet.has(String(prod.id)) : false;
+            updateFavoriteUIForProduct(prod.id, isFavorite);
             
             // Обработчик клика на кнопку избранного (optimistic UI)
             favoriteButton.addEventListener('click', async (e) => {
@@ -293,84 +297,22 @@ export async function renderProducts(products) {
                 
                 // Optimistic UI - меняем состояние МГНОВЕННО
                 const newFavoriteState = !currentFavoriteState;
-                favoriteButton.dataset.processing = 'true'; // Блокируем повторные клики
-                favoriteButton.dataset.processingStartTime = Date.now().toString(); // Запоминаем время блокировки
+                favoriteButton.dataset.processing = 'true';
+                favoriteButton.dataset.processingStartTime = Date.now().toString();
                 isFavorite = newFavoriteState;
+                updateFavoriteUIForProduct(prod.id, newFavoriteState);
                 
-                // Функция для обновления всех кнопок избранного для этого товара (optimistic)
-                function updateAllFavoriteButtonsForProductOptimistic(productId, isFavorite) {
-                    // Находим и обновляем все кнопки избранного для этого товара
-                    const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
-                    allFavoriteButtons.forEach(btn => {
-                        updateFavoriteButtonState(btn, isFavorite);
-                    });
-                    console.log(`[FAVORITES] Optimistic update: ${allFavoriteButtons.length} buttons for product ${productId}, state: ${isFavorite}`);
-                }
-                
-                // Обновляем ВСЕ кнопки избранного для этого товара (optimistic)
-                updateAllFavoriteButtonsForProductOptimistic(prod.id, newFavoriteState);
-                
-                // Запрос в API - асинхронно (в фоне)
-                // toggleFavorite автоматически обновляет кэш в favorites.js
                 try {
                     console.log(`[FAVORITES] Toggling favorite for product ${prod.id}, current state: ${currentFavoriteState}, new state: ${newFavoriteState}`);
                     const result = await safeToggleFavorite(prod.id);
                     console.log(`[FAVORITES] Toggle result for product ${prod.id}:`, result);
-                    
-                    // КРИТИЧНО: Всегда синхронизируем с ответом сервера
-                    // Это гарантирует правильное состояние даже если был рассинхронизация
                     isFavorite = result.is_favorite;
-                    
-                    // Функция для обновления всех кнопок избранного для этого товара
-                    function updateAllFavoriteButtonsForProduct(productId, isFavorite) {
-                        // Находим и обновляем все кнопки избранного для этого товара
-                        const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
-                        allFavoriteButtons.forEach(btn => {
-                            updateFavoriteButtonState(btn, isFavorite);
-                        });
-                        console.log(`[FAVORITES] Server sync: ${allFavoriteButtons.length} buttons for product ${productId}, state: ${isFavorite}`);
-                    }
-                    
-                    // Обновляем ВСЕ кнопки избранного для этого товара
-                    updateAllFavoriteButtonsForProduct(prod.id, result.is_favorite);
-                    
-                    // КРИТИЧНО: updateFavoritesCount уже вызывается в toggleFavorite
-                    // Но на всякий случай вызываем еще раз для гарантии обновления
-                    // (toggleFavorite уже обновил, но это не помешает)
-                    try {
-                        // Правильный путь: из handlers/ в js/ - это ../favorites.js
-                        const { updateFavoritesCount } = await import('../favorites.js');
-                        await updateFavoritesCount();
-                    } catch (importError) {
-                        // Не критично, toggleFavorite уже обновил состояние
-                    }
+                    updateFavoriteUIForProduct(prod.id, result.is_favorite);
+                    // updateFavoritesCount вызывается только внутри toggleFavorite (favorites.js)
                 } catch (error) {
                     console.error('❌ Error toggling favorite:', error);
-                    console.error('❌ Error details:', {
-                        message: error.message,
-                        stack: error.stack,
-                        productId: prod.id,
-                        currentFavoriteState: currentFavoriteState,
-                        newFavoriteState: newFavoriteState
-                    });
-                    // Откатываем optimistic изменение при ошибке
-                    // Используем исходное состояние (до клика)
                     isFavorite = currentFavoriteState;
-                    
-                    // Функция для отката всех кнопок избранного для этого товара
-                    function rollbackAllFavoriteButtonsForProduct(productId, isFavorite) {
-                        // Находим и откатываем все кнопки избранного для этого товара
-                        const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
-                        allFavoriteButtons.forEach(btn => {
-                            updateFavoriteButtonState(btn, isFavorite);
-                        });
-                        console.log(`[FAVORITES] Rollback: ${allFavoriteButtons.length} buttons for product ${productId}, state: ${isFavorite}`);
-                    }
-                    
-                    // Откатываем ВСЕ кнопки избранного для этого товара
-                    rollbackAllFavoriteButtonsForProduct(prod.id, currentFavoriteState);
-                    
-                    // Показываем более информативное сообщение об ошибке
+                    updateFavoriteUIForProduct(prod.id, currentFavoriteState);
                     const errorMessage = error.message || 'Ошибка при изменении избранного';
                     console.error('❌ Showing error to user:', errorMessage);
                     alert(errorMessage);
@@ -385,7 +327,7 @@ export async function renderProducts(products) {
         let actionButton = null;
         // Проверяем, находимся ли мы на странице избранного
         const favoritesPage = document.getElementById('favorites-page');
-        const isOnFavoritesPage = favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex');
+        const isOnFavoritesPage = favoritesPage && favoritesPage.classList.contains('is-active');
         
         if (isClient && isOnFavoritesPage) {
             // ========== ПРИОРИТЕТ: Используем action_type от бэка, если доступен ==========
@@ -486,7 +428,7 @@ export async function renderProducts(products) {
                     
                     // Проверяем, что мы все еще на странице избранного
                     const favoritesPage = document.getElementById('favorites-page');
-                    const isOnFavoritesPage = favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex');
+                    const isOnFavoritesPage = favoritesPage && favoritesPage.classList.contains('is-active');
                     
                     if (!isOnFavoritesPage) {
                         return; // Не показываем bottom sheet, если не на странице избранного
@@ -1040,112 +982,30 @@ export async function renderProducts(products) {
                 </svg>
             `;
             
-            // Проверяем статус избранного для режима списка
-            if (prod.id) {
-                safeCheckFavorite(prod.id).then(favorite => {
-                    updateFavoriteButtonState(favoriteButtonList, favorite);
-                }).catch(() => {
-                    updateFavoriteButtonState(favoriteButtonList, false);
-                });
-            } else {
-                console.warn('⚠️ Product without ID in list view, skipping favorite check:', prod);
-                updateFavoriteButtonState(favoriteButtonList, false);
-            }
+            // Статус избранного из кэша (без запросов check)
+            const isFavoriteList = prod.id ? favoritesIdsSet.has(String(prod.id)) : false;
+            updateFavoriteUIForProduct(prod.id, isFavoriteList);
             
             // Обработчик клика на кнопку избранного в режиме списка (optimistic UI)
             favoriteButtonList.addEventListener('click', async (e) => {
-                e.stopPropagation(); // Предотвращаем открытие модального окна товара
-                e.preventDefault(); // Предотвращаем стандартное поведение
-                
-                // Защита от повторных кликов во время обработки
+                e.stopPropagation();
+                e.preventDefault();
                 if (favoriteButtonList.dataset.processing === 'true') {
-                    console.log(`[FAVORITES] Click ignored (list mode) for product ${prod.id}: already processing`);
                     return;
                 }
-                
-                // КРИТИЧНО: Используем актуальное состояние из DOM
-                // Это гарантирует правильную работу после возврата со страницы избранного
                 const currentState = favoriteButtonList.classList.contains('favorite-active');
-                
-                // Optimistic UI - меняем состояние МГНОВЕННО
                 const newFavoriteState = !currentState;
-                favoriteButtonList.dataset.processing = 'true'; // Блокируем повторные клики
-                
-                // Функция для обновления всех кнопок избранного для этого товара (optimistic)
-                function updateAllFavoriteButtonsForProductOptimisticList(productId, isFavorite) {
-                    // Находим и обновляем все кнопки избранного для этого товара
-                    const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
-                    allFavoriteButtons.forEach(btn => {
-                        updateFavoriteButtonState(btn, isFavorite);
-                    });
-                    console.log(`[FAVORITES] Optimistic update (list): ${allFavoriteButtons.length} buttons for product ${productId}, state: ${isFavorite}`);
-                }
-                
-                // Обновляем ВСЕ кнопки избранного для этого товара (optimistic)
-                updateAllFavoriteButtonsForProductOptimisticList(prod.id, newFavoriteState);
-                
-                // Запрос в API - асинхронно (в фоне)
-                // safeToggleFavorite автоматически обновляет кэш в favorites.js
+                favoriteButtonList.dataset.processing = 'true';
+                updateFavoriteUIForProduct(prod.id, newFavoriteState);
                 try {
-                    console.log(`[FAVORITES] Toggling favorite (list mode) for product ${prod.id}, current state: ${currentState}, new state: ${newFavoriteState}`);
                     const result = await safeToggleFavorite(prod.id);
-                    console.log(`[FAVORITES] Toggle result (list mode) for product ${prod.id}:`, result);
-                    
-                    // КРИТИЧНО: Всегда синхронизируем с ответом сервера
-                    // Это гарантирует правильное состояние даже если был рассинхронизация
-                    
-                    // Функция для обновления всех кнопок избранного для этого товара
-                    function updateAllFavoriteButtonsForProductList(productId, isFavorite) {
-                        // Находим и обновляем все кнопки избранного для этого товара
-                        const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
-                        allFavoriteButtons.forEach(btn => {
-                            updateFavoriteButtonState(btn, isFavorite);
-                        });
-                        console.log(`[FAVORITES] Server sync (list): ${allFavoriteButtons.length} buttons for product ${productId}, state: ${isFavorite}`);
-                    }
-                    
-                    // Обновляем ВСЕ кнопки избранного для этого товара
-                    updateAllFavoriteButtonsForProductList(prod.id, result.is_favorite);
-                    
-                    // КРИТИЧНО: updateFavoritesCount уже вызывается в toggleFavorite
-                    // Но на всякий случай вызываем еще раз для гарантии обновления
-                    // (toggleFavorite уже обновил, но это не помешает)
-                    try {
-                        // Правильный путь: из handlers/ в js/ - это ../favorites.js
-                        const { updateFavoritesCount } = await import('../favorites.js');
-                        await updateFavoritesCount();
-                    } catch (importError) {
-                        // Не критично, toggleFavorite уже обновил состояние
-                    }
+                    updateFavoriteUIForProduct(prod.id, result.is_favorite);
+                    // updateFavoritesCount вызывается только внутри toggleFavorite (favorites.js)
                 } catch (error) {
                     console.error('❌ Error toggling favorite (list mode):', error);
-                    console.error('❌ Error details:', {
-                        message: error.message,
-                        stack: error.stack,
-                        productId: prod.id,
-                        currentState: currentState,
-                        newFavoriteState: newFavoriteState
-                    });
-                    // Откатываем optimistic изменение при ошибке
-                    // Используем исходное состояние (до клика)
-                    
-                    // Функция для отката всех кнопок избранного для этого товара
-                    function rollbackAllFavoriteButtonsForProductList(productId, isFavorite) {
-                        // Находим и откатываем все кнопки избранного для этого товара
-                        const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
-                        allFavoriteButtons.forEach(btn => {
-                            updateFavoriteButtonState(btn, isFavorite);
-                        });
-                        console.log(`[FAVORITES] Rollback (list): ${allFavoriteButtons.length} buttons for product ${productId}, state: ${isFavorite}`);
-                    }
-                    
-                    // Откатываем ВСЕ кнопки избранного для этого товара
-                    rollbackAllFavoriteButtonsForProductList(prod.id, currentState);
-                    
-                    const errorMessage = error.message || 'Ошибка при изменении избранного';
-                    alert(errorMessage);
+                    updateFavoriteUIForProduct(prod.id, currentState);
+                    alert(error.message || 'Ошибка при изменении избранного');
                 } finally {
-                    // Снимаем блокировку
                     delete favoriteButtonList.dataset.processing;
                 }
             });
@@ -1164,7 +1024,7 @@ export async function renderProducts(products) {
         let actionButtonList = null;
         // Проверяем, находимся ли мы на странице избранного
         const favoritesPageForList = document.getElementById('favorites-page');
-        const isOnFavoritesPageForList = favoritesPageForList && (favoritesPageForList.style.display === 'block' || favoritesPageForList.style.display === 'flex');
+        const isOnFavoritesPageForList = favoritesPageForList && favoritesPageForList.classList.contains('is-active');
         
         if (isClient && isOnFavoritesPageForList) {
             // Получаем тип операции через единый helper
@@ -1229,7 +1089,7 @@ export async function renderProducts(products) {
                     
                     // Проверяем, что мы все еще на странице избранного
                     const favoritesPageForList = document.getElementById('favorites-page');
-                    const isOnFavoritesPageForList = favoritesPageForList && (favoritesPageForList.style.display === 'block' || favoritesPageForList.style.display === 'flex');
+                    const isOnFavoritesPageForList = favoritesPageForList && favoritesPageForList.classList.contains('is-active');
                     
                     if (!isOnFavoritesPageForList) {
                         return; // Не показываем bottom sheet, если не на странице избранного

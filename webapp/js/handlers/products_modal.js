@@ -14,6 +14,7 @@ import { renderProductPagePricesBlock } from '../utils/productCardParts.js';
 import { isMobileDevice } from '../utils/products_utils.js';
 import { showNotification } from '../utils/admin_utils.js';
 import { showClientDetail } from './admin_clients.js';
+import { updateFavoriteUIForProduct } from './products_render.js';
 // ========== REFACTORING STEP 2.1-2.2: showModalImage, updateImageNavigation ==========
 // НОВЫЙ КОД (используется сейчас)
 // ========== END REFACTORING STEP 2.1-2.2 ==========
@@ -41,6 +42,9 @@ let showSaleOrderModalCallback = null; // Функция для показа м�
 let touchStartX = 0;
 let touchStartY = 0;
 let horizontalScrollBlocked = false;
+
+// Флаг: пользователь уже нажал лайк на странице товара — поздний ответ check не должен перетирать UI
+let userHasToggledFavorite = false;
 
 // Обработчик touchstart для определения направления жеста
 function handleTouchStart(e) {
@@ -126,9 +130,9 @@ function setupProductUpdateListener() {
         }
         // ========== КОНЕЦ DEBUG ==========
         
-        // Проверяем, открыта ли страница товара
+        // Проверяем, открыта ли страница товара (по state-классу после рефакторинга)
         const productPage = document.getElementById('product-page');
-        const isProductPageOpen = productPage && (productPage.style.display === 'block' || productPage.style.display === 'flex');
+        const isProductPageOpen = productPage && productPage.classList.contains('is-active');
         
         if (!isProductPageOpen) {
             // Страница товара не открыта, ничего не делаем
@@ -843,7 +847,7 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     const cartPage = document.getElementById('cart-page');
     const cartPageNew = document.getElementById('cart-page-new');
     const operationDetailPage = document.getElementById('operation-detail-page');
-    const fromOperationDetail = operationDetailPage && (operationDetailPage.style.display === 'block' || operationDetailPage.style.display === 'flex');
+    const fromOperationDetail = operationDetailPage && operationDetailPage.classList.contains('is-active');
     
     if (!productPage) {
         console.error('❌ [PRODUCT PAGE] Product page element not found!');
@@ -863,13 +867,13 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
         adminClientId = null;
         console.log('[PRODUCT PAGE] Coming from operation detail page');
     } else {
-        // Если НЕ из админки, ВСЕГДА сбрасываем историю навигации админки
-        if (favoritesPage && (favoritesPage.style.display === 'block' || favoritesPage.style.display === 'flex')) {
+        // Если НЕ из админки, ВСЕГДА сбрасываем историю навигации админки (проверка по is-active)
+        if (favoritesPage && favoritesPage.classList.contains('is-active')) {
             navigationHistory = 'favorites';
             adminClientId = null;
             console.log('[PRODUCT PAGE] Coming from favorites page, resetting admin history');
-        } else if ((cartPageNew && (cartPageNew.style.display === 'block' || cartPageNew.style.display === 'flex')) ||
-                   (cartPage && (cartPage.style.display === 'block' || cartPage.style.display === 'flex'))) {
+        } else if ((cartPageNew && cartPageNew.classList.contains('is-active')) ||
+                   (cartPage && cartPage.classList.contains('is-active'))) {
             navigationHistory = 'cart';
             adminClientId = null;
             console.log('[PRODUCT PAGE] Coming from cart page, resetting admin history');
@@ -924,6 +928,7 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     
     // Единый способ: скрыть все страницы, затем показать страницу товара
     hideAllPages();
+    productPage.classList.add('is-active');
     productPage.style.display = 'block';
     
     // Высота верхнего меню для позиции toast (ниже меню) — безопасно, не бросаем ошибок
@@ -1460,6 +1465,7 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
     // Настраиваем кнопку избранного в верхнем меню (для клиентов)
     const productTopMenuFavorite = document.getElementById('product-top-menu-favorite');
     if (productTopMenuFavorite && appContext && appContext.role === 'client') {
+        userHasToggledFavorite = false; // сброс при открытии страницы товара
         // Показываем кнопку избранного в меню
         productTopMenuFavorite.style.display = 'flex';
         productTopMenuFavorite.dataset.productId = prod.id;
@@ -1471,124 +1477,71 @@ export function showProductModal(prod, finalPrice, fullImages, fromAdmin = false
             oldFavoriteButton.remove();
         }
         
-        // Используем кнопку из меню как основную
         const favoriteButton = productTopMenuFavorite;
-        console.log('[PRODUCT PAGE] Favorite button in top menu for product:', prod.id);
-        
-        // Функция обновления состояния кнопки избранного
-        function updateFavoriteButtonState(button, favorite) {
-            if (!button) return;
-            if (favorite) {
-                button.classList.add('favorite-active');
-            } else {
-                button.classList.remove('favorite-active');
-            }
-        }
-        
-        // Проверяем статус избранного асинхронно
         (async () => {
             try {
-                // Правильный путь: из handlers/ в js/ - это ../favorites.js
                 const favoritesModule = await import('../favorites.js');
                 if (favoritesModule.checkFavorite && prod.id) {
                     const isFavorite = await favoritesModule.checkFavorite(prod.id);
-                    updateFavoriteButtonState(favoriteButton, isFavorite);
+                    if (!userHasToggledFavorite) {
+                        updateFavoriteUIForProduct(prod.id, isFavorite);
+                    }
                 }
             } catch (e) {
                 console.warn('[PRODUCT PAGE] Error loading favorites module:', e);
-                // Игнорируем ошибку, модуль необязательный
-                updateFavoriteButtonState(favoriteButton, false);
+                if (!userHasToggledFavorite) {
+                    updateFavoriteUIForProduct(prod.id, false);
+                }
             }
         })();
         
-        // Обработчик клика на кнопку избранного (optimistic UI)
-        favoriteButton.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            
-            // Защита от повторных кликов во время обработки
-            if (favoriteButton.dataset.processing === 'true') {
-                const processingStartTime = parseInt(favoriteButton.dataset.processingStartTime || '0');
-                const now = Date.now();
-                if (processingStartTime && (now - processingStartTime) > 5000) {
+        // Обработчик клика: один раз на кнопку, читает productId из dataset (не из closure)
+        // КРИТИЧНО: при переключении товаров не добавлять новый listener — иначе старые
+        // вызывают toggleFavorite(prevProductId) и снимают лайки с прошлых товаров
+        if (!favoriteButton.dataset.favoriteHandlerBound) {
+            favoriteButton.dataset.favoriteHandlerBound = '1';
+            favoriteButton.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                
+                const productId = favoriteButton.dataset.productId;
+                if (!productId) return;
+                
+                if (favoriteButton.dataset.processing === 'true') {
+                    const processingStartTime = parseInt(favoriteButton.dataset.processingStartTime || '0');
+                    const now = Date.now();
+                    if (processingStartTime && (now - processingStartTime) > 5000) {
+                        delete favoriteButton.dataset.processing;
+                        delete favoriteButton.dataset.processingStartTime;
+                    } else {
+                        return;
+                    }
+                }
+                
+                userHasToggledFavorite = true;
+                const currentFavoriteState = favoriteButton.classList.contains('favorite-active');
+                const newFavoriteState = !currentFavoriteState;
+                favoriteButton.dataset.processing = 'true';
+                favoriteButton.dataset.processingStartTime = Date.now().toString();
+                
+                updateFavoriteUIForProduct(productId, newFavoriteState);
+                
+                try {
+                    const favoritesModule = await import('../favorites.js');
+                    if (favoritesModule.toggleFavorite) {
+                        const result = await favoritesModule.toggleFavorite(parseInt(productId, 10));
+                        updateFavoriteUIForProduct(productId, result.is_favorite);
+                    }
+                } catch (error) {
+                    console.error('❌ Error toggling favorite on product page:', error);
+                    updateFavoriteUIForProduct(productId, currentFavoriteState);
+                    alert(error.message || 'Ошибка при изменении избранного');
+                } finally {
                     delete favoriteButton.dataset.processing;
                     delete favoriteButton.dataset.processingStartTime;
-                } else {
-                    return;
                 }
-            }
-            
-            // Используем актуальное состояние из DOM
-            const currentFavoriteState = favoriteButton.classList.contains('favorite-active');
-            
-            // Optimistic UI - меняем состояние МГНОВЕННО
-            const newFavoriteState = !currentFavoriteState;
-            favoriteButton.dataset.processing = 'true';
-            favoriteButton.dataset.processingStartTime = Date.now().toString();
-            
-            // Функция для обновления всех кнопок избранного для этого товара (optimistic)
-            function updateAllFavoriteButtonsForProductOptimistic(productId, isFavorite) {
-                // Обновляем кнопку в верхнем меню страницы товара
-                updateFavoriteButtonState(favoriteButton, isFavorite);
-                
-                // Находим и обновляем все кнопки избранного на карточках товаров
-                // Используем селектор, который найдет кнопки на карточках, но не в верхнем меню
-                const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
-                allFavoriteButtons.forEach(btn => {
-                    // Пропускаем кнопку в верхнем меню, чтобы не обновлять её дважды
-                    if (btn !== favoriteButton && !btn.classList.contains('product-top-menu-favorite')) {
-                        updateFavoriteButtonState(btn, isFavorite);
-                    }
-                });
-            }
-            
-            // Обновляем ВСЕ кнопки избранного для этого товара (optimistic)
-            updateAllFavoriteButtonsForProductOptimistic(prod.id, newFavoriteState);
-            
-            // Функция для обновления всех кнопок избранного для этого товара
-            function updateAllFavoriteButtonsForProduct(productId, isFavorite) {
-                // Обновляем кнопку в верхнем меню страницы товара
-                updateFavoriteButtonState(favoriteButton, isFavorite);
-                
-                // Находим и обновляем все кнопки избранного на карточках товаров
-                // Используем селектор, который найдет кнопки на карточках, но не в верхнем меню
-                const allFavoriteButtons = document.querySelectorAll(`.favorite-button-card[data-product-id="${productId}"]`);
-                allFavoriteButtons.forEach(btn => {
-                    // Пропускаем кнопку в верхнем меню, чтобы не обновлять её дважды
-                    if (btn !== favoriteButton && !btn.classList.contains('product-top-menu-favorite')) {
-                        updateFavoriteButtonState(btn, isFavorite);
-                    }
-                });
-                
-                console.log(`[FAVORITES] Updated ${allFavoriteButtons.length} favorite buttons for product ${productId}, state: ${isFavorite}`);
-            }
-            
-            // Запрос в API - асинхронно (в фоне)
-            try {
-                // Правильный путь: из handlers/ в js/ - это ../favorites.js
-                const favoritesModule = await import('../favorites.js');
-                if (favoritesModule.toggleFavorite) {
-                    const result = await favoritesModule.toggleFavorite(prod.id);
-                    
-                    // Синхронизируем с ответом сервера - обновляем ВСЕ кнопки для этого товара
-                    updateAllFavoriteButtonsForProduct(prod.id, result.is_favorite);
-                    
-                    // Обновляем счетчик
-                    if (favoritesModule.updateFavoritesCount) {
-                        await favoritesModule.updateFavoritesCount();
-                    }
-                }
-            } catch (error) {
-                console.error('❌ Error toggling favorite on product page:', error);
-                // Откатываем optimistic изменение при ошибке - обновляем ВСЕ кнопки
-                updateAllFavoriteButtonsForProduct(prod.id, currentFavoriteState);
-                alert(error.message || 'Ошибка при изменении избранного');
-            } finally {
-                // Снимаем блокировку
-                delete favoriteButton.dataset.processing;
-                delete favoriteButton.dataset.processingStartTime;
-            }
-        });
+            });
+        }
         
         // Кнопка избранного теперь в верхнем меню, не добавляем её в изображение
     } else if (productTopMenuFavorite) {
@@ -2310,59 +2263,15 @@ export function closeProductPage() {
     const productPageImage = document.getElementById('product-page-image');
     
     if (productPage) {
-        // Очищаем blob URLs если были
-        if (productPageImage) {
-            // Очищаем старый формат (одиночный blob URL)
-            const oldBlobUrl = productPageImage.dataset.blobUrl;
-            if (oldBlobUrl) {
-                URL.revokeObjectURL(oldBlobUrl);
-                delete productPageImage.dataset.blobUrl;
-            }
-            // Очищаем новый формат (массив blob URLs)
-            const oldBlobUrls = productPageImage.dataset.blobUrls;
-            if (oldBlobUrls) {
-                try {
-                    const urls = JSON.parse(oldBlobUrls);
-                    urls.forEach(url => {
-                        if (url) URL.revokeObjectURL(url);
-                    });
-                } catch (e) {
-                    console.warn('[PRODUCT PAGE] Error parsing blob URLs:', e);
-                }
-                delete productPageImage.dataset.blobUrls;
-            }
-            // Удаляем обработчики resize слайдера (если есть)
-            const slider = productPageImage.querySelector('.product-slider');
-            if (slider && slider.dataset.resizeHandler) {
-                // Обработчик resize будет удален при очистке innerHTML
-                delete slider.dataset.resizeHandler;
-            }
-            // Полностью очищаем содержимое
-            productPageImage.innerHTML = '';
-        }
-        
-        // Деактивируем блокировку горизонтального скролла
-        disableHorizontalScrollBlock();
-        
-        productPage.classList.remove('is-admin', 'is-client');
-        // Скрываем страницу товара
+        // 1) Сначала снимаем видимость (state-класс и display), чтобы CSS !important не оставлял пустой экран
+        productPage.classList.remove('is-active', 'is-admin', 'is-client');
         productPage.style.display = 'none';
-        
-        // Скрываем bottom sheet страницы товара
         const productPageBottomSheet = document.getElementById('product-page-bottom-sheet');
         if (productPageBottomSheet) {
             productPageBottomSheet.style.display = 'none';
         }
-        
-        // Убираем обработчик скролла и класс scrolled
-        const productTopMenu = document.querySelector('.product-new-top-menu');
-        if (productTopMenu && window.productPageScrollHandler) {
-            productPage.removeEventListener('scroll', window.productPageScrollHandler);
-            productTopMenu.classList.remove('scrolled');
-            window.productPageScrollHandler = null;
-        }
-        
-        // Возвращаемся на предыдущую страницу в зависимости от истории навигации
+
+        // 2) Возвращаемся на предыдущую страницу по истории навигации
         if (mainContent) mainContent.style.display = 'none';
         if (favoritesPage) favoritesPage.style.display = 'none';
         if (cartPage) cartPage.style.display = 'none';
@@ -2393,33 +2302,66 @@ export function closeProductPage() {
             }).catch(err => {
                 console.error('[PRODUCT PAGE] Error opening admin:', err);
                 // Fallback: показываем главную страницу
-                if (mainContent) mainContent.style.display = 'block';
+                if (mainContent) {
+                    mainContent.classList.add('is-active');
+                    mainContent.style.display = 'block';
+                }
                 // Сбрасываем историю навигации только при ошибке
                 navigationHistory = null;
                 adminClientId = null;
             });
         } else if (navigationHistory === 'favorites' && favoritesPage) {
+            favoritesPage.classList.add('is-active');
             favoritesPage.style.display = 'block';
             // Сбрасываем историю навигации только если возвращаемся НЕ в админку
             navigationHistory = null;
             adminClientId = null;
         } else if (navigationHistory === 'cart' && cartPageNew) {
+            cartPageNew.classList.add('is-active');
             cartPageNew.style.display = 'block';
             navigationHistory = null;
             adminClientId = null;
         } else if (navigationHistory === 'operation-detail' && operationDetailPage) {
+            operationDetailPage.classList.add('is-active');
             operationDetailPage.style.display = 'block';
             navigationHistory = null;
             adminClientId = null;
         } else if (mainContent) {
             // По умолчанию возвращаемся на главную
+            mainContent.classList.add('is-active');
             mainContent.style.display = 'block';
-            // Сбрасываем историю навигации только если возвращаемся НЕ в админку
             navigationHistory = null;
             adminClientId = null;
         }
-        
-        // Сбрасываем состояние
+
+        // 3) Cleanup после скрытия и переключения: blob, DOM, скролл, состояние
+        if (productPageImage) {
+            const oldBlobUrl = productPageImage.dataset.blobUrl;
+            if (oldBlobUrl) {
+                URL.revokeObjectURL(oldBlobUrl);
+                delete productPageImage.dataset.blobUrl;
+            }
+            const oldBlobUrls = productPageImage.dataset.blobUrls;
+            if (oldBlobUrls) {
+                try {
+                    const urls = JSON.parse(oldBlobUrls);
+                    urls.forEach(url => { if (url) URL.revokeObjectURL(url); });
+                } catch (e) {
+                    console.warn('[PRODUCT PAGE] Error parsing blob URLs:', e);
+                }
+                delete productPageImage.dataset.blobUrls;
+            }
+            const slider = productPageImage.querySelector('.product-slider');
+            if (slider && slider.dataset.resizeHandler) delete slider.dataset.resizeHandler;
+            productPageImage.innerHTML = '';
+        }
+        disableHorizontalScrollBlock();
+        const productTopMenu = document.querySelector('.product-new-top-menu');
+        if (productTopMenu && window.productPageScrollHandler) {
+            productPage.removeEventListener('scroll', window.productPageScrollHandler);
+            productTopMenu.classList.remove('scrolled');
+            window.productPageScrollHandler = null;
+        }
         if (modalState) {
             modalState.currentImageLoadId = 0;
             modalState.currentImages = [];
